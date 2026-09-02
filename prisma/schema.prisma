@@ -1,0 +1,411 @@
+// Prisma schema for Business Monitoring App (Pelaporan Checklist Berbasis Web)
+// Adapted for SQLite — String fields with documented enum values.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ORGANISASI
+// ============================================================
+
+/// Hierarchical organization tree: HOLDING -> SUB_HOLDING -> SECTOR -> REGION -> PT -> UNIT
+model Entity {
+  id        String   @id @default(cuid())
+  parentId  String?
+  parent    Entity?  @relation("EntityTree", fields: [parentId], references: [id])
+  children  Entity[] @relation("EntityTree")
+  type      String   // HOLDING | SUB_HOLDING | SECTOR | REGION | PT | UNIT
+  code      String   @unique
+  name      String
+  path      String   // materialized path, e.g. "/root/sh1/pt42/"
+  region    String?  // e.g. "Jakarta", "Surabaya" for grouping
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  divisions       Division[]
+  projects       Project[]
+  dailyReports   DailyProjectReport[]
+  weeklyReports  WeeklyDivisionReport[]
+  escalations    Escalation[]
+  kpiSnapshots   KpiSnapshot[]
+  adminAppointments AdminAppointment[]
+}
+
+model DivisionType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  divisions Division[]
+}
+
+model Division {
+  id             String   @id @default(cuid())
+  entityId       String
+  entity         Entity   @relation(fields: [entityId], references: [id])
+  divisionTypeId String
+  divisionType   DivisionType @relation(fields: [divisionTypeId], references: [id])
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  weeklyReports WeeklyDivisionReport[]
+
+  @@unique([entityId, name])
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  entityId       String
+  entity         Entity   @relation(fields: [entityId], references: [id])
+  code           String   @unique
+  name           String
+  phase          String   // INISIASI | PERENCANAAN | PELAKSANAAN | PENYELESAIAN
+  lifecycle      String   // DIUSULKAN | AKTIF | DITUTUP | DIARSIPKAN
+  picName        String?
+  startDate      DateTime?
+  targetEndDate  DateTime?
+  approvedByName String?
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  dailyReports DailyProjectReport[]
+}
+
+model AdminAppointment {
+  id         String   @id @default(cuid())
+  entityId   String
+  entity     Entity   @relation(fields: [entityId], references: [id])
+  userName   String
+  userEmail  String
+  kind       String   // UTAMA | PENGGANTI
+  skNumber   String
+  validFrom  DateTime
+  validUntil DateTime
+  status     String   // AKTIF | BERAKHIR | DITOLAK
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ============================================================
+// REFERENCE / DAFTAR INDUK GRUP
+// ============================================================
+
+model AspectCategory {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String   // Operasional | Keuangan | Kepatuhan | SDM | HSE | Proyek | Sistem | Komersial
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  weeklyItems WeeklyReportItem[]
+}
+
+model Priority {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String   // Tinggi | Sedang | Rendah
+  weight    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  weeklyItems WeeklyReportItem[]
+}
+
+model WorkCalendar {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  region    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  holidays Holiday[]
+}
+
+model Holiday {
+  id              String   @id @default(cuid())
+  workCalendarId String
+  workCalendar    WorkCalendar @relation(fields: [workCalendarId], references: [id])
+  date            DateTime
+  name            String
+  scope           String   // GRUP | ENTITAS
+  entityId        String?
+  createdAt       DateTime @default(now())
+}
+
+// ============================================================
+// PENGGUNA & AKSES
+// ============================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  role         String   // ADMIN_PT | KEPALA_DIVISI | PIC_PROYEK | DIREKTUR_ENTITAS | DIREKTUR_SDM_GA | MANAJEMEN | TI | AUDITOR
+  scopeEntityId String? // for role-scoped users (DIREKTUR_ENTITAS, ADMIN_PT)
+  isActive     Boolean  @default(true)
+  avatarColor  String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  dailyReportsSubmitted  DailyProjectReport[]
+  weeklyApprovals        WeeklyDivisionReport[]
+  escalationsRaised      Escalation[] @relation("EscalationRaisedBy")
+  escalationsDecided     Escalation[] @relation("EscalationDecidedBy")
+  auditLogs              AuditLog[]
+  spotChecks             SpotCheck[]
+  notifications          NotificationLog[]
+  unlockRequests         UnlockRequest[]
+  unlockApproved         UnlockRequest[] @relation("UnlockApprover")
+  unlockExecuted         UnlockRequest[] @relation("UnlockExecutor")
+}
+
+// ============================================================
+// PELAPORAN HARIAN — MODUL PROYEK
+// ============================================================
+
+model DailyProjectReport {
+  id                     String   @id @default(cuid())
+  projectId              String
+  project                Project  @relation(fields: [projectId], references: [id])
+  entityId               String
+  entity                 Entity   @relation(fields: [entityId], references: [id])
+  reportDate             DateTime
+  status                 String   // SELESAI | ON_PROGRESS | TERKENDALA | MENUNGGU_KEPUTUSAN | TIDAK_ADA_PERUBAHAN
+  progressPct            Int      @default(0)
+  phase                  String
+  achievementToday       String
+  obstacle               String?
+  followUp               String?
+  followUpTargetDate     DateTime?
+  decisionRequestedFrom  String?
+  needsEscalation        Boolean  @default(false)
+  evidenceCount          Int      @default(0)
+  isLocked               Boolean  @default(false)
+  lockedAt               DateTime?
+  isLate                 Boolean  @default(false)
+  submittedById         String?
+  submittedBy            User?    @relation(fields: [submittedById], references: [id])
+  submittedAt            DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([projectId, reportDate])
+}
+
+// ============================================================
+// PELAPORAN MINGGUAN — MODUL DIVISI
+// ============================================================
+
+model WeeklyDivisionReport {
+  id              String   @id @default(cuid())
+  divisionId      String
+  division        Division @relation(fields: [divisionId], references: [id])
+  entityId        String
+  entity          Entity   @relation(fields: [entityId], references: [id])
+  isoYear         Int
+  isoWeek         Int
+  periodStart     DateTime
+  periodEnd       DateTime
+  statusHeader    String   // DRAFT | MENUNGGU_PERSETUJUAN | DISETUJUI | TERKUNCI
+  approvedById    String?
+  approvedBy      User?    @relation(fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  approvalHash    String?
+  isLocked        Boolean  @default(false)
+  lockedAt        DateTime?
+  isLate          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items WeeklyReportItem[]
+
+  @@unique([divisionId, isoYear, isoWeek])
+}
+
+model WeeklyReportItem {
+  id                  String   @id @default(cuid())
+  weeklyReportId      String
+  weeklyReport        WeeklyDivisionReport @relation(fields: [weeklyReportId], references: [id])
+  aspectCategoryId    String
+  aspectCategory      AspectCategory @relation(fields: [aspectCategoryId], references: [id])
+  workItem            String
+  targetOutput        String
+  picName             String
+  picTitle            String
+  targetDate          DateTime?
+  status              String   // SELESAI | ON_PROGRESS | BELUM_MULAI | TERKENDALA | NA
+  progressPct         Int      @default(0)
+  achievementThisWeek String
+  obstacleFollowUp    String?
+  priorityId          String
+  priority            Priority @relation(fields: [priorityId], references: [id])
+  needsEscalation     Boolean  @default(false)
+  evidenceCount       Int      @default(0)
+  carriedOverFromId   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ============================================================
+// BUKTI, CATATAN, ESKALASI
+// ============================================================
+
+model Evidence {
+  id          String   @id @default(cuid())
+  targetType  String   // DAILY_REPORT | WEEKLY_ITEM | PROJECT_CLOSING
+  targetId    String
+  storageKey  String
+  fileName    String
+  mime        String
+  size        Int
+  url         String?
+  uploadedById String?
+  createdAt   DateTime @default(now())
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  targetType  String   // REPORT | ITEM | ENTITY
+  targetId    String
+  authorName  String
+  authorRole  String
+  content     String
+  visibility  String   // INTERNAL_ENTITAS | HOLDING
+  createdAt   DateTime @default(now())
+}
+
+model Escalation {
+  id            String   @id @default(cuid())
+  sourceType    String   // DAILY_REPORT | WEEKLY_ITEM
+  sourceId      String
+  entityId      String
+  entity        Entity   @relation(fields: [entityId], references: [id])
+  raisedById    String?
+  raisedBy      User?    @relation("EscalationRaisedBy", fields: [raisedById], references: [id])
+  raisedAt      DateTime @default(now())
+  summary       String
+  needed        String   // KEPUTUSAN | ANGGARAN | DUKUNGAN_LINTAS_FUNGSI
+  status        String   // DIAJUKAN | DITINJAU | DIPUTUSKAN | DITUTUP
+  decidedById   String?
+  decidedBy     User?    @relation("EscalationDecidedBy", fields: [decidedById], references: [id])
+  decidedAt     DateTime?
+  decisionText  String?
+  slaDays       Int      @default(7)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// PENGENDALIAN
+// ============================================================
+
+model UnlockRequest {
+  id            String   @id @default(cuid())
+  targetType    String   // DAILY_REPORT | WEEKLY_REPORT
+  targetId      String
+  requestedById String?
+  requestedBy   User?    @relation(fields: [requestedById], references: [id])
+  reason        String
+  status        String   // DIAJUKAN | DISETUJUI | DITOLAK | DIEKSEKUSI
+  approvedById  String?
+  approvedBy    User?    @relation("UnlockApprover", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  executedById  String?
+  executedBy    User?    @relation("UnlockExecutor", fields: [executedById], references: [id])
+  executedAt    DateTime?
+  unlockUntil   DateTime?
+  reLockedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  targetType String
+  targetId   String
+  beforeData String?  // JSON string
+  afterData  String?   // JSON string
+  ip         String?
+  userAgent  String?
+  at         DateTime @default(now())
+}
+
+model LateIncident {
+  id                 String   @id @default(cuid())
+  entityId           String
+  cycle              String   // HARIAN | MINGGUAN
+  period             String   // e.g. "2024-12-W50" or "2024-12-15"
+  occurrenceInMonth  Int      @default(1)
+  actionTaken        String?
+  createdAt          DateTime @default(now())
+}
+
+model SpotCheck {
+  id           String   @id @default(cuid())
+  entityId     String
+  month        String   // YYYY-MM
+  seedValue    Int
+  checkedById  String?
+  checkedBy    User?    @relation(fields: [checkedById], references: [id])
+  totalItems   Int      @default(0)
+  sesuaiCount  Int      @default(0)
+  tidakSesuaiCount Int  @default(0)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model NotificationLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  channel     String   // EMAIL | WHATSAPP
+  recipient   String
+  template    String
+  payload     String   // JSON string
+  status      String   // PENDING | SENT | FAILED
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model KpiSnapshot {
+  id                    String   @id @default(cuid())
+  entityId              String
+  entity                Entity   @relation(fields: [entityId], references: [id])
+  periodType            String   // BULANAN | MINGGUAN
+  periodKey             String   // e.g. "2024-12" or "2024-W50"
+  onTimeDailyPct        Float    @default(0)
+  weeklyCompletenessPct Float    @default(0)
+  evidenceCompletenessPct Float   @default(0)
+  highPriorityCompletionPct Float @default(0)
+  avgEscalationDays     Float    @default(0)
+  totalProjects         Int      @default(0)
+  activeProjects        Int      @default(0)
+  reportsToday          Int      @default(0)
+  lateToday             Int      @default(0)
+  pendingReports        Int      @default(0)
+  complianceScore       Float    @default(0) // 0-100 aggregated score
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([entityId, periodType, periodKey])
+}

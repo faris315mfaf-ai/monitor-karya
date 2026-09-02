@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
+
+// GET /api/daily-reports - paginated daily reports with filters
+export async function GET(req: NextRequest) {
+  try {
+    const sp = req.nextUrl.searchParams
+    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
+    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
+    const entityId = sp.get('entityId') || undefined
+    const status = sp.get('status') || undefined
+    const dateFrom = sp.get('dateFrom')
+    const dateTo = sp.get('dateTo')
+    const search = sp.get('search') || undefined
+
+    const reportDate: Prisma.DateTimeFilter = {}
+    if (dateFrom) reportDate.gte = new Date(dateFrom)
+    if (dateTo) reportDate.lte = new Date(dateTo)
+
+    const where: Prisma.DailyProjectReportWhereInput = {
+      ...(entityId ? { entityId } : {}),
+      ...(status ? { status } : {}),
+      ...(Object.keys(reportDate).length ? { reportDate } : {}),
+      ...(search
+        ? { project: { name: { contains: search } } }
+        : {}),
+    }
+
+    const [items, total] = await Promise.all([
+      db.dailyProjectReport.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: [{ reportDate: 'desc' }, { createdAt: 'desc' }],
+        include: {
+          project: { select: { id: true, name: true, code: true } },
+          entity: { select: { id: true, name: true, code: true, region: true } },
+          submittedBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      db.dailyProjectReport.count({ where }),
+    ])
+
+    return NextResponse.json({ items, total, page, pageSize })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
