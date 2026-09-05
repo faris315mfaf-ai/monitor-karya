@@ -1,26 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser } from '@/lib/auth'
 import { startOfTodayWIB, endOfTodayWIB, countdownTo, monthKeyNow } from '@/lib/wib'
 
-// GET /api/work-desk - admin PT's "today's work desk"
-export async function GET(req: NextRequest) {
+// GET /api/work-desk - the signed-in user's own "today's work desk".
+// The user is taken from the session, never from a query parameter, so one
+// account cannot read another account's desk.
+export async function GET() {
   try {
-    const userId = req.nextUrl.searchParams.get('userId')
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-    }
-
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, scopeEntityId: true, name: true, email: true },
-    })
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
 
     const entityId = user.scopeEntityId
     if (!entityId) {
-      return NextResponse.json({ error: 'User has no scopeEntityId' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Peran ini tidak terikat pada satu entitas' },
+        { status: 400 }
+      )
     }
 
     const entity = await db.entity.findUnique({
@@ -66,7 +62,7 @@ export async function GET(req: NextRequest) {
       }),
       db.unlockRequest.findMany({
         where: {
-          requestedById: userId,
+          requestedById: user.id,
           status: { in: ['DIAJUKAN', 'DISETUJUI'] },
         },
         orderBy: { createdAt: 'desc' },

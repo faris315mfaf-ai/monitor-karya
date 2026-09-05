@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { ageDays } from '@/lib/wib'
 import { Prisma } from '@prisma/client'
 
 // GET /api/escalations - list escalations with filters
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
@@ -14,10 +17,14 @@ export async function GET(req: NextRequest) {
     const entityId = sp.get('entityId') || undefined
     const overdueStr = sp.get('overdue')
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeEntityIds(user)
+
     const where: Prisma.EscalationWhereInput = {
       ...(status ? { status } : {}),
       ...(needed ? { needed } : {}),
       ...(entityId ? { entityId } : {}),
+      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
     }
 
     const [rows, total] = await Promise.all([

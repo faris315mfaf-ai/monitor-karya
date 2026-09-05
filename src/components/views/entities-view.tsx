@@ -124,8 +124,8 @@ export function EntitiesView() {
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Entitas</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Entitas</h1>
+        <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
           Pohon organisasi holding
         </p>
       </div>
@@ -140,8 +140,8 @@ export function EntitiesView() {
                 <Layers className="h-4 w-4 text-blue-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Pohon Organisasi</CardTitle>
-                <CardDescription className="text-xs">Pilih entitas PT untuk melihat detail</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Pohon Organisasi</CardTitle>
+                <CardDescription className="text-sm">Pilih entitas PT untuk melihat detail</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -173,7 +173,7 @@ function EntityTree({
   if (!data?.tree?.length) {
     return (
       <EmptyState
-        icon={<Building2 className="h-5 w-5 text-slate-400" />}
+        icon={<Building2 className="h-5 w-5 text-slate-400 dark:text-slate-500" />}
         title="Tidak ada data entitas"
       />
     )
@@ -227,12 +227,12 @@ function TreeNodeRow({
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
       >
         {hasChildren ? (
-          expanded ? <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" /> : <ChevronRight className="h-3 w-3 text-slate-400 shrink-0" />
+          expanded ? <ChevronDown className="h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0" /> : <ChevronRight className="h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0" />
         ) : (
           <span className="h-3 w-3 shrink-0" />
         )}
-        <span className="text-[10px] text-slate-400 uppercase tracking-wide w-16 shrink-0">{label}</span>
-        <span className="text-xs font-medium text-slate-700 truncate flex-1">{node.name}</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide w-16 shrink-0">{label}</span>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate flex-1">{node.name}</span>
         {typeof score === 'number' && <ComplianceBadge score={score} />}
       </button>
       {hasChildren && expanded && (
@@ -266,7 +266,7 @@ function EntityDetailPanel({ entityId }: { entityId: string | null }) {
       <Card className="glass h-full min-h-[300px] flex items-center justify-center">
         <CardContent className="p-6 w-full">
           <EmptyState
-            icon={<Building2 className="h-5 w-5 text-slate-400" />}
+            icon={<Building2 className="h-5 w-5 text-slate-400 dark:text-slate-500" />}
             title="Pilih entitas PT dari pohon"
             description="Detail KPI, divisi, proyek, dan laporan terbaru akan muncul di sini."
           />
@@ -296,21 +296,21 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
   return (
     <div id="entity-detail-scroll" className="space-y-3 max-h-[calc(100vh-180px)] overflow-y-auto scrollbar-thin pr-1 -mr-1">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1 flex-wrap text-[10px]">
+      <div className="flex items-center gap-1 flex-wrap text-xs">
         {breadcrumb.map((b, i) => (
           <span key={b.id} className="flex items-center gap-1">
             <span
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
                 i === breadcrumb.length - 1
-                  ? 'bg-blue-500/15 text-blue-700 ring-1 ring-blue-500/30'
-                  : 'bg-slate-500/10 text-slate-600',
+                  ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/30'
+                  : 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
               )}
             >
-              <span className="text-[9px] uppercase opacity-70">{ENTITY_TYPE_LABELS[b.type] || b.type}</span>
+              <span className="text-[11px] uppercase opacity-70">{ENTITY_TYPE_LABELS[b.type] || b.type}</span>
               <span className="truncate max-w-[120px]">{b.name}</span>
             </span>
-            {i < breadcrumb.length - 1 && <ChevronRight className="h-3 w-3 text-slate-400" />}
+            {i < breadcrumb.length - 1 && <ChevronRight className="h-3 w-3 text-slate-400 dark:text-slate-500" />}
           </span>
         ))}
       </div>
@@ -325,16 +325,16 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                   <Building2 className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-800 truncate">{entity.name}</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 truncate">{entity.name}</h2>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{entity.code}</Badge>
+                    <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">{entity.code}</Badge>
                     <Badge
-                      className={cn('text-[9px] h-4 px-1 bg-gradient-to-r text-white border-0', typeGradient)}
+                      className={cn('text-[11px] h-4 px-1 bg-gradient-to-r text-white border-0', typeGradient)}
                     >
                       {typeLabel}
                     </Badge>
                     {!entity.isActive && (
-                      <Badge className="text-[9px] h-4 px-1 bg-slate-500/15 text-slate-600">Nonaktif</Badge>
+                      <Badge className="text-[11px] h-4 px-1 bg-slate-500/15 text-slate-600 dark:text-slate-300">Nonaktif</Badge>
                     )}
                   </div>
                 </div>
@@ -342,7 +342,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
             </div>
           </div>
           {entity.region && (
-            <div className="flex items-center gap-1.5 mt-3 text-[11px] text-slate-500">
+            <div className="flex items-center gap-1.5 mt-3 text-[13px] text-slate-500 dark:text-slate-400">
               <MapPin className="h-3.5 w-3.5 text-blue-500" />
               <span>{entity.region}</span>
             </div>
@@ -359,8 +359,8 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                 <Layers className="h-3.5 w-3.5 text-cyan-600" />
               </div>
               <div>
-                <CardTitle className="text-sm font-semibold text-slate-800">Anak Entitas</CardTitle>
-                <CardDescription className="text-[11px]">{children.length} entitas turunan</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Anak Entitas</CardTitle>
+                <CardDescription className="text-[13px]">{children.length} entitas turunan</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -370,8 +370,8 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                 <div key={c.id} className="glass rounded-xl p-2.5 flex items-center gap-2">
                   <span className={cn('h-2 w-2 rounded-full bg-gradient-to-br', ENTITY_TYPE_COLORS[c.type] || 'from-slate-400 to-slate-300')} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-700 truncate">{c.name}</p>
-                    <p className="text-[9px] text-slate-400 font-mono">{c.code}</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{c.name}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">{c.code}</p>
                   </div>
                   <Badge variant="outline" className="text-[8px] h-3.5 px-1">{ENTITY_TYPE_LABELS[c.type] || c.type}</Badge>
                 </div>
@@ -426,7 +426,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-3.5 w-3.5 text-blue-600" />
-                  <CardTitle className="text-sm font-semibold text-slate-800">Tren 7 Laporan Terakhir</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Tren 7 Laporan Terakhir</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -443,7 +443,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                           style={{ height: `${h}%` }}
                           title={`${formatDate(r.reportDate)}: ${r.progressPct}%`}
                         />
-                        <span className="text-[8px] text-slate-400 tabular-nums">
+                        <span className="text-[8px] text-slate-400 dark:text-slate-500 tabular-nums">
                           {new Date(r.reportDate).getDate()}
                         </span>
                       </div>
@@ -463,23 +463,23 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                     <Users className="h-3.5 w-3.5 text-violet-600" />
                   </div>
                   <div>
-                    <CardTitle className="text-sm font-semibold text-slate-800">Divisi</CardTitle>
-                    <CardDescription className="text-[11px]">{divisions?.length || 0} divisi</CardDescription>
+                    <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Divisi</CardTitle>
+                    <CardDescription className="text-[13px]">{divisions?.length || 0} divisi</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {(!divisions || divisions.length === 0) ? (
-                  <p className="text-[11px] text-slate-400 text-center py-3">Belum ada divisi</p>
+                  <p className="text-[13px] text-slate-400 dark:text-slate-500 text-center py-3">Belum ada divisi</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin pr-1 -mr-1">
                     {divisions.map((d) => (
                       <div key={d.id} className="glass rounded-lg p-2 flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-slate-700 truncate">{d.name}</p>
-                          <p className="text-[9px] text-slate-400">{d.divisionType.name}</p>
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{d.name}</p>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500">{d.divisionType.name}</p>
                         </div>
-                        {!d.isActive && <Badge className="text-[8px] h-3.5 px-1 bg-slate-500/15 text-slate-500">Nonaktif</Badge>}
+                        {!d.isActive && <Badge className="text-[8px] h-3.5 px-1 bg-slate-500/15 text-slate-500 dark:text-slate-400">Nonaktif</Badge>}
                       </div>
                     ))}
                   </div>
@@ -494,27 +494,27 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                     <FolderKanban className="h-3.5 w-3.5 text-blue-600" />
                   </div>
                   <div>
-                    <CardTitle className="text-sm font-semibold text-slate-800">Proyek</CardTitle>
-                    <CardDescription className="text-[11px]">{projects?.length || 0} proyek</CardDescription>
+                    <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Proyek</CardTitle>
+                    <CardDescription className="text-[13px]">{projects?.length || 0} proyek</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {(!projects || projects.length === 0) ? (
-                  <p className="text-[11px] text-slate-400 text-center py-3">Belum ada proyek</p>
+                  <p className="text-[13px] text-slate-400 dark:text-slate-500 text-center py-3">Belum ada proyek</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-thin pr-1 -mr-1">
                     {projects.map((p) => (
                       <div key={p.id} className="glass rounded-lg p-2 space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-slate-700 truncate flex-1">{p.name}</p>
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate flex-1">{p.name}</p>
                           <Badge variant="outline" className="text-[8px] h-3.5 px-1 font-mono">{p.code}</Badge>
                         </div>
                         <div className="flex items-center gap-1 flex-wrap">
-                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-blue-500/30 text-blue-700 bg-blue-500/5">
+                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
                             {PROJECT_PHASE_LABELS[p.phase] || p.phase}
                           </Badge>
-                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-emerald-500/30 text-emerald-700 bg-emerald-500/5">
+                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/5">
                             {PROJECT_LIFECYCLE_LABELS[p.lifecycle] || p.lifecycle}
                           </Badge>
                         </div>
@@ -532,7 +532,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-3.5 w-3.5 text-blue-600" />
-                  <CardTitle className="text-sm font-semibold text-slate-800">Laporan Harian Terbaru</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Laporan Harian Terbaru</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -540,13 +540,13 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                   {recentDailyReports.slice(0, 5).map((r) => (
                     <div key={r.id} className="glass rounded-lg p-2 flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-700 truncate">{r.project.name}</p>
-                        <p className="text-[9px] text-slate-400">{formatDate(r.reportDate)}</p>
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{r.project.name}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{formatDate(r.reportDate)}</p>
                       </div>
                       <DailyStatusBadge status={r.status} size="xs" />
                       <div className="flex items-center gap-1 w-24">
                         <Progress value={r.progressPct} className="h-1" />
-                        <span className="text-[9px] font-semibold text-slate-600 tabular-nums">{r.progressPct}%</span>
+                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums">{r.progressPct}%</span>
                       </div>
                     </div>
                   ))}
@@ -561,7 +561,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <Layers className="h-3.5 w-3.5 text-violet-600" />
-                  <CardTitle className="text-sm font-semibold text-slate-800">Laporan Mingguan Terbaru</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Laporan Mingguan Terbaru</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -569,8 +569,8 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
                   {recentWeeklyReports.slice(0, 4).map((w) => (
                     <div key={w.id} className="glass rounded-lg p-2 flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-slate-700 truncate">{w.division.name}</p>
-                        <p className="text-[9px] text-slate-400 font-mono">W{w.isoWeek}/{w.isoYear}</p>
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{w.division.name}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">W{w.isoWeek}/{w.isoYear}</p>
                       </div>
                       <WeeklyHeaderBadge status={w.statusHeader} />
                     </div>
@@ -588,7 +588,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Users className="h-3.5 w-3.5 text-blue-600" />
-              <CardTitle className="text-sm font-semibold text-slate-800">Penunjukan Admin</CardTitle>
+              <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Penunjukan Admin</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -596,15 +596,15 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
               {adminAppointments.slice(0, 5).map((a) => (
                 <div key={a.id} className="glass rounded-lg p-2 flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-700 truncate">{a.userName}</p>
-                    <p className="text-[9px] text-slate-400 truncate">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{a.userName}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
                       {a.kind} · SK {a.skNumber || '-'} · {formatDate(a.validFrom)} → {formatDate(a.validUntil)}
                     </p>
                   </div>
                   <Badge
                     className={cn(
                       'text-[8px] h-3.5 px-1',
-                      a.status === 'AKTIF' ? 'bg-emerald-500/15 text-emerald-700' : 'bg-slate-500/15 text-slate-600',
+                      a.status === 'AKTIF' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/15 text-slate-600 dark:text-slate-300',
                     )}
                   >
                     {a.status}
@@ -620,7 +620,7 @@ function EntityDetailContent({ entityId }: { entityId: string }) {
       {!isPT && (!children || children.length === 0) && (
         <Card className="glass">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
               Entitas non-PT tidak memiliki KPI, divisi, atau proyek langsung. Pilih entitas PT turunan untuk melihat detail lengkap.
             </p>
           </CardContent>

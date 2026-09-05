@@ -124,13 +124,30 @@
     min-height: 100%;
   }
   body {
-    /* Soft animated gradient backdrop */
+    /* Soft gradient backdrop */
     background:
       radial-gradient(circle at 0% 0%, oklch(0.94 0.06 240 / 0.55), transparent 45%),
       radial-gradient(circle at 100% 0%, oklch(0.90 0.10 200 / 0.45), transparent 45%),
       radial-gradient(circle at 50% 100%, oklch(0.93 0.05 254 / 0.40), transparent 55%),
       var(--background);
     background-attachment: fixed;
+    /* A touch larger than the browser default: this is an operational tool read
+       at arm's length on phones and tablets, often outdoors. */
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  .dark body {
+    background:
+      radial-gradient(circle at 0% 0%, oklch(0.35 0.09 254 / 0.55), transparent 45%),
+      radial-gradient(circle at 100% 0%, oklch(0.32 0.10 200 / 0.45), transparent 45%),
+      radial-gradient(circle at 50% 100%, oklch(0.30 0.07 254 / 0.40), transparent 55%),
+      var(--background);
+  }
+  /* Every control stays thumb-sized on touch screens. */
+  @media (pointer: coarse) {
+    button, [role="button"], a.btn, summary {
+      min-height: 44px;
+    }
   }
 }
 
@@ -166,6 +183,19 @@
   .dark .glass-strong {
     background: color-mix(in oklch, var(--card) 70%, transparent);
     border: 1px solid color-mix(in oklch, white 15%, transparent);
+  }
+  /* Dialogs keep the glass look but stay opaque enough to read and type in —
+     the animated transform on Radix content disables backdrop-filter, so the
+     fill has to carry the contrast on its own. */
+  .glass-modal {
+    background: color-mix(in oklch, var(--popover) 97%, transparent);
+    border: 1px solid color-mix(in oklch, white 55%, transparent);
+    box-shadow: 0 24px 64px -12px oklch(0.30 0.08 254 / 0.35);
+  }
+  .dark .glass-modal {
+    background: color-mix(in oklch, var(--popover) 97%, transparent);
+    border: 1px solid color-mix(in oklch, white 14%, transparent);
+    box-shadow: 0 24px 64px -12px oklch(0 0 0 / 0.65);
   }
   .glass-blue {
     background: linear-gradient(135deg,

@@ -1,13 +1,14 @@
 // Prisma schema for Business Monitoring App (Pelaporan Checklist Berbasis Web)
-// Adapted for SQLite — String fields with documented enum values.
+// PostgreSQL (Supabase) — String fields with documented enum values.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================================
@@ -36,6 +37,7 @@ model Entity {
   escalations    Escalation[]
   kpiSnapshots   KpiSnapshot[]
   adminAppointments AdminAppointment[]
+  tasks          Task[]
 }
 
 model DivisionType {
@@ -56,6 +58,8 @@ model Division {
   divisionTypeId String
   divisionType   DivisionType @relation(fields: [divisionTypeId], references: [id])
   name           String
+  headUserId     String?
+  headUser       User?    @relation("DivisionHead", fields: [headUserId], references: [id])
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -74,6 +78,8 @@ model Project {
   phase          String   // INISIASI | PERENCANAAN | PELAKSANAAN | PENYELESAIAN
   lifecycle      String   // DIUSULKAN | AKTIF | DITUTUP | DIARSIPKAN
   picName        String?
+  picUserId      String?
+  picUser        User?    @relation("ProjectPic", fields: [picUserId], references: [id])
   startDate      DateTime?
   targetEndDate  DateTime?
   approvedByName String?
@@ -82,6 +88,7 @@ model Project {
   updatedAt      DateTime @updatedAt
 
   dailyReports DailyProjectReport[]
+  tasks        Task[]
 }
 
 model AdminAppointment {
@@ -154,6 +161,7 @@ model User {
   email        String   @unique
   name         String
   phone        String?
+  passwordHash String?  // scrypt: scrypt$N$r$p$salt$hash — null means the account cannot sign in yet
   role         String   // ADMIN_PT | KEPALA_DIVISI | PIC_PROYEK | DIREKTUR_ENTITAS | DIREKTUR_SDM_GA | MANAJEMEN | TI | AUDITOR
   scopeEntityId String? // for role-scoped users (DIREKTUR_ENTITAS, ADMIN_PT)
   isActive     Boolean  @default(true)
@@ -163,6 +171,13 @@ model User {
   updatedAt    DateTime @updatedAt
 
   dailyReportsSubmitted  DailyProjectReport[]
+  dailyReportsForwarded  DailyProjectReport[] @relation("DailyForwarder")
+  weeklySubmitted        WeeklyDivisionReport[] @relation("WeeklySubmitter")
+  weeklyForwarded        WeeklyDivisionReport[] @relation("WeeklyForwarder")
+  projectsAsPic          Project[]  @relation("ProjectPic")
+  tasksAsPic             Task[]     @relation("TaskPic")
+  tasksCreated           Task[]     @relation("TaskCreator")
+  divisionsAsHead        Division[] @relation("DivisionHead")
   weeklyApprovals        WeeklyDivisionReport[]
   escalationsRaised      Escalation[] @relation("EscalationRaisedBy")
   escalationsDecided     Escalation[] @relation("EscalationDecidedBy")
@@ -201,6 +216,9 @@ model DailyProjectReport {
   submittedById         String?
   submittedBy            User?    @relation(fields: [submittedById], references: [id])
   submittedAt            DateTime?
+  forwardedById          String?
+  forwardedBy            User?    @relation("DailyForwarder", fields: [forwardedById], references: [id])
+  forwardedAt            DateTime?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -222,6 +240,12 @@ model WeeklyDivisionReport {
   periodStart     DateTime
   periodEnd       DateTime
   statusHeader    String   // DRAFT | MENUNGGU_PERSETUJUAN | DISETUJUI | TERKUNCI
+  submittedById   String?
+  submittedBy     User?    @relation("WeeklySubmitter", fields: [submittedById], references: [id])
+  submittedAt     DateTime?
+  forwardedById   String?
+  forwardedBy     User?    @relation("WeeklyForwarder", fields: [forwardedById], references: [id])
+  forwardedAt     DateTime?
   approvedById    String?
   approvedBy      User?    @relation(fields: [approvedById], references: [id])
   approvedAt      DateTime?
@@ -256,6 +280,8 @@ model WeeklyReportItem {
   priority            Priority @relation(fields: [priorityId], references: [id])
   needsEscalation     Boolean  @default(false)
   evidenceCount       Int      @default(0)
+  tags                String[] @default([])
+  subtasks            Subtask[]
   carriedOverFromId   String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -306,6 +332,7 @@ model Escalation {
   decidedAt     DateTime?
   decisionText  String?
   slaDays       Int      @default(7)
+  tasks         Task[]   @relation("TaskEscalation")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -408,4 +435,68 @@ model KpiSnapshot {
   updatedAt             DateTime @updatedAt
 
   @@unique([entityId, periodType, periodKey])
+}
+
+// ============================================================
+// TASK HARIAN — rincian pekerjaan di bawah laporan harian proyek
+// ============================================================
+
+/// One unit of work a PIC plans and reports on for a given day. Sits under the
+/// project's daily report: many tasks roll up into one DailyProjectReport.
+model Task {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  entityId    String
+  entity      Entity   @relation(fields: [entityId], references: [id])
+  workDate    DateTime // WIB calendar day this task belongs to
+
+  title       String
+  description String?
+  tags        String[] @default([])
+
+  picUserId   String?
+  picUser     User?    @relation("TaskPic", fields: [picUserId], references: [id])
+  picName     String?  // free-text when the assignee has no account
+
+  startAt     DateTime? // planned window, stored UTC
+  endAt       DateTime?
+  durationMin Int?
+
+  status      String   @default("BELUM_MULAI") // BELUM_MULAI | BERJALAN | SELESAI | TERKENDALA | MENUNGGU_KEPUTUSAN
+  progressPct Int      @default(0)
+
+  obstacle       String? // required when TERKENDALA
+  decisionNeeded String? // required when MENUNGGU_KEPUTUSAN
+
+  escalationId String?     // set once raised, so it is not raised twice
+  escalation   Escalation? @relation("TaskEscalation", fields: [escalationId], references: [id])
+
+  createdById String?
+  createdBy   User?    @relation("TaskCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subtasks Subtask[]
+
+  @@index([projectId, workDate])
+  @@index([entityId, workDate])
+  @@index([picUserId, workDate])
+}
+
+/// A checklist line under either a daily task or a weekly division item.
+/// Exactly one of the two owners is set.
+model Subtask {
+  id           String            @id @default(cuid())
+  taskId       String?
+  task         Task?             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  weeklyItemId String?
+  weeklyItem   WeeklyReportItem? @relation(fields: [weeklyItemId], references: [id], onDelete: Cascade)
+  title        String
+  isDone       Boolean           @default(false)
+  position     Int               @default(0)
+  createdAt    DateTime          @default(now())
+
+  @@index([taskId])
+  @@index([weeklyItemId])
 }

@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeUserIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/unlock-requests - list unlock requests
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '30', 10)))
     const status = sp.get('status') || undefined
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeUserIds(user)
+
     const where: Prisma.UnlockRequestWhereInput = {
       ...(status ? { status } : {}),
+      ...(scopeIds ? { AND: [{ requestedById: { in: scopeIds } }] } : {}),
     }
 
     const [items, total] = await Promise.all([

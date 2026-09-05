@@ -95,6 +95,10 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return
+    // Embla is created outside React, so its initial scroll state can only be
+    // read once the instance exists. This one sync seeds the prev/next flags;
+    // every later update arrives through the events subscribed below.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api)
     api.on("reInit", onSelect)
     api.on("select", onSelect)

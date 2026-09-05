@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, resolveScopeEntityId } from '@/lib/auth'
 import { lastNMonthKeys } from '@/lib/wib'
 
 // Indonesian short month names
@@ -17,7 +18,11 @@ function labelFor(periodKey: string): string {
 // GET /api/kpi-trends - 6-month KPI trend for charts
 export async function GET(req: NextRequest) {
   try {
-    const scopeEntityId = req.nextUrl.searchParams.get('scopeEntityId')
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
+    // A scoped role is pinned to its own subtree; the query parameter can only
+    // narrow a global role's view, never widen a scoped one's.
+    const scopeEntityId = resolveScopeEntityId(user, req.nextUrl.searchParams.get('scopeEntityId'))
 
     let pathPrefix = ''
     if (scopeEntityId) {

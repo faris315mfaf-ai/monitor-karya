@@ -1,7 +1,8 @@
 'use client'
 
 import { useApp } from '@/components/app-provider'
-import { RoleSwitcher } from '@/components/role-switcher'
+import { UserMenu } from '@/components/user-menu'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Activity, Bell, Globe2, ShieldCheck, Zap } from 'lucide-react'
@@ -37,12 +38,12 @@ export function Navbar() {
           </div>
           <div className="hidden sm:flex flex-col leading-tight min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-800 text-base tracking-tight">MonitorKarya</span>
-              <Badge className="bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 text-[9px] px-1.5 py-0 h-4 font-semibold">
+              <span className="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight">MonitorKarya</span>
+              <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 text-[11px] px-1.5 py-0 h-4 font-semibold">
                 v1.0
               </Badge>
             </div>
-            <span className="text-[10px] text-slate-500 hidden md:inline">Pemantauan Bisnis Holding</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 hidden md:inline">Pemantauan Bisnis Holding</span>
           </div>
         </div>
 
@@ -73,40 +74,43 @@ export function Navbar() {
         {/* Right side */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Active tab hint */}
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 pr-2 border-r border-slate-200/60">
+          <div className="hidden md:flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 pr-2 border-r border-slate-200/60">
             <span className="capitalize">{activeTab.replace('-', ' ')}</span>
           </div>
+
+          <ThemeToggle />
 
           {/* Notifications */}
           <Button
             variant="ghost"
-            size="icon"
-            className="glass h-9 w-9 relative hover:bg-blue-500/10"
+            size="icon-sm"
+            className="glass relative hover:bg-blue-500/10"
             aria-label="Notifikasi"
           >
-            <Bell className="h-4 w-4 text-slate-600" />
+            <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
             {notifCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
                 {notifCount > 9 ? '9+' : notifCount}
               </span>
             )}
           </Button>
 
-          <RoleSwitcher />
+          <UserMenu />
         </div>
       </div>
 
       {/* Mobile sub-header — current role */}
-      {user && (
-        <div className="sm:hidden mt-2 px-1 flex items-center justify-between text-[11px] text-slate-500">
-          <span>
-            Masuk sebagai <strong className="text-slate-700">{user.name}</strong>
-          </span>
-          <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-medium border-blue-500/30 text-blue-700 bg-blue-500/10">
-            {ROLE_LABELS[user.role]}
-          </Badge>
-        </div>
-      )}
+      <div className="sm:hidden mt-2 px-1 flex items-center justify-between text-[13px] text-slate-500 dark:text-slate-400">
+        <span className="truncate">
+          Masuk sebagai <strong className="text-slate-700 dark:text-slate-200">{user.name}</strong>
+        </span>
+        <Badge
+          variant="outline"
+          className="shrink-0 ml-2 text-[11px] h-4 px-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/10"
+        >
+          {ROLE_LABELS[user.role] ?? user.role}
+        </Badge>
+      </div>
     </header>
   )
 }
@@ -125,8 +129,8 @@ function StatusChip({
   return (
     <div className="glass rounded-full px-2.5 py-1 flex items-center gap-1.5">
       <span className={color}>{icon}</span>
-      <span className="text-[10px] text-slate-500 font-medium">{label}</span>
-      <span className="text-[11px] font-semibold text-slate-700 tabular-nums">{value}</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</span>
+      <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200 tabular-nums">{value}</span>
     </div>
   )
 }

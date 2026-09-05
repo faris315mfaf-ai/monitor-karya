@@ -13,7 +13,7 @@ import {
   Clock, FolderKanban, CalendarRange, Lock, AlertTriangle, CheckCircle2,
   FileEdit, Hourglass, FolderCheck, TimerReset, ChevronRight,
 } from 'lucide-react'
-import { PROJECT_PHASE_LABELS, DAILY_STATUS_META } from '@/lib/constants'
+import { PROJECT_PHASE_LABELS, DAILY_STATUS_META, ROLE_LABELS } from '@/lib/constants'
 import { formatTime, formatDateLong, formatPercent } from '@/lib/format'
 
 type WorkDeskData = {
@@ -56,12 +56,20 @@ type WorkDeskData = {
 
 export function WorkDeskView() {
   const { user, setActiveTab } = useApp()
-  const userId = user?.id
-  const url = userId ? `/api/work-desk?userId=${userId}` : null
-  const { data, loading, error } = useFetch<WorkDeskData>(url)
+  // The desk is built around one PT, so it only means anything for a role that
+  // is scoped to an entity. Asking the API for an unscoped role (Manajemen,
+  // Auditor, TI) would just come back 400 — skip the request and explain.
+  // The API reads the account from the session, so nothing is passed here.
+  const isScoped = Boolean(user.scopeEntityId)
+  const { data, loading, error } = useFetch<WorkDeskData>(isScoped ? '/api/work-desk' : null)
 
-  if (!userId) {
-    return <EmptyState title="Pilih peran Admin PT" description="Meja kerja hanya tersedia untuk peran Admin PT" />
+  if (!isScoped) {
+    return (
+      <EmptyState
+        title="Meja kerja tidak berlaku untuk peran ini"
+        description={`Akun ${ROLE_LABELS[user.role] ?? user.role} tidak terikat pada satu PT, sehingga tidak punya daftar laporan harian sendiri. Meja kerja tersedia untuk akun yang melekat pada sebuah entitas, misalnya Admin PT.`}
+      />
+    )
   }
 
   if (loading) {
@@ -88,8 +96,8 @@ export function WorkDeskView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Meja Kerja Hari Ini</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Meja Kerja Hari Ini</h1>
+          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
             {data.entity.name} · {formatDateLong(new Date())}
           </p>
         </div>
@@ -113,14 +121,14 @@ export function WorkDeskView() {
                 <FolderKanban className="h-4 w-4 text-blue-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Daftar Proyek Hari Ini</CardTitle>
-                <CardDescription className="text-xs">Perbarui laporan harian sebelum jam kunci 17:00 WIB</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Daftar Proyek Hari Ini</CardTitle>
+                <CardDescription className="text-sm">Perbarui laporan harian sebelum jam kunci 17:00 WIB</CardDescription>
               </div>
             </div>
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs text-blue-600 hover:text-blue-700 h-7"
+              className="text-sm text-blue-600 hover:text-blue-700 h-7"
               onClick={() => setActiveTab('projects')}
             >
               Buka modul <ChevronRight className="h-3 w-3" />
@@ -129,7 +137,7 @@ export function WorkDeskView() {
         </CardHeader>
         <CardContent>
           {data.projectsToday.length === 0 ? (
-            <EmptyState icon={<FolderKanban className="h-5 w-5 text-slate-400" />} title="Tidak ada proyek aktif" description="Belum ada proyek AKTIF yang ditugaskan" />
+            <EmptyState icon={<FolderKanban className="h-5 w-5 text-slate-400 dark:text-slate-500" />} title="Tidak ada proyek aktif" description="Belum ada proyek AKTIF yang ditugaskan" />
           ) : (
             <div className="space-y-2">
               {data.projectsToday.map((p) => (
@@ -149,8 +157,8 @@ export function WorkDeskView() {
                 <CalendarRange className="h-4 w-4 text-violet-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Laporan Mingguan Draft</CardTitle>
-                <CardDescription className="text-xs">Perlu dikirim untuk persetujuan</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Laporan Mingguan Draft</CardTitle>
+                <CardDescription className="text-sm">Perlu dikirim untuk persetujuan</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -163,20 +171,20 @@ export function WorkDeskView() {
                   <div key={w.id} className="glass rounded-xl p-3 flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-slate-800">{w.division.name}</span>
-                        <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">W{w.isoWeek}/{w.isoYear}</Badge>
+                        <span className="text-lg font-semibold text-slate-800 dark:text-slate-100">{w.division.name}</span>
+                        <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">W{w.isoWeek}/{w.isoYear}</Badge>
                         {w.isLate && (
-                          <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20">Terlambat</Badge>
+                          <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20">Terlambat</Badge>
                         )}
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         {formatDateLong(w.periodStart)} — {formatDateLong(w.periodEnd)}
                       </p>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="glass h-7 text-[10px] border-blue-500/30 text-blue-700 hover:bg-blue-500/10"
+                      className="glass h-7 text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
                       onClick={() => setActiveTab('divisions')}
                     >
                       <FileEdit className="h-3 w-3 mr-1" /> Lanjutkan
@@ -195,8 +203,8 @@ export function WorkDeskView() {
                 <Lock className="h-4 w-4 text-amber-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Permohonan Buka Kunci</CardTitle>
-                <CardDescription className="text-xs">Status permohonan Anda</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Permohonan Buka Kunci</CardTitle>
+                <CardDescription className="text-sm">Status permohonan Anda</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -208,12 +216,12 @@ export function WorkDeskView() {
                 {data.pendingUnlocks.map((u) => (
                   <div key={u.id} className="glass rounded-xl p-3">
                     <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500">{u.targetType === 'DAILY_REPORT' ? 'Laporan Harian' : 'Laporan Mingguan'}</span>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-slate-500 dark:text-slate-400">{u.targetType === 'DAILY_REPORT' ? 'Laporan Harian' : 'Laporan Mingguan'}</span>
                       </div>
                       <UnlockStatusBadge status={u.status} />
                     </div>
-                    <p className="text-[11px] text-slate-600 line-clamp-2">{u.reason}</p>
+                    <p className="text-[13px] text-slate-600 dark:text-slate-300 line-clamp-2">{u.reason}</p>
                   </div>
                 ))}
               </div>
@@ -237,9 +245,9 @@ function ProjectTodayRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-slate-800 truncate">{project.name}</span>
-            <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{project.code}</Badge>
-            <Badge variant="outline" className="text-[9px] h-4 px-1 border-blue-500/30 text-blue-700 bg-blue-500/5">
+            <span className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{project.name}</span>
+            <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">{project.code}</Badge>
+            <Badge variant="outline" className="text-[11px] h-4 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
               {PROJECT_PHASE_LABELS[project.phase]}
             </Badge>
           </div>
@@ -248,30 +256,30 @@ function ProjectTodayRow({
               <div className="flex items-center gap-2 flex-wrap">
                 <DailyStatusBadge status={project.todayReport.status} />
                 {project.todayReport.isLate && (
-                  <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20">
+                  <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20">
                     <Clock className="h-2.5 w-2.5 mr-0.5" /> Terlambat
                   </Badge>
                 )}
                 {project.todayReport.needsEscalation && (
-                  <Badge className="text-[9px] h-4 px-1 bg-amber-500/15 text-amber-700 hover:bg-amber-500/20">
+                  <Badge className="text-[11px] h-4 px-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20">
                     <AlertTriangle className="h-2.5 w-2.5 mr-0.5" /> Eskalasi
                   </Badge>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Progress value={project.todayReport.progressPct} className="h-1.5 flex-1" />
-                <span className="text-[10px] font-semibold text-slate-600 tabular-nums">{project.todayReport.progressPct}%</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tabular-nums">{project.todayReport.progressPct}%</span>
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex items-center gap-2 text-xs text-amber-700">
+            <div className="mt-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
               <Hourglass className="h-3.5 w-3.5" />
               <span className="font-medium">Belum diperbarui hari ini</span>
             </div>
           )}
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <div className={`flex items-center gap-1 text-[10px] font-semibold ${isUpdated ? 'text-emerald-700' : 'text-amber-700'}`}>
+          <div className={`flex items-center gap-1 text-xs font-semibold ${isUpdated ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
             <span className={`h-2 w-2 rounded-full ${isUpdated ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse-soft'}`} />
             {isUpdated ? 'Diperbarui' : 'Belum'}
           </div>
@@ -288,10 +296,10 @@ function CountdownPill({ countdown }: { countdown: WorkDeskData['countdown'] }) 
     <div className={`glass rounded-full px-3 py-1.5 flex items-center gap-2 ${passed ? 'bg-rose-500/15' : total < 60 ? 'bg-amber-500/15' : 'bg-blue-500/10'}`}>
       <TimerReset className={`h-4 w-4 ${passed ? 'text-rose-600' : total < 60 ? 'text-amber-600' : 'text-blue-600'}`} />
       <div className="flex flex-col leading-tight">
-        <span className="text-[9px] text-slate-500 font-medium uppercase tracking-wider">
+        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider">
           {passed ? 'Kunci tercapai' : 'Sisa waktu'}
         </span>
-        <span className={`text-xs font-bold tabular-nums ${passed ? 'text-rose-700' : total < 60 ? 'text-amber-700' : 'text-blue-700'}`}>
+        <span className={`text-sm font-bold tabular-nums ${passed ? 'text-rose-700 dark:text-rose-300' : total < 60 ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
           {passed ? '17:00 WIB' : `${String(countdown.hours).padStart(2, '0')}j ${String(countdown.minutes).padStart(2, '0')}m`}
         </span>
       </div>

@@ -1,6 +1,10 @@
 'use client'
 
 import { useFetch } from '@/hooks/use-fetch'
+import {
+  AdminDashboard, KadivDashboard, OversightExtras, PicDashboard,
+  type AdminData, type KadivData, type OversightPanel, type PicData,
+} from '@/components/views/role-dashboards'
 import { useApp } from '@/components/app-provider'
 import { StatCard, ComplianceBadge, EscalationStatusBadge } from '@/components'
 import { LoadingCard, LoadingSpinner, EmptyState } from '@/components/loading-states'
@@ -10,9 +14,11 @@ import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Building2, FolderKanban, CheckCircle2, AlertTriangle, Siren, Lock, TrendingUp, TrendingDown, Clock, Trophy, ChevronRight,
+  BadgeCheck,
 } from 'lucide-react'
 import { formatNumber, formatPercent, formatRelative, formatDateLong } from '@/lib/format'
-import { ESCALATION_NEEDED_LABELS } from '@/lib/constants'
+import { ESCALATION_NEEDED_LABELS, ROLE_LABELS } from '@/lib/constants'
+import { ROLE_DUTIES } from '@/lib/rbac'
 import { ComplianceTreemap } from '@/components/dashboard/compliance-treemap'
 import { KpiTrendChart } from '@/components/dashboard/kpi-trend-chart'
 
@@ -75,7 +81,7 @@ type DashboardData = {
   }>
 }
 
-export function DashboardView() {
+function AggregateDashboard() {
   const { user, setActiveTab, setSelectedEntityId } = useApp()
   const scopeId = user?.scopeEntityId
   const url = `/api/dashboard${scopeId ? `?scopeEntityId=${scopeId}` : ''}`
@@ -103,18 +109,26 @@ export function DashboardView() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">
-            Dashboard Pemantauan
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+            Dashboard {ROLE_LABELS[user.role] ?? 'Pemantauan'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
             {user?.scopeEntityId ? 'Cakupan: subtree entitas Anda' : 'Cakupan: seluruh holding'} · {formatDateLong(new Date())}
           </p>
         </div>
-        <Badge className="glass-blue text-blue-700 text-xs font-medium px-3 py-1 border-blue-500/30 w-fit">
+        <Badge className="glass-blue text-blue-700 dark:text-blue-300 text-sm font-medium px-3 py-1 border-blue-500/30 w-fit">
           <TrendingUp className="h-3 w-3 mr-1" />
           Skor kepatuhan rata-rata: {formatPercent(s.avgCompliance, 1)}
         </Badge>
       </div>
+
+      {/* What this role is answerable for */}
+      {ROLE_DUTIES[user.role] && (
+        <div className="glass rounded-xl px-3 py-2.5 flex items-start gap-2 text-[13px] text-slate-600 dark:text-slate-300">
+          <BadgeCheck className="h-4 w-4 text-blue-600 shrink-0 mt-px" />
+          <span>{ROLE_DUTIES[user.role]}</span>
+        </div>
+      )}
 
       {/* KPI cards grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -156,10 +170,10 @@ export function DashboardView() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Tren KPI 6 Bulan</CardTitle>
-                <CardDescription className="text-xs">Indikator kepatuhan agregat</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Tren KPI 6 Bulan</CardTitle>
+                <CardDescription className="text-sm">Indikator kepatuhan agregat</CardDescription>
               </div>
-              <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-700 bg-blue-500/5">
+              <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
                 Bulanan
               </Badge>
             </div>
@@ -171,8 +185,8 @@ export function DashboardView() {
 
         <Card className="glass">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold text-slate-800">Peta Kepatuhan</CardTitle>
-            <CardDescription className="text-xs">Hierarki holding → PT</CardDescription>
+            <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Peta Kepatuhan</CardTitle>
+            <CardDescription className="text-sm">Hierarki holding → PT</CardDescription>
           </CardHeader>
           <CardContent>
             <ComplianceTreemap scopeEntityId={user?.scopeEntityId} onSelectEntity={(id) => {
@@ -202,11 +216,11 @@ export function DashboardView() {
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-base font-semibold text-slate-800">Perlu Perhatian</CardTitle>
-                  <CardDescription className="text-xs">Entitas dengan kepatuhan &lt; 75%</CardDescription>
+                  <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Perlu Perhatian</CardTitle>
+                  <CardDescription className="text-sm">Entitas dengan kepatuhan &lt; 75%</CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 bg-amber-500/5">
+              <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/5">
                 {formatNumber(data.attentionEntities.length)} entitas
               </Badge>
             </div>
@@ -229,10 +243,10 @@ export function DashboardView() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-800 truncate">{e.entityName}</span>
-                            <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{e.entityCode}</Badge>
+                            <span className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{e.entityName}</span>
+                            <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">{e.entityCode}</Badge>
                           </div>
-                          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
+                          <div className="flex items-center gap-3 mt-1.5 text-[13px] text-slate-500 dark:text-slate-400">
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" /> Tepat waktu {formatPercent(e.onTimeDailyPct, 0)}
                             </span>
@@ -240,7 +254,7 @@ export function DashboardView() {
                               <CheckCircle2 className="h-3 w-3" /> Mingguan {formatPercent(e.weeklyCompletenessPct, 0)}
                             </span>
                             {e.lateToday > 0 && (
-                              <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20">
+                              <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20">
                                 {e.lateToday} terlambat
                               </Badge>
                             )}
@@ -267,8 +281,8 @@ export function DashboardView() {
                 <Trophy className="h-4 w-4 text-emerald-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Top Performer</CardTitle>
-                <CardDescription className="text-xs">Entitas terbaik bulan ini</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Top Performer</CardTitle>
+                <CardDescription className="text-sm">Entitas terbaik bulan ini</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -276,12 +290,12 @@ export function DashboardView() {
             <div className="space-y-2">
               {data.topPerformers.map((p, i) => (
                 <div key={p.entityId} className="flex items-center gap-3 glass rounded-xl p-2.5">
-                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-500 text-white' : i === 1 ? 'bg-slate-400 text-white' : i === 2 ? 'bg-orange-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <div className={`h-7 w-7 rounded-full flex items-center justify-center text-sm font-bold ${i === 0 ? 'bg-amber-500 text-white' : i === 1 ? 'bg-slate-400 text-white' : i === 2 ? 'bg-orange-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 truncate">{p.entityName}</div>
-                    <div className="text-[10px] text-slate-500">{p.region}</div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{p.entityName}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{p.region}</div>
                   </div>
                   <ComplianceBadge score={p.complianceScore} />
                 </div>
@@ -300,13 +314,13 @@ export function DashboardView() {
                 <Siren className="h-4 w-4 text-rose-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Papan Eskalasi</CardTitle>
-                <CardDescription className="text-xs">Menunggu keputusan Manajemen</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Papan Eskalasi</CardTitle>
+                <CardDescription className="text-sm">Menunggu keputusan Manajemen</CardDescription>
               </div>
             </div>
             <button
               onClick={() => setActiveTab('escalations')}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
             >
               Lihat semua <ChevronRight className="h-3 w-3" />
             </button>
@@ -323,18 +337,18 @@ export function DashboardView() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-semibold text-slate-800">{esc.entityName}</span>
-                          <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{esc.entityCode}</Badge>
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{esc.entityName}</span>
+                          <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">{esc.entityCode}</Badge>
                           <EscalationStatusBadge status={esc.status} />
                           {esc.isOverdue && (
-                            <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20">
+                            <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20">
                               <TrendingDown className="h-2.5 w-2.5 mr-0.5" /> Lewat SLA
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{esc.summary}</p>
-                        <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
-                          <span>Butuh: <strong className="text-slate-700">{ESCALATION_NEEDED_LABELS[esc.needed]}</strong></span>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2">{esc.summary}</p>
+                        <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 dark:text-slate-400">
+                          <span>Butuh: <strong className="text-slate-700 dark:text-slate-200">{ESCALATION_NEEDED_LABELS[esc.needed]}</strong></span>
                           <span>·</span>
                           <span>Umur {esc.ageDays} hari</span>
                           <span>·</span>
@@ -359,8 +373,8 @@ export function DashboardView() {
                 <AlertTriangle className="h-4 w-4 text-rose-600" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Entitas Terlambat ≥3× Bulan Ini</CardTitle>
-                <CardDescription className="text-xs">Evaluasi penunjukan Admin PT diperlukan</CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Entitas Terlambat ≥3× Bulan Ini</CardTitle>
+                <CardDescription className="text-sm">Evaluasi penunjukan Admin PT diperlukan</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -370,10 +384,10 @@ export function DashboardView() {
                 <div key={li.id} className="glass rounded-xl p-3">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-slate-800 truncate">{li.entityName}</div>
-                      <div className="text-[10px] text-slate-500">{li.region}</div>
+                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{li.entityName}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{li.region}</div>
                     </div>
-                    <Badge className="text-[9px] h-5 px-1.5 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20">
+                    <Badge className="text-[11px] h-5 px-1.5 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20">
                       {li.occurrenceInMonth}× {li.cycle === 'HARIAN' ? 'Harian' : 'Mingguan'}
                     </Badge>
                   </div>
@@ -419,13 +433,56 @@ function KpiIndicator({
         <div className={`h-7 w-7 rounded-lg flex items-center justify-center ${tones[tone]}`}>
           <Icon className="h-3.5 w-3.5" />
         </div>
-        <span className="text-[11px] font-medium text-slate-600 truncate">{label}</span>
+        <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300 truncate">{label}</span>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-xl font-bold text-slate-800 tabular-nums">{formatPercent(value, 1)}</span>
-        <span className="text-[10px] text-slate-400">/ target {target}%</span>
+        <span className="text-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums">{formatPercent(value, 1)}</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">/ target {target}%</span>
       </div>
       <Progress value={pct} className={`h-1.5 mt-2 ${barColor[tone]}`} />
+    </div>
+  )
+}
+
+type MyDashboard =
+  | PicData
+  | KadivData
+  | AdminData
+  | { kind: 'OVERSIGHT'; panel: OversightPanel }
+
+/**
+ * Picks the dashboard that matches what the signed-in role is answerable for.
+ * The people who input data get an operational view of their own work; the
+ * people who oversee get the aggregate plus the decisions waiting on them.
+ */
+export function DashboardView() {
+  const { data, loading, error } = useFetch<MyDashboard>('/api/my-dashboard')
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <LoadingCard key={i} />
+          ))}
+        </div>
+        <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return <EmptyState title="Gagal memuat dashboard" description={error ?? undefined} />
+  }
+
+  if (data.kind === 'PIC') return <PicDashboard data={data} />
+  if (data.kind === 'KADIV') return <KadivDashboard data={data} />
+  if (data.kind === 'ADMIN') return <AdminDashboard data={data} />
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <AggregateDashboard />
+      <OversightExtras panel={data.panel} />
     </div>
   )
 }

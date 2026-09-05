@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, isGlobalRole } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/notifications - paginated notification logs
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
@@ -12,10 +15,14 @@ export async function GET(req: NextRequest) {
     const channel = sp.get('channel') || undefined
     const template = sp.get('template') || undefined
 
+    // Notification history is personal unless the role covers the whole group.
+    const ownOnly = !isGlobalRole(user.role)
+
     const where: Prisma.NotificationLogWhereInput = {
       ...(status ? { status } : {}),
       ...(channel ? { channel } : {}),
       ...(template ? { template } : {}),
+      ...(ownOnly ? { AND: [{ userId: user.id }] } : {}),
     }
 
     const [items, total] = await Promise.all([

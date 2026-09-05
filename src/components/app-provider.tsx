@@ -1,76 +1,105 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { NavTabId } from '@/lib/constants'
+import { canSeeTab, defaultTabForRole } from '@/lib/rbac'
 
-type RoleUser = {
+export type SessionUser = {
   id: string
   name: string
   email: string
   role: string
-  scopeEntityId?: string | null
-  avatarColor?: string | null
-  lastLoginAt?: string | null
+  scopeEntityId: string | null
+  avatarColor: string | null
 }
 
-type AppState = {
-  user: RoleUser | null
-  setUser: (u: RoleUser | null) => void
+/** UI preferences that are safe to keep in the browser. */
+type UiState = {
   activeTab: NavTabId
-  setActiveTab: (t: NavTabId) => void
   selectedEntityId: string | null
+}
+
+type AppState = UiState & {
+  /** The signed-in user. Comes from the session cookie, never from the browser. */
+  user: SessionUser
+  setActiveTab: (t: NavTabId) => void
   setSelectedEntityId: (id: string | null) => void
 }
 
 const AppContext = createContext<AppState | undefined>(undefined)
 
-const STORAGE_KEY = 'monitor-karya-state'
+const STORAGE_KEY = 'monitor-karya-ui'
 
-function readStoredState(): { user: RoleUser | null; activeTab: NavTabId; selectedEntityId: string | null } {
-  if (typeof window === 'undefined') {
-    return { user: null, activeTab: 'dashboard', selectedEntityId: null }
-  }
+const DEFAULT_UI: UiState = {
+  activeTab: 'dashboard',
+  selectedEntityId: null,
+}
+
+function readStoredUi(): UiState {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
       return {
-        user: parsed.user || null,
-        activeTab: parsed.activeTab || 'dashboard',
+        activeTab: parsed.activeTab || DEFAULT_UI.activeTab,
         selectedEntityId: parsed.selectedEntityId || null,
       }
     }
   } catch {}
-  return { user: null, activeTab: 'dashboard', selectedEntityId: null }
+  return DEFAULT_UI
 }
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initialize from localStorage on the client only.
-  const initial = useMemo(() => readStoredState(), [])
-  const [user, setUserState] = useState<RoleUser | null>(initial.user)
-  const [activeTab, setActiveTabState] = useState<NavTabId>(initial.activeTab)
-  const [selectedEntityId, setSelectedEntityIdState] = useState<string | null>(initial.selectedEntityId)
+const subscribeNever = () => () => {}
 
-  // Persist to localStorage whenever state changes.
+/**
+ * False while rendering on the server and during the hydration pass, true
+ * afterwards. Lets us render exactly what the server sent, then swap in
+ * browser-only state — reading localStorage during the first render would
+ * make the client markup diverge from the server's and break hydration.
+ */
+function useIsHydrated() {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false
+  )
+}
+
+export function AppProvider({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+  const hydrated = useIsHydrated()
+
+  // Only consulted once the browser has taken over.
+  const restored = useMemo(() => (hydrated ? readStoredUi() : DEFAULT_UI), [hydrated])
+
+  // Changes made during this session win over whatever was restored.
+  const [overrides, setOverrides] = useState<Partial<UiState>>({})
+
+  const ui = useMemo<UiState>(() => {
+    const merged = { ...restored, ...overrides }
+    // A tab remembered from another account may not be open to this role.
+    return canSeeTab(user.role, merged.activeTab)
+      ? merged
+      : { ...merged, activeTab: defaultTabForRole(user.role) }
+  }, [restored, overrides, user.role])
+
+  // Persist, but never before the restore has happened — otherwise the first
+  // commit would overwrite the saved state with the defaults.
   useEffect(() => {
+    if (!hydrated) return
     try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user, activeTab, selectedEntityId })
-      )
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ui))
     } catch {}
-  }, [user, activeTab, selectedEntityId])
+  }, [hydrated, ui])
 
-  const value = useMemo(
+  const value = useMemo<AppState>(
     () => ({
+      ...ui,
       user,
-      setUser: (u: RoleUser | null) => setUserState(u),
-      activeTab,
-      setActiveTab: (t: NavTabId) => setActiveTabState(t),
-      selectedEntityId,
-      setSelectedEntityId: (id: string | null) => setSelectedEntityIdState(id),
+      setActiveTab: (t: NavTabId) => setOverrides((o) => ({ ...o, activeTab: t })),
+      setSelectedEntityId: (id: string | null) =>
+        setOverrides((o) => ({ ...o, selectedEntityId: id })),
     }),
-    [user, activeTab, selectedEntityId]
+    [ui, user]
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

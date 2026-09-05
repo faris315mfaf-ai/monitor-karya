@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeUserIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/audit-logs - paginated audit logs
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
@@ -18,11 +21,15 @@ export async function GET(req: NextRequest) {
     if (dateFrom) at.gte = new Date(dateFrom)
     if (dateTo) at.lte = new Date(dateTo)
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeUserIds(user)
+
     const where: Prisma.AuditLogWhereInput = {
       ...(actorId ? { actorId } : {}),
       ...(action ? { action } : {}),
       ...(targetType ? { targetType } : {}),
       ...(Object.keys(at).length ? { at } : {}),
+      ...(scopeIds ? { AND: [{ actorId: { in: scopeIds } }] } : {}),
     }
 
     const [rows, total] = await Promise.all([

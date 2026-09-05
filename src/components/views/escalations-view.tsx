@@ -1,7 +1,11 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useFetch } from '@/hooks/use-fetch'
+import { useResource } from '@/hooks/use-resource'
+import { useApp } from '@/components/app-provider'
+import { can } from '@/lib/rbac'
+import { Textarea } from '@/components/ui/textarea'
+import { Loader2 } from 'lucide-react'
 import { LoadingSpinner, EmptyState, ErrorState } from '@/components/loading-states'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -103,7 +107,7 @@ export function EscalationsView() {
     return p.toString()
   }, [status, needed, overdueOnly])
 
-  const { data, loading, error } = useFetch<EscalationListData>(`/api/escalations?${params}`)
+  const { data, loading, error, reload } = useResource<EscalationListData>(`/api/escalations?${params}`)
 
   // Group items by status into 4 columns
   const grouped = useMemo(() => {
@@ -127,8 +131,8 @@ export function EscalationsView() {
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Papan Eskalasi</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Papan Eskalasi</h1>
+        <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
           Pelacakan keputusan lintas entitas
         </p>
       </div>
@@ -138,8 +142,8 @@ export function EscalationsView() {
         <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="glass h-9 text-xs w-full sm:w-44">
-                <Filter className="h-3 w-3 mr-1 text-slate-400" />
+              <SelectTrigger className="glass h-9 text-sm w-full sm:w-44">
+                <Filter className="h-3 w-3 mr-1 text-slate-400 dark:text-slate-500" />
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent className="glass-strong">
@@ -149,8 +153,8 @@ export function EscalationsView() {
               </SelectContent>
             </Select>
             <Select value={needed} onValueChange={setNeeded}>
-              <SelectTrigger className="glass h-9 text-xs w-full sm:w-52">
-                <Siren className="h-3 w-3 mr-1 text-slate-400" />
+              <SelectTrigger className="glass h-9 text-sm w-full sm:w-52">
+                <Siren className="h-3 w-3 mr-1 text-slate-400 dark:text-slate-500" />
                 <SelectValue placeholder="Kebutuhan" />
               </SelectTrigger>
               <SelectContent className="glass-strong">
@@ -164,16 +168,16 @@ export function EscalationsView() {
               size="sm"
               onClick={() => setOverdueOnly((v) => !v)}
               className={cn(
-                'h-9 text-xs gap-1.5',
+                'h-9 text-sm gap-1.5',
                 overdueOnly
                   ? 'bg-rose-500/90 text-white hover:bg-rose-600 border-rose-500'
-                  : 'glass border-slate-200/60 text-slate-600 hover:bg-rose-500/10',
+                  : 'glass border-slate-200/60 text-slate-600 dark:text-slate-300 hover:bg-rose-500/10',
               )}
             >
               <Clock className="h-3.5 w-3.5" />
               {overdueOnly ? 'Lewat SLA aktif' : 'Hanya lewat SLA'}
             </Button>
-            <div className="text-xs text-slate-500 sm:ml-auto">
+            <div className="text-sm text-slate-500 dark:text-slate-400 sm:ml-auto">
               {data?.total ?? 0} eskalasi
             </div>
           </div>
@@ -187,7 +191,7 @@ export function EscalationsView() {
         <ErrorState message={error} />
       ) : !data?.items?.length ? (
         <EmptyState
-          icon={<Siren className="h-5 w-5 text-slate-400" />}
+          icon={<Siren className="h-5 w-5 text-slate-400 dark:text-slate-500" />}
           title="Tidak ada eskalasi"
           description="Coba ubah filter pencarian"
         />
@@ -201,6 +205,7 @@ export function EscalationsView() {
               key={colStatus}
               status={colStatus}
               items={grouped[colStatus] || []}
+              onChanged={reload}
             />
           ))}
         </div>
@@ -209,7 +214,15 @@ export function EscalationsView() {
   )
 }
 
-function KanbanColumn({ status, items }: { status: string; items: Escalation[] }) {
+function KanbanColumn({
+  status,
+  items,
+  onChanged,
+}: {
+  status: string
+  items: Escalation[]
+  onChanged: () => void
+}) {
   const meta = ESCALATION_STATUS_META[status]
   const accent = COLUMN_ACCENT[status] || COLUMN_ACCENT.DITUTUP
   return (
@@ -223,9 +236,9 @@ function KanbanColumn({ status, items }: { status: string; items: Escalation[] }
       <div className={cn('rounded-xl px-2.5 py-2 mb-2.5 flex items-center justify-between', accent.headerBg)}>
         <div className="flex items-center gap-2">
           <span className={cn('h-2 w-2 rounded-full', accent.dot)} />
-          <span className="text-xs font-semibold text-slate-700">{meta?.label || status}</span>
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{meta?.label || status}</span>
         </div>
-        <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono tabular-nums">
+        <Badge variant="outline" className="text-xs h-5 px-1.5 font-mono tabular-nums">
           {items.length}
         </Badge>
       </div>
@@ -233,10 +246,10 @@ function KanbanColumn({ status, items }: { status: string; items: Escalation[] }
       {/* Items */}
       <div className="max-h-[60vh] overflow-y-auto scrollbar-thin pr-1 -mr-1 space-y-2">
         {items.length === 0 ? (
-          <div className="text-center py-6 text-[11px] text-slate-400">Tidak ada item</div>
+          <div className="text-center py-6 text-[13px] text-slate-400 dark:text-slate-500">Tidak ada item</div>
         ) : (
           items.map((it) => (
-            <EscalationCard key={it.id} escalation={it} />
+            <EscalationCard key={it.id} escalation={it} onChanged={onChanged} />
           ))
         )}
       </div>
@@ -244,16 +257,16 @@ function KanbanColumn({ status, items }: { status: string; items: Escalation[] }
   )
 }
 
-function EscalationCard({ escalation }: { escalation: Escalation }) {
+function EscalationCard({ escalation, onChanged }: { escalation: Escalation; onChanged: () => void }) {
   const neededLabel = ESCALATION_NEEDED_LABELS[escalation.needed] || escalation.needed
   return (
     <div className="glass-strong rounded-xl p-3 space-y-2 hover:shadow-md transition-all">
       {/* Header: entity info */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-slate-800 truncate">{escalation.entity.name}</p>
-          <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 flex-wrap">
-            <Badge variant="outline" className="text-[9px] h-3.5 px-1 font-mono">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{escalation.entity.name}</p>
+          <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+            <Badge variant="outline" className="text-[11px] h-3.5 px-1 font-mono">
               {escalation.entity.code}
             </Badge>
             <span className="truncate">{escalation.entity.region || '-'}</span>
@@ -263,24 +276,24 @@ function EscalationCard({ escalation }: { escalation: Escalation }) {
       </div>
 
       {/* Summary */}
-      <p className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
+      <p className="text-[13px] text-slate-600 dark:text-slate-300 line-clamp-3 leading-relaxed">
         {escalation.summary}
       </p>
 
       {/* Needed */}
-      <div className="flex items-center gap-1 text-[10px] text-slate-500">
+      <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
         <span className="font-medium">Butuh:</span>
-        <span className="text-blue-700 font-semibold">{neededLabel}</span>
+        <span className="text-blue-700 dark:text-blue-300 font-semibold">{neededLabel}</span>
       </div>
 
       {/* Age + overdue */}
       <div className="flex items-center gap-2 flex-wrap">
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full text-[10px] font-semibold px-1.5 py-0.5 tabular-nums',
+            'inline-flex items-center gap-1 rounded-full text-xs font-semibold px-1.5 py-0.5 tabular-nums',
             escalation.isOverdue
-              ? 'bg-rose-500/15 text-rose-700'
-              : 'bg-slate-500/10 text-slate-600',
+              ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+              : 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
           )}
         >
           {escalation.isOverdue ? (
@@ -297,11 +310,11 @@ function EscalationCard({ escalation }: { escalation: Escalation }) {
 
       {/* Raised by */}
       {escalation.raisedBy && (
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <User className="h-3 w-3 shrink-0" />
           <span className="truncate">
-            <span className="text-slate-700 font-medium">{escalation.raisedBy.name}</span>
-            <span className="text-slate-400"> · {formatRelative(escalation.raisedAt)}</span>
+            <span className="text-slate-700 dark:text-slate-200 font-medium">{escalation.raisedBy.name}</span>
+            <span className="text-slate-400 dark:text-slate-500"> · {formatRelative(escalation.raisedAt)}</span>
           </span>
         </div>
       )}
@@ -309,23 +322,130 @@ function EscalationCard({ escalation }: { escalation: Escalation }) {
       {/* Decided by */}
       {escalation.decidedBy && (
         <div className="glass rounded-md p-2 space-y-1">
-          <div className="flex items-center gap-1.5 text-[10px] text-emerald-700">
+          <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
             <Gavel className="h-3 w-3 shrink-0" />
             <span className="font-medium">Diputuskan oleh {escalation.decidedBy.name}</span>
           </div>
           {escalation.decisionText && (
-            <p className="text-[10px] text-slate-600 line-clamp-2 pl-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 pl-4">
               {escalation.decisionText}
             </p>
           )}
           {escalation.status === 'DITUTUP' && (
-            <div className="flex items-center gap-1 text-[10px] text-emerald-700 pl-4">
+            <div className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300 pl-4">
               <CheckCircle2 className="h-3 w-3" />
               <span>Ditutup</span>
             </div>
           )}
         </div>
       )}
+
+      <EscalationActions escalation={escalation} onChanged={onChanged} />
+    </div>
+  )
+}
+
+/**
+ * The moves available on one escalation, filtered by what this role may do:
+ * a director acknowledges it, Management records the decision, and either of
+ * them (or the person who raised it) closes it afterwards.
+ */
+function EscalationActions({
+  escalation,
+  onChanged,
+}: {
+  escalation: Escalation
+  onChanged: () => void
+}) {
+  const { user } = useApp()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [deciding, setDeciding] = useState(false)
+  const [decisionText, setDecisionText] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const mayReview = can(user.role, 'escalation:followup') && escalation.status === 'DIAJUKAN'
+  const mayDecide = can(user.role, 'escalation:decide') && escalation.status !== 'DITUTUP' && escalation.status !== 'DIPUTUSKAN'
+  const mayClose =
+    escalation.status === 'DIPUTUSKAN' &&
+    (can(user.role, 'escalation:decide') || can(user.role, 'escalation:followup'))
+
+  async function act(action: string, extra?: Record<string, unknown>) {
+    setBusy(action)
+    setErr(null)
+    try {
+      const res = await fetch('/api/escalations/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, id: escalation.id, ...extra }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setErr(json.error || 'Gagal memproses')
+      else {
+        setDeciding(false)
+        setDecisionText('')
+        onChanged()
+      }
+    } catch {
+      setErr('Tidak dapat menghubungi server.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (!mayReview && !mayDecide && !mayClose) return null
+
+  return (
+    <div className="space-y-2 pt-1">
+      {deciding ? (
+        <div className="space-y-2">
+          <Textarea
+            rows={3}
+            value={decisionText}
+            onChange={(e) => setDecisionText(e.target.value)}
+            placeholder="Tuliskan keputusan dan arahan pelaksanaannya."
+            className="bg-white/70 dark:bg-slate-900/50 text-sm"
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => act('decide', { decisionText })}
+              disabled={busy !== null || decisionText.trim().length < 10}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white"
+            >
+              {busy === 'decide' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gavel className="h-4 w-4" />}
+              Simpan keputusan
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setDeciding(false)} disabled={busy !== null}>
+              Batal
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {mayReview && (
+            <Button size="sm" variant="outline" onClick={() => act('review')} disabled={busy !== null}>
+              {busy === 'review' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Tandai ditinjau
+            </Button>
+          )}
+          {mayDecide && (
+            <Button
+              size="sm"
+              onClick={() => setDeciding(true)}
+              className="bg-gradient-to-r from-blue-600 to-blue-500 text-white"
+            >
+              <Gavel className="h-4 w-4" /> Putuskan
+            </Button>
+          )}
+          {mayClose && (
+            <Button size="sm" variant="outline" onClick={() => act('close')} disabled={busy !== null}>
+              {busy === 'close' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Tutup
+            </Button>
+          )}
+        </div>
+      )}
+      {err && <p className="text-sm text-rose-700 dark:text-rose-300">{err}</p>}
     </div>
   )
 }

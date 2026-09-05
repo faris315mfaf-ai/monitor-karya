@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, resolveScopeEntityId } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
 
 // GET /api/compliance-map - hierarchical treemap data for compliance heatmap
 // Groups: subHoldings > sectors > regions > PTs.
 export async function GET(req: NextRequest) {
   try {
-    const scopeEntityId = req.nextUrl.searchParams.get('scopeEntityId')
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
+    // A scoped role is pinned to its own subtree; the query parameter can only
+    // narrow a global role's view, never widen a scoped one's.
+    const scopeEntityId = resolveScopeEntityId(user, req.nextUrl.searchParams.get('scopeEntityId'))
 
     // Build path prefix filter for subtree scoping
     let pathPrefix = ''

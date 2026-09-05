@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/late-incidents - list late incidents
@@ -7,6 +8,8 @@ import { Prisma } from '@prisma/client'
 // the entity info manually to provide { name, code, region } as required.
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
@@ -14,10 +17,14 @@ export async function GET(req: NextRequest) {
     const cycle = sp.get('cycle') || undefined
     const minOccurrence = Math.max(1, parseInt(sp.get('minOccurrence') || '1', 10))
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeEntityIds(user)
+
     const where: Prisma.LateIncidentWhereInput = {
       ...(entityId ? { entityId } : {}),
       ...(cycle ? { cycle } : {}),
       occurrenceInMonth: { gte: minOccurrence },
+      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
     }
 
     const [rows, total] = await Promise.all([

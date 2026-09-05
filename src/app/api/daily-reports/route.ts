@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/daily-reports - paginated daily reports with filters
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
@@ -18,6 +21,9 @@ export async function GET(req: NextRequest) {
     if (dateFrom) reportDate.gte = new Date(dateFrom)
     if (dateTo) reportDate.lte = new Date(dateTo)
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeEntityIds(user)
+
     const where: Prisma.DailyProjectReportWhereInput = {
       ...(entityId ? { entityId } : {}),
       ...(status ? { status } : {}),
@@ -25,6 +31,7 @@ export async function GET(req: NextRequest) {
       ...(search
         ? { project: { name: { contains: search } } }
         : {}),
+      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
     }
 
     const [items, total] = await Promise.all([

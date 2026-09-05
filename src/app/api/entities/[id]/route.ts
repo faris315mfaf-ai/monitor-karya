@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, isGlobalRole, scopePathPrefix } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
 
 // GET /api/entities/[id] - entity detail with stats
@@ -8,11 +9,21 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const { id } = await params
 
     const entity = await db.entity.findUnique({ where: { id } })
     if (!entity) {
-      return NextResponse.json({ error: 'Entity not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Entitas tidak ditemukan' }, { status: 404 })
+    }
+
+    // A scoped role may only open its own entity or one beneath it.
+    if (!isGlobalRole(user.role) && user.scopeEntityId) {
+      const prefix = await scopePathPrefix(user.scopeEntityId)
+      if (!prefix || !entity.path.startsWith(prefix)) {
+        return NextResponse.json({ error: 'Entitas ini di luar cakupan Anda' }, { status: 403 })
+      }
     }
 
     // Walk parent chain

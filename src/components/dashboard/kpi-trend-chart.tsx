@@ -25,7 +25,7 @@ export function KpiTrendChart({ scopeEntityId }: { scopeEntityId?: string | null
   const { data, loading, error } = useFetch<TrendData>(url)
 
   if (loading) return <LoadingSpinner className="py-6" />
-  if (error || !data) return <EmptyState title="Gagal memuat tren" description={error} />
+  if (error || !data) return <EmptyState title="Gagal memuat tren" description={error ?? undefined} />
 
   const chartData = data.months.map((m) => ({
     label: m.label,

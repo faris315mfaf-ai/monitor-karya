@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isGlobalRole, requireApiUser } from '@/lib/auth'
 
 // Role display labels
 const ROLE_LABELS: Record<string, string> = {
@@ -25,9 +26,16 @@ const ROLE_ORDER = [
   'AUDITOR',
 ]
 
-// GET /api/roles - users grouped by role (for role-switcher demo)
+// GET /api/roles - users grouped by role (user directory; global roles only)
 export async function GET(_req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
+    // The directory lists every account's name and email, so keep it to the
+    // roles that are meant to see the whole group.
+    if (!isGlobalRole(user.role)) {
+      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 })
+    }
     const users = await db.user.findMany({
       where: { isActive: true },
       select: {

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 
 // GET /api/weekly-reports - paginated weekly division reports
 export async function GET(req: NextRequest) {
   try {
+    const user = await requireApiUser()
+    if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
@@ -16,11 +19,15 @@ export async function GET(req: NextRequest) {
     const isoYear = isoYearStr ? parseInt(isoYearStr, 10) : undefined
     const isoWeek = isoWeekStr ? parseInt(isoWeekStr, 10) : undefined
 
+    // null for roles that may read the whole group.
+    const scopeIds = await scopeEntityIds(user)
+
     const where: Prisma.WeeklyDivisionReportWhereInput = {
       ...(entityId ? { entityId } : {}),
       ...(statusHeader ? { statusHeader } : {}),
       ...(isoYear ? { isoYear } : {}),
       ...(isoWeek ? { isoWeek } : {}),
+      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
     }
 
     const [items, total] = await Promise.all([

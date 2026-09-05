@@ -89,8 +89,8 @@ export function DivisionsView() {
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Modul Divisi</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Modul Divisi</h1>
+        <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
           Siklus pelaporan mingguan divisi
         </p>
       </div>
@@ -100,17 +100,17 @@ export function DivisionsView() {
         <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
               <Input
                 placeholder="Cari divisi, entitas, atau wilayah..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                className="glass pl-9 h-9 text-xs border-slate-200/60"
+                className="glass pl-9 h-9 text-sm border-slate-200/60"
               />
             </div>
             <Select value={statusHeader} onValueChange={(v) => { setStatusHeader(v); setPage(1) }}>
-              <SelectTrigger className="glass h-9 text-xs w-full sm:w-52">
-                <Filter className="h-3 w-3 mr-1 text-slate-400" />
+              <SelectTrigger className="glass h-9 text-sm w-full sm:w-52">
+                <Filter className="h-3 w-3 mr-1 text-slate-400 dark:text-slate-500" />
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent className="glass-strong">
@@ -130,7 +130,7 @@ export function DivisionsView() {
         <ErrorState message={error} />
       ) : !data?.items?.length ? (
         <EmptyState
-          icon={<FileText className="h-5 w-5 text-slate-400" />}
+          icon={<FileText className="h-5 w-5 text-slate-400 dark:text-slate-500" />}
           title="Tidak ada laporan mingguan"
           description="Coba ubah filter pencarian"
         />
@@ -144,26 +144,26 @@ export function DivisionsView() {
 
           {/* Pagination */}
           <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-xs text-slate-500">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
               Menampilkan {data.items.length} dari {formatNumber(data.total)} laporan
             </span>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="sm"
-                className="glass h-8 text-xs"
+                className="glass h-8 text-sm"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
-              <span className="text-xs text-slate-600 px-2 tabular-nums">
+              <span className="text-sm text-slate-600 dark:text-slate-300 px-2 tabular-nums">
                 {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                className="glass h-8 text-xs"
+                className="glass h-8 text-sm"
                 disabled={page * data.pageSize >= data.total}
                 onClick={() => setPage((p) => p + 1)}
               >
@@ -208,23 +208,23 @@ function WeeklyReportCard({ report }: { report: WeeklyReport }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-semibold text-slate-800 truncate">{report.division.name}</h3>
-              <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{report.division.name}</h3>
+              <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">
                 W{report.isoWeek}/{report.isoYear}
               </Badge>
               <WeeklyHeaderBadge status={report.statusHeader} />
               {report.isLocked && (
-                <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 gap-0.5">
+                <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 gap-0.5">
                   <Lock className="h-2.5 w-2.5" /> Terkunci
                 </Badge>
               )}
               {report.isLate && (
-                <Badge className="text-[9px] h-4 px-1 bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 gap-0.5">
+                <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 gap-0.5">
                   <AlertTriangle className="h-2.5 w-2.5" /> Terlambat
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 flex-wrap">
+            <div className="flex items-center gap-2 mt-1 text-[13px] text-slate-500 dark:text-slate-400 flex-wrap">
               <span className="truncate">{report.entity.name}</span>
               <span className="text-slate-300">·</span>
               <span className="truncate">{report.entity.region || report.entity.code}</span>
@@ -233,7 +233,7 @@ function WeeklyReportCard({ report }: { report: WeeklyReport }) {
         </div>
 
         {/* Period dates */}
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+        <div className="flex items-center gap-1.5 text-[13px] text-slate-600 dark:text-slate-300">
           <CalendarRange className="h-3.5 w-3.5 text-blue-500" />
           <span>
             {formatDate(report.periodStart)} — {formatDate(report.periodEnd)}
@@ -242,29 +242,29 @@ function WeeklyReportCard({ report }: { report: WeeklyReport }) {
 
         {/* Approved by */}
         {report.approvedBy && report.approvedAt && (
-          <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-500/5 rounded-md px-2 py-1">
+          <div className="flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/5 rounded-md px-2 py-1">
             <CheckCircle2 className="h-3 w-3" />
             <span>
               Disetujui oleh <span className="font-semibold">{report.approvedBy.name}</span>
-              <span className="text-slate-500"> · {formatDate(report.approvedAt)}</span>
+              <span className="text-slate-500 dark:text-slate-400"> · {formatDate(report.approvedAt)}</span>
             </span>
           </div>
         )}
 
         {/* Items count + breakdown */}
-        <div className="flex items-center justify-between gap-2 text-[11px] bg-blue-500/5 rounded-md px-2 py-1.5">
-          <div className="flex items-center gap-1.5 text-slate-700 min-w-0">
+        <div className="flex items-center justify-between gap-2 text-[13px] bg-blue-500/5 rounded-md px-2 py-1.5">
+          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 min-w-0">
             <Target className="h-3 w-3 text-blue-600 shrink-0" />
             <span className="font-semibold">{report.items.length} item deliverable</span>
             {breakdownStr && (
-              <span className="text-slate-500 truncate hidden sm:inline">· {breakdownStr}</span>
+              <span className="text-slate-500 dark:text-slate-400 truncate hidden sm:inline">· {breakdownStr}</span>
             )}
           </div>
           {report.items.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              className="glass h-6 text-[10px] px-2 hover:bg-blue-500/10"
+              className="glass h-6 text-xs px-2 hover:bg-blue-500/10"
               onClick={() => setExpanded((v) => !v)}
             >
               {expanded ? 'Sembunyikan' : 'Detail'}
@@ -292,9 +292,9 @@ function WeeklyItemRow({ item }: { item: WeeklyItem }) {
     <div className="glass rounded-xl p-3 border-l-2 border-l-blue-500/40">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-slate-800 line-clamp-1">{item.workItem}</p>
-          <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 flex-wrap">
-            <Badge variant="outline" className="text-[9px] h-3.5 px-1 border-blue-500/30 text-blue-700 bg-blue-500/5">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-1">{item.workItem}</p>
+          <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+            <Badge variant="outline" className="text-[11px] h-3.5 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
               {aspectLabel}
             </Badge>
             <PriorityBadge priority={item.priority.code} />
@@ -306,26 +306,26 @@ function WeeklyItemRow({ item }: { item: WeeklyItem }) {
       {/* Progress */}
       <div className="mt-2 flex items-center gap-2">
         <Progress value={item.progressPct} className="h-1.5 flex-1" />
-        <span className="text-[10px] font-semibold text-slate-600 tabular-nums">{item.progressPct}%</span>
+        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tabular-nums">{item.progressPct}%</span>
       </div>
 
       {/* PIC */}
-      <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500">
+      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
         <User className="h-3 w-3" />
         <span className="truncate">{item.picName}{item.picTitle ? `, ${item.picTitle}` : ''}</span>
       </div>
 
       {/* Achievement */}
       {item.achievementThisWeek && (
-        <p className="text-[10px] text-slate-600 mt-1.5 line-clamp-2">
-          <span className="font-medium text-slate-700">Capaian: </span>
+        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2">
+          <span className="font-medium text-slate-700 dark:text-slate-200">Capaian: </span>
           {item.achievementThisWeek}
         </p>
       )}
 
       {/* Obstacle */}
       {item.obstacleFollowUp && (
-        <div className="mt-1.5 text-[10px] bg-amber-500/5 border border-amber-500/20 rounded-md px-2 py-1 text-amber-800">
+        <div className="mt-1.5 text-xs bg-amber-500/5 border border-amber-500/20 rounded-md px-2 py-1 text-amber-800">
           <span className="font-medium">Kendala/Tindak Lanjut: </span>
           <span className="line-clamp-2">{item.obstacleFollowUp}</span>
         </div>

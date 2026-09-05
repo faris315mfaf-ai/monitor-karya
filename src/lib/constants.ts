@@ -126,11 +126,15 @@ export function complianceColor(score: number): { bg: string; text: string; ring
 export const NAV_TABS = [
   { id: 'dashboard', label: 'Dashboard', short: 'Beranda' },
   { id: 'work-desk', label: 'Meja Kerja', short: 'Kerja' },
+  { id: 'daily-input', label: 'Lapor Harian', short: 'Harian' },
+  { id: 'weekly-input', label: 'Capaian Mingguan', short: 'Mingguan' },
+  { id: 'inbox', label: 'Penerimaan', short: 'Masuk' },
   { id: 'projects', label: 'Modul Proyek', short: 'Proyek' },
   { id: 'divisions', label: 'Modul Divisi', short: 'Divisi' },
   { id: 'escalations', label: 'Eskalasi', short: 'Eskalasi' },
   { id: 'entities', label: 'Entitas', short: 'Entitas' },
   { id: 'audit', label: 'Audit Trail', short: 'Audit' },
+  { id: 'system', label: 'Sistem & Akses', short: 'Sistem' },
 ] as const
 
 export type NavTabId = typeof NAV_TABS[number]['id']
