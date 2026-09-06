@@ -68,7 +68,7 @@ for key in DATABASE_URL DIRECT_URL; do
     catch (e) {
       const NL = String.fromCharCode(10)
       const lines = String(e && e.message ? e.message : e).split(NL).map((l) => l.trim()).filter(Boolean)
-      // Prefer the line that names the cause over Prisma's generic first line.
+      // Prefer the line that names the cause over the generic first line from Prisma.
       const reason = lines.find((l) => /P1[0-9]{3}|authentication|password|tenant|not found|refused|timed out|ENOTFOUND/i.test(l)) || lines[0] || "tidak ada pesan"
       console.error("    " + reason.replace(/:[/][/][^@ ]+@/g, "://***@").slice(0, 200))
       process.exit(1)
