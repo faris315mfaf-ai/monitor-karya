@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { refuseUnscoped, requireApiUser, resolveScopeEntityId } from '@/lib/auth'
+import { refuseUnscoped, requireApiUser, resolveScopeEntityId, scopeUserIds } from '@/lib/auth'
 import { startOfTodayWIB, endOfTodayWIB, monthKeyNow, ageDays } from '@/lib/wib'
 
 // GET /api/dashboard - aggregated root dashboard for management/holding view
@@ -27,6 +27,9 @@ export async function GET(req: NextRequest) {
   }
   const reportEntityWhere = pathPrefix ? { entity: { path: { startsWith: pathPrefix } } } : {}
   const escalationEntityWhere = pathPrefix ? { entity: { path: { startsWith: pathPrefix } } } : {}
+  // Unlock requests record a person, not an entity, so they scope by account.
+  const requesterIds = await scopeUserIds(user)
+  const unlockWhere = requesterIds ? { requestedById: { in: requesterIds } } : {}
 
   const [entities, todayReports, lateToday, pendingEscalations, unlockPending, kpiThisMonth, weeklyPending] =
     await Promise.all([
@@ -56,7 +59,7 @@ export async function GET(req: NextRequest) {
         orderBy: { raisedAt: 'asc' },
         take: 50,
       }),
-      db.unlockRequest.count({ where: { status: { in: ['DIAJUKAN', 'DISETUJUI'] } } }),
+      db.unlockRequest.count({ where: { status: { in: ['DIAJUKAN', 'DISETUJUI'] }, ...unlockWhere } }),
       db.kpiSnapshot.findMany({
         where: {
           periodType: 'BULANAN',
