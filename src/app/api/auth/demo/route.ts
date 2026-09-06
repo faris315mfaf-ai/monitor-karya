@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { SESSION_COOKIE, createSessionToken } from '@/lib/auth'
 import { ROLE_TABS } from '@/lib/rbac'
+import { DEMO_EMAILS } from '@/lib/demo-accounts'
 
 /**
  * One-click sign-in as a demo role.
@@ -11,16 +12,6 @@ import { ROLE_TABS } from '@/lib/rbac'
  * on, and it will only ever hand out the accounts listed in DEMO_EMAILS. Leave
  * DEMO_LOGIN unset in any environment holding real data.
  */
-
-const DEMO_EMAILS: Record<string, string> = {
-  PIC_PROYEK: 'pic@karya.co.id',
-  KEPALA_DIVISI: 'kadiv@karya.co.id',
-  ADMIN_PT: 'adminpt@karya.co.id',
-  DIREKTUR_ENTITAS: 'direktur@karya.co.id',
-  DIREKTUR_SDM_GA: 'sdmga@karya.co.id',
-  TI: 'it@karya.co.id',
-  MANAJEMEN: 'manajemen@karya.co.id',
-}
 
 export function demoLoginEnabled(): boolean {
   const flag = process.env.DEMO_LOGIN
@@ -79,10 +70,19 @@ export async function POST(req: NextRequest) {
   const email = DEMO_EMAILS[role]
   if (!email) return NextResponse.json({ error: 'Peran demo tidak dikenali' }, { status: 400 })
 
-  const user = await db.user.findUnique({
-    where: { email },
-    select: { id: true, name: true, role: true, isActive: true },
-  })
+  let user: { id: string; name: string; role: string; isActive: boolean } | null
+  try {
+    user = await db.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, role: true, isActive: true },
+    })
+  } catch {
+    // Almost always a missing or wrong DATABASE_URL rather than a bad request.
+    return NextResponse.json(
+      { error: 'Database tidak terjangkau dari server ini.' },
+      { status: 503 }
+    )
+  }
   if (!user || !user.isActive) {
     return NextResponse.json(
       { error: 'Akun demo belum tersedia. Jalankan: npm run db:demo' },

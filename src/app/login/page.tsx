@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
-import { ROLE_LABELS } from '@/lib/constants'
+import { getSessionUser, isGlobalRole } from '@/lib/auth'
 import { ROLE_TABS } from '@/lib/rbac'
+import { ROLE_LABELS } from '@/lib/constants'
 import { LoginForm } from '@/components/login-form'
 import { DemoRolePicker, type DemoRole } from '@/components/demo-role-picker'
 import { demoLoginEnabled } from '@/app/api/auth/demo/route'
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/demo-accounts'
 
 export const metadata: Metadata = {
   title: 'Masuk — MonitorKarya',
@@ -16,20 +17,33 @@ export const metadata: Metadata = {
 // The session cookie has to be read per request.
 export const dynamic = 'force-dynamic'
 
-const DEMO_EMAILS: Record<string, string> = {
-  PIC_PROYEK: 'pic@karya.co.id',
-  KEPALA_DIVISI: 'kadiv@karya.co.id',
-  ADMIN_PT: 'adminpt@karya.co.id',
-  DIREKTUR_ENTITAS: 'direktur@karya.co.id',
-  DIREKTUR_SDM_GA: 'sdmga@karya.co.id',
-  TI: 'it@karya.co.id',
-  MANAJEMEN: 'manajemen@karya.co.id',
+/** Shown until the database says which entity an account is actually pinned to. */
+function fallbackScope(role: string): string {
+  return isGlobalRole(role) ? 'Seluruh grup' : 'Entitas contoh'
 }
 
-/** The roles offered for one-click entry, ordered along the reporting chain. */
-async function demoRoles(): Promise<DemoRole[]> {
+/** The static picker, built without touching the database. */
+function baseRoles(): DemoRole[] {
+  return DEMO_ACCOUNTS.map((a) => ({
+    role: a.role,
+    name: a.name,
+    email: a.email,
+    avatarColor: a.avatarColor,
+    scope: fallbackScope(a.role),
+    moduleCount: ROLE_TABS[a.role]?.length ?? 0,
+  }))
+}
+
+/**
+ * The picker with each account's real name and entity filled in.
+ *
+ * Only the display detail comes from the database, so a failure here degrades
+ * to the static list rather than to an empty page — a blank login screen gives
+ * no clue that the database is the thing that is wrong.
+ */
+async function enrichRoles(): Promise<DemoRole[]> {
   const users = await db.user.findMany({
-    where: { email: { in: Object.values(DEMO_EMAILS) }, isActive: true },
+    where: { email: { in: DEMO_ACCOUNTS.map((a) => a.email) }, isActive: true },
     select: { name: true, email: true, role: true, avatarColor: true, scopeEntityId: true },
   })
 
@@ -40,58 +54,54 @@ async function demoRoles(): Promise<DemoRole[]> {
   })
   const entityName = new Map(entities.map((e) => [e.id, e.name]))
 
-  return Object.keys(DEMO_EMAILS)
-    .map((role) => {
-      const u = users.find((x) => x.role === role)
-      if (!u) return null
-      return {
-        role,
-        name: u.name,
-        email: u.email,
-        avatarColor: u.avatarColor,
-        scope: u.scopeEntityId ? (entityName.get(u.scopeEntityId) ?? 'Entitas') : 'Seluruh grup',
-        moduleCount: ROLE_TABS[role]?.length ?? 0,
-      }
-    })
-    .filter((r): r is DemoRole => r !== null)
-}
-
-/** One representative account per role, so every permission level can be tried. */
-async function demoAccounts() {
-  const wanted = ['MANAJEMEN', 'ADMIN_PT', 'DIREKTUR_ENTITAS', 'AUDITOR']
-  const users = await db.user.findMany({
-    where: { isActive: true, role: { in: wanted }, passwordHash: { not: null } },
-    select: { name: true, email: true, role: true },
-    orderBy: { email: 'asc' },
+  return baseRoles().map((base) => {
+    const u = users.find((x) => x.email === base.email)
+    if (!u) return base
+    return {
+      ...base,
+      name: u.name,
+      avatarColor: u.avatarColor ?? base.avatarColor,
+      scope: u.scopeEntityId ? (entityName.get(u.scopeEntityId) ?? base.scope) : 'Seluruh grup',
+    }
   })
-
-  return wanted
-    .map((role) => {
-      const u = users.find((x) => x.role === role)
-      return u ? { email: u.email, name: u.name, roleLabel: ROLE_LABELS[role] ?? role } : null
-    })
-    .filter((x): x is { email: string; name: string; roleLabel: string } => x !== null)
 }
 
 export default async function LoginPage() {
   if (await getSessionUser()) redirect('/')
 
   const demoOn = demoLoginEnabled()
-  let accounts: { email: string; name: string; roleLabel: string }[] = []
-  let roles: DemoRole[] = []
-  try {
-    // The sign-in form must still render if the database is unreachable.
-    ;[accounts, roles] = await Promise.all([
-      demoAccounts(),
-      demoOn ? demoRoles() : Promise.resolve<DemoRole[]>([]),
-    ])
-  } catch {
-    accounts = []
-    roles = []
+
+  let roles: DemoRole[] = demoOn ? baseRoles() : []
+  let dbReachable = true
+  if (demoOn) {
+    try {
+      roles = await enrichRoles()
+    } catch {
+      // Keep the static list; the banner below explains why it may not work.
+      dbReachable = false
+    }
+  } else {
+    try {
+      await db.user.count()
+    } catch {
+      dbReachable = false
+    }
   }
 
   return (
-    <LoginForm demoAccounts={demoOn ? [] : accounts}>
+    <LoginForm
+      demoOn={demoOn}
+      demoPassword={demoOn ? DEMO_PASSWORD : null}
+      demoEmails={
+        demoOn
+          ? DEMO_ACCOUNTS.map((a) => ({
+              email: a.email,
+              roleLabel: ROLE_LABELS[a.role] ?? a.role,
+            }))
+          : []
+      }
+      dbReachable={dbReachable}
+    >
       {demoOn ? <DemoRolePicker roles={roles} /> : null}
     </LoginForm>
   )

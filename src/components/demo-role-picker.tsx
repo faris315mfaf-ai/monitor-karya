@@ -47,7 +47,12 @@ export function DemoRolePicker({ roles }: { roles: DemoRole[] }) {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data.error || 'Gagal masuk sebagai peran ini')
+        setError(
+          data.error ||
+            (res.status >= 500
+              ? 'Server tidak dapat membaca database. Hubungi Tim TI holding.'
+              : 'Gagal masuk sebagai peran ini')
+        )
         setBusy(null)
         return
       }
@@ -62,10 +67,10 @@ export function DemoRolePicker({ roles }: { roles: DemoRole[] }) {
   if (roles.length === 0) return null
 
   return (
-    <div className="glass rounded-2xl mt-4 p-4 sm:p-5">
-      <div className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
-        <Sparkles className="h-4.5 w-4.5 text-blue-600 dark:text-blue-400" />
-        Coba sebagai peran
+    <div className="glass-strong rounded-2xl p-5 sm:p-7">
+      <div className="flex items-center gap-2 text-xl font-semibold text-slate-800 dark:text-slate-100">
+        <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        Masuk langsung sebagai
       </div>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Masuk langsung tanpa kata sandi. Setiap peran membuka modul dan dashboard
