@@ -280,6 +280,17 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: oklch(0.55 0.18 254 / 0.5);
   }
+
+/* A scroll container that keeps its scrollbar out of sight: the mobile tab
+   bar scrolls sideways when a role has more tabs than the screen is wide. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
   .animate-fade-in {
     animation: fadeIn 0.4s ease-out;
   }

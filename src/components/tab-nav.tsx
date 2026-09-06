@@ -63,8 +63,10 @@ export function TabNav() {
         })}
       </nav>
 
-      {/* Mobile bottom tab bar */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/40 dark:border-white/10 px-1 py-1 flex items-center justify-around">
+      {/* Mobile bottom tab bar. A role with many tabs (TI has eleven) does not
+          fit a 375px phone at 44px per tab, so the bar scrolls sideways instead
+          of squeezing or clipping; with few tabs the items still spread out. */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/40 dark:border-white/10 px-1 py-1 flex items-stretch overflow-x-auto scrollbar-none">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
           return (
@@ -72,7 +74,7 @@ export function TabNav() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'relative flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-all min-w-[44px] min-h-[44px] justify-center',
+                'relative flex flex-1 shrink-0 flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-all min-w-[44px] min-h-[44px] justify-center',
                 isActive ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'
               )}
               aria-label={tab.label}

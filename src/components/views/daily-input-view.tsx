@@ -400,7 +400,14 @@ function ProjectCard({
             </Button>
             <Button
               size="sm"
-              disabled={locked || busy !== null || (needsEvidence && evidenceCount < 1)}
+              // Nothing to submit until a status is chosen (a derived day
+              // always has one); the API would only answer 422 anyway.
+              disabled={
+                locked ||
+                busy !== null ||
+                shownStatus === '' ||
+                (needsEvidence && evidenceCount < 1)
+              }
               onClick={() => send('submit')}
               className="text-sm bg-gradient-to-r from-blue-600 to-blue-500 text-white"
             >
