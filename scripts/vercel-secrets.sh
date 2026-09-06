@@ -56,6 +56,30 @@ push() {
   fi
 }
 
+# Prove the connection strings work before any of them leaves this machine. A
+# value that cannot open the database here will not open it from Vercel either,
+# and pushing it would take the live site down until someone notices.
+echo "Menguji koneksi database dengan nilai dari .env..."
+for key in DATABASE_URL DIRECT_URL; do
+  if ! DB_URL="$(read_env "$key")" node --input-type=module -e '
+    import { PrismaClient } from "@prisma/client"
+    const db = new PrismaClient({ datasources: { db: { url: process.env.DB_URL } }, log: [] })
+    try { await db.$queryRaw`SELECT 1` }
+    catch (e) {
+      const first = String(e?.message || e).split("
+").find((l) => l.trim()) || "tidak ada pesan"
+      console.error("    " + first.replace(/:\/\/[^@\s]+@/g, "://***@").slice(0, 160))
+      process.exit(1)
+    } finally { await db.$disconnect() }
+  '; then
+    echo "ERROR: $key di .env tidak bisa terhubung ke database. Tidak ada yang dikirim ke Vercel." >&2
+    echo "       Periksa password dan bentuk URL (harus postgresql://user:password@host:port/db)." >&2
+    exit 1
+  fi
+  echo "  OK   $key terhubung"
+done
+echo
+
 echo "Mengirim rahasia ke Vercel Production..."
 fail=0
 push DATABASE_URL              "$(read_env DATABASE_URL)"              || fail=1
