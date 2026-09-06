@@ -9,6 +9,7 @@ import { Activity, Bell, Globe2, ShieldCheck, Zap } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import { useEffect, useState } from 'react'
 import { formatTime } from '@/lib/format'
+import { DAILY_CUTOFF_HOUR } from '@/lib/lock'
 
 export function Navbar() {
   const { user, activeTab } = useApp()
@@ -63,8 +64,8 @@ export function Navbar() {
           />
           <StatusChip
             icon={<Zap className="h-3 w-3" />}
-            label="Job"
-            value="17:00"
+            label="Kunci"
+            value={`${String(DAILY_CUTOFF_HOUR).padStart(2, '0')}:00`}
             color="text-amber-600"
           />
         </div>

@@ -18,8 +18,14 @@ export async function GET(req: NextRequest) {
     const dateTo = sp.get('dateTo')
 
     const at: Prisma.DateTimeFilter = {}
-    if (dateFrom) at.gte = new Date(dateFrom)
-    if (dateTo) at.lte = new Date(dateTo)
+    for (const [raw, key] of [[dateFrom, 'gte'], [dateTo, 'lte']] as const) {
+      if (!raw) continue
+      const d = new Date(raw)
+      if (Number.isNaN(d.getTime())) {
+        return NextResponse.json({ error: 'Format tanggal tidak valid' }, { status: 400 })
+      }
+      at[key] = d
+    }
 
     // null for roles that may read the whole group.
     const scopeIds = await scopeUserIds(user)

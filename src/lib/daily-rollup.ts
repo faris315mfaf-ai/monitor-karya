@@ -67,8 +67,9 @@ export async function computeRollup(projectId: string, workDate: Date): Promise<
 
   // Roll the blocked tasks up into one sentence the report can carry.
   const blockingNotes = tasks
-    .filter((t) => t.obstacle?.trim() || t.decisionNeeded?.trim())
-    .map((t) => `${t.title}: ${(t.obstacle || t.decisionNeeded)!.trim()}`)
+    .map((t) => ({ title: t.title, note: t.obstacle?.trim() || t.decisionNeeded?.trim() || '' }))
+    .filter((t) => t.note)
+    .map((t) => `${t.title}: ${t.note}`)
 
   return {
     taskCount: tasks.length,
@@ -147,4 +148,31 @@ export async function rollupDailyReport(projectId: string, workDate: Date): Prom
   }
 
   return rollup
+}
+
+/**
+ * Recounts the evidence on one target and writes the cached total back onto
+ * its parent row. Daily reports and tasks go through the roll-up so that task
+ * attachments stay part of the day's total.
+ */
+export async function syncEvidenceCount(targetType: string, targetId: string): Promise<number> {
+  const count = await db.evidence.count({ where: { targetType, targetId } })
+
+  if (targetType === 'DAILY_REPORT') {
+    const report = await db.dailyProjectReport.findUnique({
+      where: { id: targetId },
+      select: { projectId: true, reportDate: true },
+    })
+    if (report) await rollupDailyReport(report.projectId, report.reportDate)
+  } else if (targetType === 'TASK') {
+    const task = await db.task.findUnique({
+      where: { id: targetId },
+      select: { projectId: true, workDate: true },
+    })
+    if (task) await rollupDailyReport(task.projectId, task.workDate)
+  } else if (targetType === 'WEEKLY_ITEM') {
+    await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
+  }
+
+  return count
 }

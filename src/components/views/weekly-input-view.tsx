@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { WeeklyHeaderBadge, WeeklyItemStatusBadge } from '@/components/status-badges'
 import { EvidencePanel } from '@/components/evidence-panel'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { formatDate, formatDateLong } from '@/lib/format'
+import { formatDate, formatDateLong, formatTime } from '@/lib/format'
 import {
   AlertTriangle, CalendarCheck, Check, CheckCircle2, ListChecks, Loader2, Lock, Plus,
   Send, ShieldCheck, Siren, Tag as TagIcon, Trash2, X,
@@ -105,7 +105,7 @@ export function WeeklyInputView() {
             <div className="text-base font-semibold">
               {data.locked
                 ? 'Minggu ini ditutup'
-                : `${formatDateLong(new Date(data.handoverBy))} pukul 17.00`}
+                : `${formatDateLong(data.handoverBy)} pukul ${formatTime(data.handoverBy)}`}
             </div>
           </div>
         </div>

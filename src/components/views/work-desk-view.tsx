@@ -50,6 +50,7 @@ type WorkDeskData = {
     status: string
     createdAt: string
   }>
+  lockAt: string
   countdown: { hours: number; minutes: number; total: number; passed: boolean }
   lateThisMonth: number
 }
@@ -101,7 +102,7 @@ export function WorkDeskView() {
             {data.entity.name} · {formatDateLong(new Date())}
           </p>
         </div>
-        <CountdownPill countdown={data.countdown} />
+        <CountdownPill countdown={data.countdown} lockAt={data.lockAt} />
       </div>
 
       {/* Stats row */}
@@ -122,7 +123,9 @@ export function WorkDeskView() {
               </div>
               <div>
                 <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Daftar Proyek Hari Ini</CardTitle>
-                <CardDescription className="text-sm">Perbarui laporan harian sebelum jam kunci 17:00 WIB</CardDescription>
+                <CardDescription className="text-sm">
+                  Perbarui laporan harian sebelum jam kunci {formatTime(data.lockAt)} WIB
+                </CardDescription>
               </div>
             </div>
             <Button
@@ -289,7 +292,13 @@ function ProjectTodayRow({
   )
 }
 
-function CountdownPill({ countdown }: { countdown: WorkDeskData['countdown'] }) {
+function CountdownPill({
+  countdown,
+  lockAt,
+}: {
+  countdown: WorkDeskData['countdown']
+  lockAt: string
+}) {
   const passed = countdown.passed
   const total = countdown.hours * 60 + countdown.minutes
   return (
@@ -300,7 +309,7 @@ function CountdownPill({ countdown }: { countdown: WorkDeskData['countdown'] }) 
           {passed ? 'Kunci tercapai' : 'Sisa waktu'}
         </span>
         <span className={`text-sm font-bold tabular-nums ${passed ? 'text-rose-700 dark:text-rose-300' : total < 60 ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
-          {passed ? '17:00 WIB' : `${String(countdown.hours).padStart(2, '0')}j ${String(countdown.minutes).padStart(2, '0')}m`}
+          {passed ? `${formatTime(lockAt)} WIB` : `${String(countdown.hours).padStart(2, '0')}j ${String(countdown.minutes).padStart(2, '0')}m`}
         </span>
       </div>
     </div>

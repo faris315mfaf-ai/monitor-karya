@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { SESSION_COOKIE, createSessionToken } from '@/lib/auth'
 import { ROLE_TABS } from '@/lib/rbac'
-import { DEMO_EMAILS } from '@/lib/demo-accounts'
+import { DEMO_EMAILS, demoLoginEnabled } from '@/lib/demo-accounts'
 
 /**
  * One-click sign-in as a demo role.
@@ -13,25 +13,25 @@ import { DEMO_EMAILS } from '@/lib/demo-accounts'
  * DEMO_LOGIN unset in any environment holding real data.
  */
 
-export function demoLoginEnabled(): boolean {
-  const flag = process.env.DEMO_LOGIN
-  return flag === '1' || flag === 'true'
-}
-
 /** GET — which roles the login page may offer, or an empty list when off. */
 export async function GET() {
   if (!demoLoginEnabled()) return NextResponse.json({ enabled: false, roles: [] })
 
-  const users = await db.user.findMany({
-    where: { email: { in: Object.values(DEMO_EMAILS) }, isActive: true },
-    select: { name: true, email: true, role: true, avatarColor: true, scopeEntityId: true },
-  })
-
-  const scopeIds = users.map((u) => u.scopeEntityId).filter((id): id is string => Boolean(id))
-  const entities = await db.entity.findMany({
-    where: { id: { in: scopeIds } },
-    select: { id: true, name: true },
-  })
+  let users: { name: string; email: string; role: string; avatarColor: string | null; scopeEntityId: string | null }[]
+  let entities: { id: string; name: string }[]
+  try {
+    users = await db.user.findMany({
+      where: { email: { in: Object.values(DEMO_EMAILS) }, isActive: true },
+      select: { name: true, email: true, role: true, avatarColor: true, scopeEntityId: true },
+    })
+    const scopeIds = users.map((u) => u.scopeEntityId).filter((id): id is string => Boolean(id))
+    entities = await db.entity.findMany({
+      where: { id: { in: scopeIds } },
+      select: { id: true, name: true },
+    })
+  } catch {
+    return NextResponse.json({ error: 'Database tidak terjangkau dari server ini.' }, { status: 503 })
+  }
   const entityName = new Map(entities.map((e) => [e.id, e.name]))
 
   // Keep the on-screen order of DEMO_EMAILS: bottom of the chain first.

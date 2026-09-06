@@ -80,18 +80,26 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const payload = readSessionToken(store.get(SESSION_COOKIE)?.value)
   if (!payload) return null
 
-  const user = await db.user.findUnique({
-    where: { id: payload.sub },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      scopeEntityId: true,
-      avatarColor: true,
-      isActive: true,
-    },
-  })
+  let user
+  try {
+    user = await db.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        scopeEntityId: true,
+        avatarColor: true,
+        isActive: true,
+      },
+    })
+  } catch (err) {
+    // With the database unreachable nobody can be signed in. Treating that as
+    // "no session" sends the browser to /login, which says what is wrong.
+    console.error('[auth] session lookup failed:', err instanceof Error ? err.message : err)
+    return null
+  }
   if (!user || !user.isActive) return null
 
   const { isActive: _isActive, ...sessionUser } = user
@@ -136,6 +144,19 @@ export function resolveScopeEntityId(
 }
 
 /**
+ * The 403 to return when a scoped role has no entity to be scoped to, or null
+ * when the account is fine. Subtree endpoints call this before resolving a
+ * path prefix, because an empty prefix would otherwise mean "everything".
+ */
+export function refuseUnscoped(user: SessionUser): NextResponse | null {
+  if (isGlobalRole(user.role) || user.scopeEntityId) return null
+  return NextResponse.json(
+    { error: 'Akun Anda belum ditautkan ke entitas mana pun. Hubungi Tim TI holding.' },
+    { status: 403 }
+  )
+}
+
+/**
  * Materialized-path prefix for the user's readable subtree, or null when the
  * user may read everything. Pair with `{ path: { startsWith: prefix } }`.
  */
@@ -154,7 +175,10 @@ export async function scopePathPrefix(scopeEntityId: string | null): Promise<str
  * an `AND` clause, so a scoped role can still narrow but never widen.
  */
 export async function scopeEntityIds(user: SessionUser): Promise<string[] | null> {
-  if (isGlobalRole(user.role) || !user.scopeEntityId) return null
+  if (isGlobalRole(user.role)) return null
+  // A scoped account with no entity is misconfigured. Reading nothing is the
+  // safe answer; reading the whole group would be a leak.
+  if (!user.scopeEntityId) return []
 
   const prefix = await scopePathPrefix(user.scopeEntityId)
   if (!prefix) return [user.scopeEntityId]

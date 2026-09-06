@@ -6,8 +6,7 @@ import { ROLE_TABS } from '@/lib/rbac'
 import { ROLE_LABELS } from '@/lib/constants'
 import { LoginForm } from '@/components/login-form'
 import { DemoRolePicker, type DemoRole } from '@/components/demo-role-picker'
-import { demoLoginEnabled } from '@/app/api/auth/demo/route'
-import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/demo-accounts'
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, demoLoginEnabled } from '@/lib/demo-accounts'
 
 export const metadata: Metadata = {
   title: 'Masuk — MonitorKarya',

@@ -54,6 +54,7 @@ export function TaskSection({
   const [editing, setEditing] = useState<TaskRecord | null>(null)
   const [escalating, setEscalating] = useState<TaskRecord | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const tasks = data?.tasks ?? []
   const done = tasks.filter((t) => t.status === 'SELESAI').length
@@ -61,9 +62,17 @@ export function TaskSection({
 
   async function remove(id: string) {
     setBusy(id)
+    setActionError(null)
     try {
-      await fetch(`/api/tasks?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/tasks?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setActionError(json.error || 'Gagal menghapus task')
+        return
+      }
       reload()
+    } catch {
+      setActionError('Tidak dapat menghubungi server.')
     } finally {
       setBusy(null)
     }
@@ -98,6 +107,12 @@ export function TaskSection({
 
       {loading && <Loader2 className="h-5 w-5 animate-spin text-slate-400 mx-auto my-3" />}
       {error && <p className="text-sm text-rose-700 dark:text-rose-300">{error}</p>}
+      {actionError && (
+        <p className="text-sm text-rose-700 dark:text-rose-300 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          {actionError}
+        </p>
+      )}
 
       {!loading && tasks.length === 0 && (
         <p className="text-sm text-slate-500 dark:text-slate-400 py-2">

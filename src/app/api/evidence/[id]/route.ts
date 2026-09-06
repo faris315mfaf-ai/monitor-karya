@@ -1,36 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rollupDailyReport } from '@/lib/daily-rollup'
-import { startOfWibDay } from '@/lib/lock'
+import { syncEvidenceCount } from '@/lib/daily-rollup'
 import { requireApiUser } from '@/lib/auth'
 import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
 import { removeEvidence, signedEvidenceUrl, storageConfigured } from '@/lib/storage'
 
 export const runtime = 'nodejs'
-
-async function syncCount(targetType: string, targetId: string) {
-  const count = await db.evidence.count({ where: { targetType, targetId } })
-
-  if (targetType === 'DAILY_REPORT') {
-    const report = await db.dailyProjectReport.findUnique({
-      where: { id: targetId },
-      select: { projectId: true, reportDate: true },
-    })
-    // Recount through the roll-up so task attachments stay part of the total.
-    if (report) await rollupDailyReport(report.projectId, startOfWibDay(report.reportDate))
-    else await db.dailyProjectReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  } else if (targetType === 'WEEKLY_ITEM') {
-    await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  } else if (targetType === 'TASK') {
-    const task = await db.task.findUnique({
-      where: { id: targetId },
-      select: { projectId: true, workDate: true },
-    })
-    if (task) await rollupDailyReport(task.projectId, startOfWibDay(task.workDate))
-  }
-
-  return count
-}
 
 /**
  * GET /api/evidence/[id] — hands back a way to open this piece of evidence.
@@ -99,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   await db.evidence.delete({ where: { id } })
-  const count = await syncCount(evidence.targetType, evidence.targetId)
+  const count = await syncEvidenceCount(evidence.targetType, evidence.targetId)
 
   await db.auditLog.create({
     data: {

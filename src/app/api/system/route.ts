@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { ROLE_CAPABILITIES, can } from '@/lib/rbac'
-import { dailyCountdown, isDailyLocked, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import {
+  DAILY_CUTOFF_LABEL,
+  dailyCountdown,
+  dailyLockAt,
+  isDailyLocked,
+  startOfWibDay,
+  weeklyDeadlines,
+} from '@/lib/lock'
 
 /**
  * The system administrator's console: who has access, whether the locking and
@@ -86,8 +93,8 @@ export async function GET() {
       })),
     },
     locking: {
-      dailyCutoff: '17:00 WIB',
-      dailyLockAt: new Date(today.getTime() + 17 * 3600 * 1000).toISOString(),
+      dailyCutoff: DAILY_CUTOFF_LABEL,
+      dailyLockAt: dailyLockAt(today).toISOString(),
       dailyLocked: isDailyLocked(today),
       dailyCountdown: dailyCountdown(),
       lockedToday,

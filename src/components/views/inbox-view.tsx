@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DailyStatusBadge, WeeklyHeaderBadge } from '@/components/status-badges'
-import { formatDateLong, formatTime } from '@/lib/format'
+import { formatDateLong, formatDateTime, formatTime } from '@/lib/format'
 import {
   ArrowUpRight, CheckCircle2, Clock, FolderKanban, Inbox, Loader2, Lock, Users,
 } from 'lucide-react'
@@ -42,6 +42,7 @@ type WeeklyRow = {
 
 type Data = {
   reportDate: string
+  dailyLockAt: string
   dailyCountdown: { hours: number; minutes: number; passed: boolean }
   dailyLocked: boolean
   week: { isoYear: number; isoWeek: number; handoverBy: string; lockAt: string }
@@ -101,7 +102,7 @@ export function InboxView() {
             <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Kunci harian</div>
             <div className="text-base font-semibold tabular-nums">
               {data.dailyLocked
-                ? 'Sudah 17.00 WIB'
+                ? `Sudah ${formatTime(data.dailyLockAt)} WIB`
                 : `${data.dailyCountdown.hours}j ${data.dailyCountdown.minutes}m lagi`}
             </div>
           </div>
@@ -133,7 +134,7 @@ export function InboxView() {
                 Laporan Harian dari PIC Proyek
               </CardTitle>
               <CardDescription className="text-sm">
-                Teruskan sebelum pukul 17.00 WIB
+                Teruskan sebelum pukul {formatTime(data.dailyLockAt)} WIB
               </CardDescription>
             </div>
           </div>
@@ -197,7 +198,8 @@ export function InboxView() {
                 Capaian Mingguan dari Kepala Divisi
               </CardTitle>
               <CardDescription className="text-sm">
-                Diserahkan paling lambat Kamis, dikunci Jumat 17.00 WIB
+                Diserahkan paling lambat {formatDateLong(data.week.handoverBy)}, dikunci{' '}
+                {formatDateTime(data.week.lockAt)} WIB
               </CardDescription>
             </div>
           </div>

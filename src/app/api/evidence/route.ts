@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
+import { syncEvidenceCount } from '@/lib/daily-rollup'
 
 /**
  * Supporting evidence attached to a report line.
@@ -13,17 +14,6 @@ import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
  * Storage; both kinds share these rows, so the "at least one piece of evidence"
  * validation counts them together.
  */
-
-/** Recount and cache the evidence total on the parent row. */
-async function syncCount(targetType: string, targetId: string) {
-  const count = await db.evidence.count({ where: { targetType, targetId } })
-  if (targetType === 'DAILY_REPORT') {
-    await db.dailyProjectReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  } else if (targetType === 'WEEKLY_ITEM') {
-    await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  }
-  return count
-}
 
 export async function GET(req: NextRequest) {
   const user = await requireApiUser()
@@ -82,7 +72,7 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  const count = await syncCount(targetType, targetId)
+  const count = await syncEvidenceCount(targetType, targetId)
 
   await db.auditLog.create({
     data: {

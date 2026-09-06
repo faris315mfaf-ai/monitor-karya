@@ -4,6 +4,7 @@ import { requireApiUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
 import {
   dailyCountdown,
+  dailyLockAt,
   isDailyLocked,
   isoWeekOf,
   startOfWibDay,
@@ -24,32 +25,34 @@ export async function GET() {
   if (!can(user.role, 'daily:forward') && !can(user.role, 'weekly:forward')) {
     return NextResponse.json({ error: 'Peran Anda tidak menerima penerusan' }, { status: 403 })
   }
-  if (!user.scopeEntityId) {
+  // Admin PT is pinned to one PT. TI, the master account, has no entity and
+  // sees every PT's queue at once.
+  if (!user.scopeEntityId && user.role !== 'TI') {
     return NextResponse.json({ error: 'Peran ini tidak terikat pada satu entitas' }, { status: 400 })
   }
 
-  const entityId = user.scopeEntityId
+  const entityWhere = user.scopeEntityId ? { entityId: user.scopeEntityId } : {}
   const today = startOfWibDay(new Date())
   const { isoYear, isoWeek } = isoWeekOf(new Date())
   const deadlines = weeklyDeadlines(new Date())
 
   const [projects, reports, divisions, weekly] = await Promise.all([
     db.project.findMany({
-      where: { entityId, lifecycle: 'AKTIF' },
+      where: { ...entityWhere, lifecycle: 'AKTIF' },
       select: { id: true, code: true, name: true, picUser: { select: { name: true } } },
       orderBy: { code: 'asc' },
     }),
     db.dailyProjectReport.findMany({
-      where: { entityId, reportDate: today },
+      where: { ...entityWhere, reportDate: today },
       include: { submittedBy: { select: { name: true } } },
     }),
     db.division.findMany({
-      where: { entityId, isActive: true },
+      where: { ...entityWhere, isActive: true },
       select: { id: true, name: true, headUser: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
     db.weeklyDivisionReport.findMany({
-      where: { entityId, isoYear, isoWeek },
+      where: { ...entityWhere, isoYear, isoWeek },
       include: { items: { select: { id: true, status: true } } },
     }),
   ])
@@ -59,6 +62,7 @@ export async function GET() {
 
   return NextResponse.json({
     reportDate: today.toISOString(),
+    dailyLockAt: dailyLockAt(today).toISOString(),
     dailyCountdown: dailyCountdown(),
     dailyLocked: isDailyLocked(today),
     week: { isoYear, isoWeek, handoverBy: deadlines.handoverBy.toISOString(), lockAt: deadlines.lockAt.toISOString() },
@@ -119,7 +123,7 @@ export async function POST(req: NextRequest) {
     }
     const report = await db.dailyProjectReport.findUnique({ where: { id } })
     if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
-    if (report.entityId !== user.scopeEntityId) {
+    if (user.scopeEntityId && report.entityId !== user.scopeEntityId) {
       return NextResponse.json({ error: 'Laporan ini di luar entitas Anda' }, { status: 403 })
     }
     if (!report.submittedAt) {
@@ -151,7 +155,7 @@ export async function POST(req: NextRequest) {
   }
   const report = await db.weeklyDivisionReport.findUnique({ where: { id } })
   if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
-  if (report.entityId !== user.scopeEntityId) {
+  if (user.scopeEntityId && report.entityId !== user.scopeEntityId) {
     return NextResponse.json({ error: 'Laporan ini di luar entitas Anda' }, { status: 403 })
   }
   if (report.statusHeader !== 'DISETUJUI') {

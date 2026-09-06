@@ -15,7 +15,7 @@ import { DailyStatusBadge } from '@/components/status-badges'
 import { EvidencePanel } from '@/components/evidence-panel'
 import { TaskSection } from '@/components/task-section'
 import { DAILY_STATUS_META, PROJECT_PHASE_LABELS } from '@/lib/constants'
-import { formatDateLong } from '@/lib/format'
+import { formatDateLong, formatTime } from '@/lib/format'
 import {
   AlertTriangle, CheckCircle2, ClipboardCheck, Clock, ExternalLink,
   Loader2, Lock, Paperclip, Plus, Send, Trash2, ListChecks,
@@ -90,7 +90,7 @@ export function DailyInputView() {
             </div>
             <div className="text-base font-semibold tabular-nums">
               {data.locked
-                ? 'Lewat 17.00 WIB'
+                ? `Lewat ${formatTime(data.lockAt)} WIB`
                 : `${data.countdown.hours}j ${data.countdown.minutes}m lagi`}
             </div>
           </div>
@@ -125,6 +125,7 @@ export function DailyInputView() {
               key={p.id}
               project={p}
               locked={data.locked}
+              lockAt={data.lockAt}
               open={openId === p.id}
               onToggle={() => setOpenId(openId === p.id ? null : p.id)}
               onSaved={reload}
@@ -139,12 +140,14 @@ export function DailyInputView() {
 function ProjectCard({
   project,
   locked,
+  lockAt,
   open,
   onToggle,
   onSaved,
 }: {
   project: ProjectRow
   locked: boolean
+  lockAt: string
   open: boolean
   onToggle: () => void
   onSaved: () => void
@@ -158,9 +161,15 @@ function ProjectCard({
   const [busy, setBusy] = useState<'save' | 'submit' | null>(null)
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
 
-  const needsObstacle = status === 'TERKENDALA' || status === 'MENUNGGU_KEPUTUSAN'
-  const needsEvidence = status !== '' && status !== 'TIDAK_ADA_PERUBAHAN'
-  const evidenceCount = r?.evidence.length ?? 0
+  // Once the day has tasks the report is derived from them, so the values the
+  // server just computed are the truth — the local form state would be stale
+  // after every task edit. The evidence total likewise includes task files.
+  const derived = project.derived && r !== null
+  const shownStatus = derived ? r.status : status
+  const shownProgress = derived ? r.progressPct : progressPct
+  const needsObstacle = shownStatus === 'TERKENDALA' || shownStatus === 'MENUNGGU_KEPUTUSAN'
+  const needsEvidence = shownStatus !== '' && shownStatus !== 'TIDAK_ADA_PERUBAHAN'
+  const evidenceCount = r?.evidenceCount ?? 0
 
   async function send(action: 'save' | 'submit') {
     setBusy(action)
@@ -239,8 +248,8 @@ function ProjectCard({
           {locked && (
             <div className="flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/25 p-2.5 text-[13px] text-rose-700 dark:text-rose-300">
               <Lock className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              Laporan hari ini sudah melewati pukul 17.00 WIB dan terkunci. Ajukan permohonan buka
-              kunci melalui Admin PT.
+              Laporan hari ini sudah melewati pukul {formatTime(lockAt)} WIB dan terkunci. Ajukan
+              permohonan buka kunci melalui Admin PT.
             </div>
           )}
 
@@ -251,10 +260,10 @@ function ProjectCard({
                 Diringkas dari {project.taskCount} task
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <DailyStatusBadge status={status} />
+                <DailyStatusBadge status={shownStatus} />
                 <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-                  <Progress value={progressPct} className="h-2 flex-1" />
-                  <span className="text-sm font-semibold tabular-nums">{progressPct}%</span>
+                  <Progress value={shownProgress} className="h-2 flex-1" />
+                  <span className="text-sm font-semibold tabular-nums">{shownProgress}%</span>
                 </div>
               </div>
               <p className="text-[13px] text-blue-800/80 dark:text-blue-200/80">
@@ -336,7 +345,7 @@ function ProjectCard({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`fu-${project.id}`} className="text-sm">
-                  Rencana tindak lanjut {status === 'TERKENDALA' && <span className="text-rose-500">*</span>}
+                  Rencana tindak lanjut {shownStatus === 'TERKENDALA' && <span className="text-rose-500">*</span>}
                 </Label>
                 <Textarea
                   id={`fu-${project.id}`}

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rollupDailyReport } from '@/lib/daily-rollup'
-import { startOfWibDay } from '@/lib/lock'
+import { syncEvidenceCount } from '@/lib/daily-rollup'
 import { requireApiUser } from '@/lib/auth'
 import { canWriteEvidence } from '@/lib/evidence-access'
 import {
@@ -16,29 +15,21 @@ import {
 // the Node runtime rather than the edge.
 export const runtime = 'nodejs'
 
-/** Recount and cache the evidence total on the parent row. */
-async function syncCount(targetType: string, targetId: string) {
-  const count = await db.evidence.count({ where: { targetType, targetId } })
-
-  if (targetType === 'DAILY_REPORT') {
-    const report = await db.dailyProjectReport.findUnique({
-      where: { id: targetId },
-      select: { projectId: true, reportDate: true },
-    })
-    // Recount through the roll-up so task attachments stay part of the total.
-    if (report) await rollupDailyReport(report.projectId, startOfWibDay(report.reportDate))
-    else await db.dailyProjectReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  } else if (targetType === 'WEEKLY_ITEM') {
-    await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
-  } else if (targetType === 'TASK') {
-    const task = await db.task.findUnique({
-      where: { id: targetId },
-      select: { projectId: true, workDate: true },
-    })
-    if (task) await rollupDailyReport(task.projectId, startOfWibDay(task.workDate))
-  }
-
-  return count
+/** The extensions each accepted MIME type may arrive with. The browser sets the
+ *  type from the extension, so a mismatch means the request was hand-made. */
+const EXTENSIONS_FOR_MIME: Record<string, string[]> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+  'image/heic': ['heic'],
+  'image/gif': ['gif'],
+  'application/pdf': ['pdf'],
+  'application/msword': ['doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+  'application/vnd.ms-excel': ['xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['xlsx'],
+  'text/plain': ['txt'],
+  'text/csv': ['csv'],
 }
 
 /**
@@ -98,6 +89,13 @@ export async function POST(req: NextRequest) {
       { status: 415 }
     )
   }
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!EXTENSIONS_FOR_MIME[mime]?.includes(ext)) {
+    return NextResponse.json(
+      { error: `Ekstensi .${ext || '?'} tidak sesuai dengan jenis berkas ${mime}.` },
+      { status: 415 }
+    )
+  }
 
   const key = buildStorageKey(targetType, targetId, file.name)
   try {
@@ -122,7 +120,7 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  const count = await syncCount(targetType, targetId)
+  const count = await syncEvidenceCount(targetType, targetId)
 
   await db.auditLog.create({
     data: {

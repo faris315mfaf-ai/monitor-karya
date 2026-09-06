@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
@@ -19,6 +20,13 @@ async function visibleDivisions(user: SessionUser) {
   if (user.role === 'KEPALA_DIVISI') {
     return db.division.findMany({
       where: { headUserId: user.id, isActive: true },
+      include: { divisionType: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    })
+  }
+  if (user.role === 'TI') {
+    return db.division.findMany({
+      where: { isActive: true },
       include: { divisionType: { select: { name: true } } },
       orderBy: { name: 'asc' },
     })
@@ -139,6 +147,14 @@ export async function GET() {
   })
 }
 
+/** An ISO date from the client, or null when absent or unreadable — an
+ *  Invalid Date would otherwise surface as a 500 from Prisma. */
+function parseDate(value: unknown): Date | null {
+  if (typeof value !== 'string' || !value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 /** Guard shared by PUT and POST: the division must belong to this account. */
 async function assertOwnsDivision(user: SessionUser, divisionId: string) {
   const division = await db.division.findUnique({ where: { id: divisionId } })
@@ -147,7 +163,9 @@ async function assertOwnsDivision(user: SessionUser, divisionId: string) {
   const owns =
     user.role === 'KEPALA_DIVISI'
       ? division.headUserId === user.id
-      : division.entityId === user.scopeEntityId
+      : user.role === 'TI'
+        ? true
+        : division.entityId === user.scopeEntityId
   if (!owns) {
     return { error: NextResponse.json({ error: 'Divisi ini bukan tanggung jawab Anda' }, { status: 403 }) }
   }
@@ -199,7 +217,7 @@ export async function PUT(req: NextRequest) {
     progressPct: Math.max(0, Math.min(100, Number(body.progressPct) || 0)),
     aspectCategoryId: str('aspectCategoryId'),
     priorityId: str('priorityId'),
-    targetDate: typeof body.targetDate === 'string' && body.targetDate ? new Date(body.targetDate) : null,
+    targetDate: parseDate(body.targetDate),
     tags: Array.isArray(body.tags)
       ? (body.tags as unknown[])
           .filter((t): t is string => typeof t === 'string')
@@ -354,7 +372,11 @@ export async function POST(req: NextRequest) {
             statusHeader: 'DISETUJUI',
             approvedById: user.id,
             approvedAt: now,
-            approvalHash: `sha256:${Buffer.from(`${report.id}:${now.toISOString()}`).toString('base64url').slice(0, 16)}`,
+            // A genuine digest of what was approved and when, so the label is honest.
+            approvalHash: `sha256:${createHash('sha256')
+              .update(`${report.id}:${user.id}:${now.toISOString()}:${items.map((i) => i.id).sort().join(',')}`)
+              .digest('hex')
+              .slice(0, 32)}`,
           },
         })
 

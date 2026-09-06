@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { startOfTodayWIB, endOfTodayWIB, countdownTo, monthKeyNow } from '@/lib/wib'
+import { startOfTodayWIB, endOfTodayWIB, monthKeyNow } from '@/lib/wib'
+import { dailyCountdown, dailyLockAt } from '@/lib/lock'
 
 // GET /api/work-desk - the signed-in user's own "today's work desk".
 // The user is taken from the session, never from a query parameter, so one
@@ -88,7 +89,7 @@ export async function GET() {
       }
     })
 
-    const countdown = countdownTo(17)
+    const countdown = dailyCountdown()
 
     return NextResponse.json({
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
@@ -96,10 +97,11 @@ export async function GET() {
       projectsToday,
       weeklyDrafts,
       pendingUnlocks,
+      lockAt: dailyLockAt(new Date()).toISOString(),
       countdown: {
         hours: countdown.hours,
         minutes: countdown.minutes,
-        total: countdown.total,
+        total: countdown.totalMs,
         passed: countdown.passed,
       },
       lateThisMonth,

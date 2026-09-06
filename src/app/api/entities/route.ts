@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser, scopePathPrefix, isGlobalRole } from '@/lib/auth'
+import { refuseUnscoped, requireApiUser, scopePathPrefix, isGlobalRole } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
 
 // GET /api/entities - full entity tree (HOLDING -> SUB_HOLDING -> SECTOR -> REGION -> PT).
@@ -9,6 +9,8 @@ export async function GET(_req: NextRequest) {
   try {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
+    const unscoped = refuseUnscoped(user)
+    if (unscoped) return unscoped
     const periodKey = monthKeyNow()
 
     // A scoped role only sees its own entity and everything under it; the tree

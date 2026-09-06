@@ -85,7 +85,7 @@ export function LoginForm({
   }
 
   /** Fill both fields so the manual path is one tap away from submitting. */
-  function useAccount(addr: string) {
+  function fillAccount(addr: string) {
     setEmail(addr)
     if (demoPassword) setPassword(demoPassword)
     setManualOpen(true)
@@ -175,7 +175,7 @@ export function LoginForm({
                         <button
                           key={a.email}
                           type="button"
-                          onClick={() => useAccount(a.email)}
+                          onClick={() => fillAccount(a.email)}
                           disabled={submitting}
                           className="rounded-lg bg-white/60 dark:bg-slate-900/50 px-2.5 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-500/15 transition-colors disabled:opacity-50"
                         >

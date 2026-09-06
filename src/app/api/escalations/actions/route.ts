@@ -56,8 +56,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Jenis kebutuhan wajib dipilih' }, { status: 422 })
     }
 
-    // Resolve the entity from the source, and refuse to raise the same task twice.
+    // Resolve the entity and the responsible person from the source. A PIC may
+    // only raise their own project's work and a head of division only their own
+    // division's — being in the same PT is not enough.
     let entityId: string | null = null
+    let ownerId: string | null = null
     if (sourceType === 'TASK') {
       const task = await db.task.findUnique({
         where: { id: sourceId },
@@ -68,25 +71,45 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Task ini sudah dieskalasi' }, { status: 409 })
       }
       entityId = task.entityId
+      ownerId = task.project.picUserId
     } else if (sourceType === 'DAILY_REPORT') {
       const r = await db.dailyProjectReport.findUnique({
         where: { id: sourceId },
-        select: { entityId: true },
+        select: { entityId: true, project: { select: { picUserId: true } } },
       })
       if (!r) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
       entityId = r.entityId
+      ownerId = r.project.picUserId
     } else {
       const item = await db.weeklyReportItem.findUnique({
         where: { id: sourceId },
-        select: { weeklyReport: { select: { entityId: true } } },
+        select: { weeklyReport: { select: { entityId: true, division: { select: { headUserId: true } } } } },
       })
       if (!item) return NextResponse.json({ error: 'Item tidak ditemukan' }, { status: 404 })
       entityId = item.weeklyReport.entityId
+      ownerId = item.weeklyReport.division.headUserId
+    }
+
+    if (
+      (user.role === 'PIC_PROYEK' || user.role === 'KEPALA_DIVISI') &&
+      ownerId !== user.id
+    ) {
+      return NextResponse.json({ error: 'Sumber ini bukan tanggung jawab Anda' }, { status: 403 })
     }
 
     const allowed = await scopeEntityIds(user)
     if (allowed && entityId && !allowed.includes(entityId)) {
       return NextResponse.json({ error: 'Sumber ini di luar cakupan Anda' }, { status: 403 })
+    }
+
+    // The task table carries its own escalationId; the other two sources are
+    // checked here so a report cannot be escalated twice while one is open.
+    const open = await db.escalation.findFirst({
+      where: { sourceType, sourceId, status: { in: ['DIAJUKAN', 'DITINJAU', 'DIPUTUSKAN'] } },
+      select: { id: true },
+    })
+    if (open) {
+      return NextResponse.json({ error: 'Sumber ini sudah memiliki eskalasi yang masih berjalan' }, { status: 409 })
     }
 
     const escalation = await db.escalation.create({

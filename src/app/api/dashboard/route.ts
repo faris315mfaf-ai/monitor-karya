@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser, resolveScopeEntityId } from '@/lib/auth'
+import { refuseUnscoped, requireApiUser, resolveScopeEntityId } from '@/lib/auth'
 import { startOfTodayWIB, endOfTodayWIB, monthKeyNow, ageDays } from '@/lib/wib'
 
 // GET /api/dashboard - aggregated root dashboard for management/holding view
 export async function GET(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  const unscoped = refuseUnscoped(user)
+  if (unscoped) return unscoped
   // A scoped role is pinned to its own subtree; the query parameter can only
   // narrow a global role's view, never widen a scoped one's.
   const scopeEntityId = resolveScopeEntityId(user, req.nextUrl.searchParams.get('scopeEntityId'))

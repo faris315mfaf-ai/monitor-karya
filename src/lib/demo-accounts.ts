@@ -41,3 +41,9 @@ export const DEMO_EMAILS: Record<string, string> = Object.fromEntries(
  * this at a password that guards real data.
  */
 export const DEMO_PASSWORD = process.env.SEED_PASSWORD || 'MonitorKarya#2026'
+
+/** Whether one-click demo sign-in is switched on for this server. */
+export function demoLoginEnabled(): boolean {
+  const flag = process.env.DEMO_LOGIN
+  return flag === '1' || flag === 'true'
+}

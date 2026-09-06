@@ -19,10 +19,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email dan kata sandi wajib diisi' }, { status: 400 })
   }
 
-  const user = await db.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
-    select: { id: true, name: true, email: true, role: true, isActive: true, passwordHash: true },
-  })
+  let user
+  try {
+    user = await db.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true, name: true, email: true, role: true, isActive: true, passwordHash: true },
+    })
+  } catch {
+    return NextResponse.json({ error: 'Database tidak terjangkau dari server ini.' }, { status: 503 })
+  }
 
   const ok = await verifyPassword(password, user?.passwordHash ?? null)
   if (!user || !ok) {

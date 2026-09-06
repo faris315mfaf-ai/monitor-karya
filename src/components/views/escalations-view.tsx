@@ -367,7 +367,9 @@ function EscalationActions({
   const mayDecide = can(user.role, 'escalation:decide') && escalation.status !== 'DITUTUP' && escalation.status !== 'DIPUTUSKAN'
   const mayClose =
     escalation.status === 'DIPUTUSKAN' &&
-    (can(user.role, 'escalation:decide') || can(user.role, 'escalation:followup'))
+    (can(user.role, 'escalation:decide') ||
+      can(user.role, 'escalation:followup') ||
+      escalation.raisedById === user.id)
 
   async function act(action: string, extra?: Record<string, unknown>) {
     setBusy(action)

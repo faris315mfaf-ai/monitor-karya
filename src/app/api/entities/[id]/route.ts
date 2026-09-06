@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser, isGlobalRole, scopePathPrefix } from '@/lib/auth'
+import { refuseUnscoped, requireApiUser, isGlobalRole, scopePathPrefix } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
 
 // GET /api/entities/[id] - entity detail with stats
@@ -11,6 +11,8 @@ export async function GET(
   try {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
+    const unscoped = refuseUnscoped(user)
+    if (unscoped) return unscoped
     const { id } = await params
 
     const entity = await db.entity.findUnique({ where: { id } })

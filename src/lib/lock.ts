@@ -33,6 +33,17 @@ export const WEEKLY_HANDOVER_DAY = dayFromEnv('WEEKLY_HANDOVER_DAY', 4) // Thurs
 export const WEEKLY_LOCK_DAY = dayFromEnv('WEEKLY_LOCK_DAY', 5) // Friday
 export const WEEKLY_CUTOFF_HOUR = hourFromEnv('WEEKLY_CUTOFF_HOUR', 17)
 
+const DAY_NAMES_ID = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+
+/** "17.00 WIB" — for messages, so the wording follows the configured hour. */
+export function hourLabel(hour: number): string {
+  return `${String(hour).padStart(2, '0')}.00 WIB`
+}
+
+export const DAILY_CUTOFF_LABEL = hourLabel(DAILY_CUTOFF_HOUR)
+export const WEEKLY_HANDOVER_LABEL = `${DAY_NAMES_ID[WEEKLY_HANDOVER_DAY]} ${hourLabel(WEEKLY_CUTOFF_HOUR)}`
+export const WEEKLY_LOCK_LABEL = `${DAY_NAMES_ID[WEEKLY_LOCK_DAY]} ${hourLabel(WEEKLY_CUTOFF_HOUR)}`
+
 /** The UTC instant of a given WIB wall-clock hour on the WIB calendar day of `date`. */
 function wibHourOn(date: Date, hour: number): Date {
   const wib = new Date(date.getTime() + WIB_OFFSET_MS)
@@ -150,6 +161,14 @@ export const DAILY_STATUSES = [
   'TERKENDALA',
   'MENUNGGU_KEPUTUSAN',
   'TIDAK_ADA_PERUBAHAN',
+] as const
+
+export const TASK_STATUSES = [
+  'BELUM_MULAI',
+  'BERJALAN',
+  'SELESAI',
+  'TERKENDALA',
+  'MENUNGGU_KEPUTUSAN',
 ] as const
 
 export const WEEKLY_ITEM_STATUSES = [

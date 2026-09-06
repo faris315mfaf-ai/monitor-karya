@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
-import { isDailyLocked, startOfWibDay } from '@/lib/lock'
+import { DAILY_CUTOFF_LABEL, TASK_STATUSES, isDailyLocked, startOfWibDay } from '@/lib/lock'
 import { rollupDailyReport } from '@/lib/daily-rollup'
 
 /**
@@ -16,14 +16,6 @@ import { rollupDailyReport } from '@/lib/daily-rollup'
  * Everything is gated on owning the project and on the day not being locked,
  * the same rules the daily report itself follows.
  */
-
-export const TASK_STATUSES = [
-  'BELUM_MULAI',
-  'BERJALAN',
-  'SELESAI',
-  'TERKENDALA',
-  'MENUNGGU_KEPUTUSAN',
-] as const
 
 type Guard = { ok: true; project: { id: string; entityId: string } } | { ok: false; res: NextResponse }
 
@@ -109,10 +101,21 @@ function readBody(body: Record<string, unknown>, day: Date) {
   }
 }
 
-/** Shared validation: the rules a task must satisfy to be saved. */
-function validate(t: ReturnType<typeof readBody>): string[] {
+/**
+ * Shared validation: the rules a task must satisfy to be saved. A picUserId
+ * is checked against the user table here rather than left for the foreign key
+ * to reject, which would surface as an opaque 500.
+ */
+async function validate(t: ReturnType<typeof readBody>, entityId: string): Promise<string[]> {
   const errors: string[] = []
   if (!t.title) errors.push('Judul task wajib diisi.')
+  if (t.picUserId) {
+    const pic = await db.user.findFirst({
+      where: { id: t.picUserId, isActive: true, OR: [{ scopeEntityId: entityId }, { scopeEntityId: null }] },
+      select: { id: true },
+    })
+    if (!pic) errors.push('PIC pelaksana tidak ditemukan atau berada di luar entitas ini.')
+  }
   if (t.startAt && t.endAt && t.endAt <= t.startAt) {
     errors.push('Jam selesai harus setelah jam mulai.')
   }
@@ -137,7 +140,11 @@ export async function GET(req: NextRequest) {
 
   const projectId = req.nextUrl.searchParams.get('projectId') || ''
   const dateParam = req.nextUrl.searchParams.get('date')
-  const day = startOfWibDay(dateParam ? new Date(dateParam) : new Date())
+  const parsed = dateParam ? new Date(dateParam) : new Date()
+  if (Number.isNaN(parsed.getTime())) {
+    return NextResponse.json({ error: 'Parameter tanggal tidak valid' }, { status: 400 })
+  }
+  const day = startOfWibDay(parsed)
 
   const guard = await guardProject(user, projectId)
   if (!guard.ok) return guard.res
@@ -179,13 +186,13 @@ export async function POST(req: NextRequest) {
   const day = startOfWibDay(new Date())
   if (isDailyLocked(day)) {
     return NextResponse.json(
-      { error: 'Hari ini sudah dikunci pukul 17.00 WIB.', locked: true },
+      { error: `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true },
       { status: 409 }
     )
   }
 
   const t = readBody(body, day)
-  const errors = validate(t)
+  const errors = await validate(t, guard.project.entityId)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
@@ -243,7 +250,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const t = readBody(body, startOfWibDay(existing.workDate))
-  const errors = validate(t)
+  const errors = await validate(t, guard.project.entityId)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t

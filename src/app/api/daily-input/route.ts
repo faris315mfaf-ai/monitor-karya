@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
 import {
+  DAILY_CUTOFF_LABEL,
   dailyCountdown,
   dailyLockAt,
   isDailyLocked,
@@ -27,6 +28,10 @@ async function visibleProjects(user: SessionUser) {
       where: { picUserId: user.id, lifecycle: 'AKTIF' },
       orderBy: { code: 'asc' },
     })
+  }
+  // TI is the master account and is not pinned to an entity.
+  if (user.role === 'TI') {
+    return db.project.findMany({ where: { lifecycle: 'AKTIF' }, orderBy: { code: 'asc' } })
   }
   if (!user.scopeEntityId) return []
   return db.project.findMany({
@@ -130,7 +135,9 @@ export async function PUT(req: NextRequest) {
   const owns =
     user.role === 'PIC_PROYEK'
       ? project.picUserId === user.id
-      : project.entityId === user.scopeEntityId
+      : user.role === 'TI'
+        ? true
+        : project.entityId === user.scopeEntityId
   if (!owns) {
     return NextResponse.json({ error: 'Proyek ini bukan tanggung jawab Anda' }, { status: 403 })
   }
@@ -139,7 +146,7 @@ export async function PUT(req: NextRequest) {
   if (isDailyLocked(today)) {
     return NextResponse.json(
       {
-        error: 'Laporan hari ini sudah dikunci pukul 17.00 WIB. Ajukan permohonan buka kunci.',
+        error: `Laporan hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}. Ajukan permohonan buka kunci.`,
         locked: true,
       },
       { status: 409 }
