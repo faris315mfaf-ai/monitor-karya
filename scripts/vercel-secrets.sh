@@ -66,9 +66,11 @@ for key in DATABASE_URL DIRECT_URL; do
     const db = new PrismaClient({ datasources: { db: { url: process.env.DB_URL } }, log: [] })
     try { await db.$queryRaw`SELECT 1` }
     catch (e) {
-      const first = String(e?.message || e).split("
-").find((l) => l.trim()) || "tidak ada pesan"
-      console.error("    " + first.replace(/:\/\/[^@\s]+@/g, "://***@").slice(0, 160))
+      const NL = String.fromCharCode(10)
+      const lines = String(e && e.message ? e.message : e).split(NL).map((l) => l.trim()).filter(Boolean)
+      // Prefer the line that names the cause over Prisma's generic first line.
+      const reason = lines.find((l) => /P1[0-9]{3}|authentication|password|tenant|not found|refused|timed out|ENOTFOUND/i.test(l)) || lines[0] || "tidak ada pesan"
+      console.error("    " + reason.replace(/:[/][/][^@ ]+@/g, "://***@").slice(0, 200))
       process.exit(1)
     } finally { await db.$disconnect() }
   '; then
