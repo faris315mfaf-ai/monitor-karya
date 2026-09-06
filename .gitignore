@@ -54,3 +54,6 @@ server.log
 /skills/
 # keep the env template tracked
 !.env.example
+
+.vercel
+.env*

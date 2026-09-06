@@ -100,5 +100,8 @@
   },
   "prisma": {
     "seed": "tsx scripts/seed.ts"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

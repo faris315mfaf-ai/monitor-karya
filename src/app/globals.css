@@ -187,6 +187,39 @@
   /* Dialogs keep the glass look but stay opaque enough to read and type in —
      the animated transform on Radix content disables backdrop-filter, so the
      fill has to carry the contrast on its own. */
+  /* ------------------------------------------------------------------
+     Chart tokens. Validated with the data-viz palette validator against this
+     app's own card surfaces (#f9fcff light / #0b1820 dark): all checks pass in
+     both modes. Light mode warns on contrast for aqua and yellow, so charts
+     using them must carry direct labels — never colour alone.
+     ------------------------------------------------------------------ */
+  .viz {
+    --series-1: #2a78d6; /* biru    */
+    --series-2: #eb6834; /* jingga  */
+    --series-3: #1baf7a; /* toska   */
+    --series-4: #eda100; /* kuning  */
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #d03b3b;
+    --viz-grid: #e1e0d9;
+    --viz-axis: #c3c2b7;
+    --viz-ink: #52514e;
+    --viz-muted: #898781;
+    --viz-neutral: #94a3b8;
+  }
+  .dark .viz {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --viz-grid: #2c2c2a;
+    --viz-axis: #383835;
+    --viz-ink: #c3c2b7;
+    --viz-muted: #898781;
+    --viz-neutral: #64748b;
+  }
+
   .glass-modal {
     background: color-mix(in oklch, var(--popover) 97%, transparent);
     border: 1px solid color-mix(in oklch, white 55%, transparent);

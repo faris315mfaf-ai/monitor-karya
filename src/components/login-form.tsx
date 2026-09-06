@@ -10,7 +10,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 type DemoAccount = { email: string; name: string; roleLabel: string }
 
-export function LoginForm({ demoAccounts }: { demoAccounts: DemoAccount[] }) {
+export function LoginForm({
+  demoAccounts,
+  children,
+}: {
+  demoAccounts: DemoAccount[]
+  /** Slot for the demo role picker, rendered under the password form. */
+  children?: React.ReactNode
+}) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -140,6 +147,8 @@ export function LoginForm({ demoAccounts }: { demoAccounts: DemoAccount[] }) {
             </Button>
           </form>
         </div>
+
+        {children}
 
         {demoAccounts.length > 0 && (
           <div className="glass rounded-xl mt-4 p-4">

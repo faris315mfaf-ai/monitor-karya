@@ -5,6 +5,7 @@ import {
   AdminDashboard, KadivDashboard, OversightExtras, PicDashboard,
   type AdminData, type KadivData, type OversightPanel, type PicData,
 } from '@/components/views/role-dashboards'
+import { ManagementCharts } from '@/components/views/management-charts'
 import { useApp } from '@/components/app-provider'
 import { StatCard, ComplianceBadge, EscalationStatusBadge } from '@/components'
 import { LoadingCard, LoadingSpinner, EmptyState } from '@/components/loading-states'
@@ -456,6 +457,7 @@ type MyDashboard =
  * people who oversee get the aggregate plus the decisions waiting on them.
  */
 export function DashboardView() {
+  const { user } = useApp()
   const { data, loading, error } = useFetch<MyDashboard>('/api/my-dashboard')
 
   if (loading) {
@@ -483,6 +485,8 @@ export function DashboardView() {
     <div className="space-y-4 sm:space-y-5">
       <AggregateDashboard />
       <OversightExtras panel={data.panel} />
+      {/* Management gets the full chart pack: they read, decide, and monitor. */}
+      {user.role === 'MANAJEMEN' && <ManagementCharts />}
     </div>
   )
 }

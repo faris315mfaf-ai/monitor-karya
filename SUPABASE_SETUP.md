@@ -22,6 +22,8 @@ di `src/app/api/*` tidak perlu diubah.
 | `src/lib/lock.ts` | Tenggat, penguncian, dan validasi |
 | `prisma/migrations/0007_task_and_subtask/` | Tabel Task & Subtask |
 | `src/components/task-dialog.tsx` | Form tambah/ubah task |
+| `src/components/demo-role-picker.tsx` | Masuk cepat sebagai peran |
+| `src/components/views/management-charts.tsx` | Enam grafik Manajemen |
 | `src/lib/daily-rollup.ts` | Task → laporan harian |
 | `prisma/migrations/0008_weekly_item_tags_and_subtasks/` | Tag & checklist item mingguan |
 | `src/lib/storage.ts` | Unggah/signed URL bucket privat `evidence` |
@@ -282,6 +284,46 @@ WEEKLY_CUTOFF_HOUR="17"    # jam kunci mingguan
 WEEKLY_HANDOVER_DAY="4"    # 1=Senin .. 7=Minggu — serah terima (default Kamis)
 WEEKLY_LOCK_DAY="5"        # kunci mingguan (default Jumat)
 ```
+
+### Masuk cepat sebagai peran (mode demo)
+
+Halaman login menampilkan tujuh kartu peran yang dapat diklik untuk masuk
+**tanpa kata sandi**, berurut dari pelaksana lapangan sampai manajemen. Tiap
+kartu menyebut cakupan datanya dan berapa modul yang terbuka.
+
+Ini pintu belakang yang disengaja, jadi dikunci di balik saklar:
+
+```
+DEMO_LOGIN="1"     # aktif; kosongkan atau hapus untuk mematikan
+```
+
+Tanpa saklar itu, `/api/auth/demo` menjawab 404 dan halaman login kembali ke
+formulir kata sandi biasa. **Jangan aktifkan di lingkungan berisi data
+sungguhan.** Endpoint-nya juga hanya mengenali tujuh email demo yang di-hardcode,
+bukan email sembarang.
+
+### Grafik dashboard Manajemen
+
+Peran Manajemen mendapat enam grafik, masing-masing menjawab satu pertanyaan:
+
+| Grafik | Pertanyaan yang dijawab |
+|---|---|
+| Arah Kepatuhan 6 Bulan | Apakah grup membaik atau memburuk? |
+| Kepatuhan per Sub-Holding | Bagian grup mana yang tertinggal? |
+| Status Laporan Hari Ini | Bagaimana kondisi pelaporan hari ini? |
+| Eskalasi Menunggu Keputusan | Apa yang tertahan, dan sudah berapa lama? |
+| Penyerahan Mingguan | Divisi mana yang belum menyerahkan capaian? |
+| 10 PT dengan Kepatuhan Terendah | Di mana intervensi paling mendesak? |
+
+Agar terbaca tanpa pelatihan: setiap grafik punya sub-judul berupa pertanyaannya,
+satu kalimat penafsiran di bawahnya, tombol **Tabel** untuk membaca angkanya
+langsung, dan panduan skala di atas (0–100, target 75).
+
+Warna diambil dari token `.viz` di `globals.css`, divalidasi dengan skrip
+pemeriksa palet terhadap permukaan kartu aplikasi ini (`#f9fcff` terang /
+`#0b1820` gelap): lolos seluruh pemeriksaan di kedua mode, termasuk keterpisahan
+untuk buta warna. Dua warna mode terang berada di bawah rasio kontras 3:1, jadi
+grafik yang memakainya wajib membawa label nilai langsung — bukan warna saja.
 
 ### Penyimpanan bukti (Supabase Storage)
 
