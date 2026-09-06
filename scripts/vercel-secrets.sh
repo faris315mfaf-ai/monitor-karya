@@ -15,6 +15,21 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# Every push below fails the same opaque way when the CLI is signed out or the
+# directory is not linked, so say which of the two it is up front.
+if ! whoami_out=$(npx --yes vercel whoami 2>&1); then
+  echo "ERROR: Vercel CLI belum masuk. Jalankan dulu: npx vercel login" >&2
+  printf '%s
+' "$whoami_out" | sed 's/^/  /' >&2
+  exit 1
+fi
+echo "Masuk sebagai: $(printf '%s' "$whoami_out" | tail -1)"
+
+if [ ! -f .vercel/project.json ]; then
+  echo "ERROR: folder ini belum ditautkan. Jalankan dulu: npx vercel link" >&2
+  exit 1
+fi
+
 # Read one key out of .env, dropping surrounding quotes and any CRLF.
 read_env() {
   grep -E "^$1=" .env | head -1 \
@@ -22,17 +37,21 @@ read_env() {
 }
 
 push() {
-  local name="$1" value="$2"
+  local name="$1" value="$2" out
   if [ -z "$value" ]; then
-    echo "  SKIP $name — nilai kosong" >&2
+    echo "  SKIP $name — tidak ada di .env" >&2
     return 1
   fi
   # Drop any earlier copy so re-running the script stays idempotent.
   npx --yes vercel env rm "$name" production --yes >/dev/null 2>&1
-  if printf '%s' "$value" | npx --yes vercel env add "$name" production >/dev/null 2>&1; then
+  # Keep the CLI's own message: swallowing it leaves a bare "GAGAL" that says
+  # nothing about whether this was a login, a network or a permission problem.
+  if out=$(printf '%s' "$value" | npx --yes vercel env add "$name" production 2>&1); then
     echo "  OK   $name (${#value} karakter)"
   else
-    echo "  GAGAL $name" >&2
+    echo "  GAGAL $name — pesan dari Vercel:" >&2
+    printf '%s
+' "$out" | sed 's/^/         /' >&2
     return 1
   fi
 }
