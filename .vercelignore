@@ -1,0 +1,20 @@
+# A .vercelignore replaces .gitignore for deployments, so the entries that keep
+# local-only files out of the upload have to be repeated here.
+
+# Local secrets. The deployment reads its values from Vercel's own environment
+# variables; shipping this file would put the database password and the Supabase
+# service-role key into the build.
+.env
+.env.*
+!.env.example
+
+# Build output and dependencies are produced on Vercel, never uploaded.
+node_modules
+.next
+.turbo
+
+# Local tooling and history.
+.git
+.claude
+*.log
+*.tsbuildinfo
