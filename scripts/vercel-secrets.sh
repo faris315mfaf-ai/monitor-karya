@@ -5,7 +5,10 @@
 # project. AUTH_SECRET is generated fresh instead: a leaked development secret
 # must not be able to forge production sessions.
 #
-# Run from the repository root:  bash scripts/vercel-secrets.sh
+# Run from the repository root:
+#   PowerShell / cmd :  .\scripts\vercel-secrets.cmd   (finds Git Bash itself)
+#   Git Bash         :  bash scripts/vercel-secrets.sh
+# DRY_RUN=1 exercises everything except the push to Vercel.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -41,6 +44,10 @@ push() {
   if [ -z "$value" ]; then
     echo "  SKIP $name — tidak ada di .env" >&2
     return 1
+  fi
+  if [ "${DRY_RUN:-}" = "1" ]; then
+    echo "  (uji-coba) $name siap dikirim (${#value} karakter) — tidak dikirim"
+    return 0
   fi
   # Drop any earlier copy so re-running the script stays idempotent.
   npx --yes vercel env rm "$name" production --yes >/dev/null 2>&1
@@ -88,6 +95,10 @@ push DATABASE_URL              "$(read_env DATABASE_URL)"              || fail=1
 push DIRECT_URL                "$(read_env DIRECT_URL)"                || fail=1
 push SUPABASE_SERVICE_ROLE_KEY "$(read_env SUPABASE_SERVICE_ROLE_KEY)" || fail=1
 push AUTH_SECRET               "$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))')" || fail=1
+
+if [ "${DRY_RUN:-}" = "1" ]; then
+  echo; echo "Mode uji-coba selesai: tidak ada yang dikirim ke Vercel."; exit "$fail"
+fi
 
 echo
 echo "Memeriksa hasil..."
