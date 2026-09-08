@@ -148,6 +148,95 @@ export function isWeeklyLocked(periodStart: Date, now: Date = new Date()): boole
 }
 
 // ------------------------------------------------------------------
+// Laporan kemajuan proyek — mingguan & bulanan (7 Sep 2026)
+// ------------------------------------------------------------------
+
+export const PROGRESS_CADENCES = ['MINGGUAN', 'BULANAN'] as const
+export type ProgressCadence = (typeof PROGRESS_CADENCES)[number]
+
+export type Period = { cadence: ProgressCadence; key: string; start: Date; end: Date }
+
+/** ISO week containing `date`: key "2026-W36", Monday 00:00 -> Sunday 00:00 WIB. */
+export function weekPeriodOf(date: Date = new Date()): Period {
+  const { isoYear, isoWeek } = isoWeekOf(date)
+  const start = isoWeekStart(date)
+  return {
+    cadence: 'MINGGUAN',
+    key: `${isoYear}-W${String(isoWeek).padStart(2, '0')}`,
+    start,
+    end: new Date(start.getTime() + 6 * 86400000),
+  }
+}
+
+/** Calendar month containing `date`: key "2026-09", 1st -> last day, 00:00 WIB. */
+export function monthPeriodOf(date: Date = new Date()): Period {
+  const wib = new Date(date.getTime() + WIB_OFFSET_MS)
+  const y = wib.getUTCFullYear()
+  const m = wib.getUTCMonth()
+  return {
+    cadence: 'BULANAN',
+    key: `${y}-${String(m + 1).padStart(2, '0')}`,
+    start: new Date(Date.UTC(y, m, 1) - WIB_OFFSET_MS),
+    end: new Date(Date.UTC(y, m + 1, 0) - WIB_OFFSET_MS),
+  }
+}
+
+/** The period `offset` steps before the current one (0 = current). */
+export function periodOf(cadence: ProgressCadence, offset = 0, now: Date = new Date()): Period {
+  if (cadence === 'MINGGUAN') {
+    return weekPeriodOf(new Date(now.getTime() - offset * 7 * 86400000))
+  }
+  const wib = new Date(now.getTime() + WIB_OFFSET_MS)
+  const anchor = new Date(Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth() - offset, 1) - WIB_OFFSET_MS)
+  return monthPeriodOf(anchor)
+}
+
+/**
+ * A monthly report stays open until the cutoff hour on the 3rd day of the
+ * following month, so the PIC has a short window after month-end to close it.
+ * Weekly project reports follow the same Friday lock as the division bundle.
+ */
+export function progressLockAt(period: Period): Date {
+  if (period.cadence === 'MINGGUAN') return weeklyDeadlines(period.start).lockAt
+  const wib = new Date(period.start.getTime() + WIB_OFFSET_MS)
+  const graceDay = new Date(Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth() + 1, 3) - WIB_OFFSET_MS)
+  return wibHourOn(graceDay, WEEKLY_CUTOFF_HOUR)
+}
+
+export function isProgressLocked(period: Period, now: Date = new Date()): boolean {
+  return now >= progressLockAt(period)
+}
+
+export const TASK_URGENCIES = ['RENDAH', 'SEDANG', 'TINGGI', 'KRITIS'] as const
+
+export function validateProgressReport(input: {
+  status: string
+  summary: string
+  evidenceCount: number
+  obstacle?: string | null
+  followUp?: string | null
+}): string[] {
+  const errors: string[] = []
+  if (!DAILY_STATUSES.includes(input.status as (typeof DAILY_STATUSES)[number])) {
+    errors.push('Status wajib dipilih.')
+  }
+  if (!input.summary?.trim()) errors.push('Ringkasan capaian wajib diisi.')
+  if (dailyRequiresEvidence(input.status) && input.evidenceCount < 1) {
+    errors.push('Bukti pendukung wajib dilampirkan minimal 1 untuk status ini.')
+  }
+  if (
+    (input.status === 'TERKENDALA' || input.status === 'MENUNGGU_KEPUTUSAN') &&
+    !input.obstacle?.trim()
+  ) {
+    errors.push('Kendala wajib dijelaskan untuk status Terkendala/Menunggu Keputusan.')
+  }
+  if (input.status === 'TERKENDALA' && !input.followUp?.trim()) {
+    errors.push('Rencana tindak lanjut wajib diisi untuk status Terkendala.')
+  }
+  return errors
+}
+
+// ------------------------------------------------------------------
 // Validation — "status dan bukti wajib terisi"
 // ------------------------------------------------------------------
 

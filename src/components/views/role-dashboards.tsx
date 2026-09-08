@@ -10,10 +10,10 @@ import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/loading-states'
 import { PROJECT_PHASE_LABELS, ROLE_LABELS } from '@/lib/constants'
 import { ROLE_DUTIES } from '@/lib/rbac'
-import { formatDateLong, formatPercent } from '@/lib/format'
+import { formatDate, formatDateLong, formatPercent, formatTime } from '@/lib/format'
 import {
   AlertTriangle, ArrowUpRight, BadgeCheck, CalendarCheck, CheckCircle2, ChevronRight,
-  ClipboardCheck, Clock, FolderKanban, Hourglass, Inbox, Lock, Paperclip, Siren, Users,
+  ClipboardCheck, Clock, FolderKanban, Hourglass, Inbox, Lock, Paperclip, Plus, Siren, Users,
 } from 'lucide-react'
 
 // ------------------------------------------------------------------
@@ -76,12 +76,15 @@ function Countdown({
 export type PicData = {
   kind: 'PIC'
   countdown: { hours: number; minutes: number; passed: boolean }
+  lockAt: string
   summary: { projects: number; submitted: number; outstanding: number; blocked: number; onTimePct: number }
   projects: Array<{
     id: string
     code: string
     name: string
     phase: string
+    targetEndDate: string | null
+    entityName: string
     status: string | null
     progressPct: number | null
     evidenceCount: number
@@ -94,6 +97,9 @@ export type PicData = {
 export function PicDashboard({ data }: { data: PicData }) {
   const { setActiveTab } = useApp()
   const s = data.summary
+  // Aturan sejak 7 Sep 2026: satu PIC memegang satu proyek. Bila memang satu,
+  // proyek itu jadi "pahlawan" layar dengan tindakan utamanya langsung terlihat.
+  const single = data.projects.length === 1 ? data.projects[0] : null
 
   return (
     <div className="space-y-4 sm:space-y-5 animate-fade-in">
@@ -105,10 +111,36 @@ export function PicDashboard({ data }: { data: PicData }) {
             hours={data.countdown.hours}
             minutes={data.countdown.minutes}
             label="Batas lapor"
-            passedLabel="Lewat 17.00 WIB"
+            passedLabel={`Lewat ${formatTime(data.lockAt)} WIB`}
           />
         }
       />
+
+      {single && (
+        <div className="hero-strip p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Proyek yang Anda pegang</div>
+            <div className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 leading-tight mt-0.5">{single.name}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-300 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-mono">{single.code}</span>
+              <span>· {single.entityName}</span>
+              <span>· {PROJECT_PHASE_LABELS[single.phase] ?? single.phase}</span>
+              {single.targetEndDate && <span>· target {formatDate(single.targetEndDate)}</span>}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <Progress value={single.progressPct ?? 0} className="h-2 flex-1 max-w-md" />
+              <span className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{single.progressPct ?? 0}%</span>
+              {single.status && <DailyStatusBadge status={single.status} size="xs" />}
+            </div>
+          </div>
+          <Button
+            onClick={() => setActiveTab('daily-input')}
+            className="h-14 px-6 text-base font-semibold bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white btn-primary-glow shrink-0"
+          >
+            <Plus className="h-6 w-6" strokeWidth={2.5} /> Tambah Progress
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Proyek Saya" value={s.projects} sub="ditugaskan aktif" icon={FolderKanban} tone="blue" />

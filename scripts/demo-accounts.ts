@@ -39,8 +39,10 @@ async function main() {
     throw new Error('SEED_PASSWORD is missing or shorter than 8 characters — set it in .env')
   }
 
-  const pt = await db.entity.findUnique({ where: { code: 'PT-001' } })
-  if (!pt) throw new Error('Entitas PT-001 tidak ditemukan — jalankan seed terlebih dahulu.')
+  // Sejak seed 7 Sep 2026 akun demo sudah ditanam oleh seed itu sendiri; skrip
+  // ini tinggal alat perbaikan bila akunnya terhapus. Rumahnya PT Sigma.
+  const pt = await db.entity.findUnique({ where: { code: 'PT-SIGMA' } })
+  if (!pt) throw new Error('Entitas PT-SIGMA tidak ditemukan — jalankan seed terlebih dahulu.')
 
   // Walk up to the sub-holding so the Direktur account covers several PTs.
   let subHolding = pt

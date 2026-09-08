@@ -50,8 +50,30 @@ export const PROJECT_PHASE_LABELS: Record<string, string> = {
 export const PROJECT_LIFECYCLE_LABELS: Record<string, string> = {
   DIUSULKAN: 'Diusulkan',
   AKTIF: 'Aktif',
+  DITOLAK: 'Ditolak',
   DITUTUP: 'Ditutup',
   DIARSIPKAN: 'Diarsipkan',
+}
+
+/** Empat kategori urgensi task harian (7 Sep 2026). */
+export const URGENCY_META: Record<string, { label: string; bg: string; text: string; dot: string; hint: string }> = {
+  RENDAH: { label: 'Rendah', bg: 'bg-slate-500/15', text: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-400', hint: 'Bisa menunggu' },
+  SEDANG: { label: 'Sedang', bg: 'bg-blue-500/15', text: 'text-blue-700 dark:text-blue-300', dot: 'bg-blue-500', hint: 'Sesuai jadwal' },
+  TINGGI: { label: 'Tinggi', bg: 'bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300', dot: 'bg-amber-500', hint: 'Prioritaskan hari ini' },
+  KRITIS: { label: 'Kritis', bg: 'bg-rose-500/15', text: 'text-rose-700 dark:text-rose-300', dot: 'bg-rose-500', hint: 'Menghambat proyek' },
+}
+
+/** Kadens laporan kemajuan proyek. */
+export const CADENCE_LABELS: Record<string, string> = {
+  HARIAN: 'Harian',
+  MINGGUAN: 'Mingguan',
+  BULANAN: 'Bulanan',
+}
+
+export const PROJECT_APPROVER_LABELS: Record<string, string> = {
+  DIREKTUR_ENTITAS: 'Direktur Entitas',
+  DIREKTUR_SDM_GA: 'Direktur SDM & GA',
+  MANAJEMEN: 'Manajemen',
 }
 
 // Daily report status colors and labels
@@ -126,7 +148,7 @@ export function complianceColor(score: number): { bg: string; text: string; ring
 export const NAV_TABS = [
   { id: 'dashboard', label: 'Dashboard', short: 'Beranda' },
   { id: 'work-desk', label: 'Meja Kerja', short: 'Kerja' },
-  { id: 'daily-input', label: 'Lapor Harian', short: 'Harian' },
+  { id: 'daily-input', label: 'Laporan Kemajuan', short: 'Laporan' },
   { id: 'weekly-input', label: 'Capaian Mingguan', short: 'Mingguan' },
   { id: 'inbox', label: 'Penerimaan', short: 'Masuk' },
   { id: 'projects', label: 'Modul Proyek', short: 'Proyek' },

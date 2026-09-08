@@ -73,16 +73,18 @@ export async function GET(req: NextRequest) {
       REGION: 'PT',
     }
 
-    const buildNode = (parentId: string | null, type: string) => {
-      const children = entities.filter(
-        (e) => e.type === type && (parentId === null ? e.parentId === null : e.parentId === parentId),
+    // Anak langsung dari sebuah induk, apa pun tipenya — struktur datar
+    // (holding -> PT) maupun berjenjang (sub-holding -> sektor -> wilayah -> PT)
+    // sama-sama terbaca.
+    const buildNode = (parentId: string | null, _type: string) => {
+      const children = entities.filter((e) =>
+        parentId === null ? e.parentId === null : e.parentId === parentId,
       )
       return children.map((e) => {
         const kpi = kpiByEntity.get(e.id)
-        const childType = typeOrder[type]
-        const childNodes = childType ? buildNode(e.id, childType) : []
+        const childNodes = e.type === 'PT' ? [] : buildNode(e.id, typeOrder[e.type] ?? 'PT')
         // collect all PTs beneath (or self if PT)
-        const ptIds = type === 'PT' ? [e.id] : collectPTs(e.id)
+        const ptIds = e.type === 'PT' ? [e.id] : collectPTs(e.id)
         const entityCount = ptIds.length
         const ptEntitiesForAvg = ptIds.map((id) => ({ entityId: id }))
         const avgComplianceScore = computeAvg(ptEntitiesForAvg)

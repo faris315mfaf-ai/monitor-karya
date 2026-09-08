@@ -124,11 +124,14 @@
     min-height: 100%;
   }
   body {
-    /* Soft gradient backdrop */
+    /* Layered backdrop: cool blue top-left, aqua top-right, a violet wash at
+       the foot, and a faint diagonal sheen so large empty areas never read
+       as flat grey. Fixed so cards appear to float over it while scrolling. */
     background:
-      radial-gradient(circle at 0% 0%, oklch(0.94 0.06 240 / 0.55), transparent 45%),
-      radial-gradient(circle at 100% 0%, oklch(0.90 0.10 200 / 0.45), transparent 45%),
-      radial-gradient(circle at 50% 100%, oklch(0.93 0.05 254 / 0.40), transparent 55%),
+      linear-gradient(160deg, oklch(1 0 0 / 0.55) 0%, transparent 40%),
+      radial-gradient(ellipse 70% 55% at 0% 0%, oklch(0.92 0.08 240 / 0.70), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 0%, oklch(0.90 0.11 200 / 0.55), transparent 60%),
+      radial-gradient(ellipse 80% 45% at 50% 100%, oklch(0.92 0.07 280 / 0.45), transparent 60%),
       var(--background);
     background-attachment: fixed;
     /* A touch larger than the browser default: this is an operational tool read
@@ -138,9 +141,10 @@
   }
   .dark body {
     background:
-      radial-gradient(circle at 0% 0%, oklch(0.35 0.09 254 / 0.55), transparent 45%),
-      radial-gradient(circle at 100% 0%, oklch(0.32 0.10 200 / 0.45), transparent 45%),
-      radial-gradient(circle at 50% 100%, oklch(0.30 0.07 254 / 0.40), transparent 55%),
+      linear-gradient(160deg, oklch(0.30 0.06 254 / 0.35) 0%, transparent 45%),
+      radial-gradient(ellipse 70% 55% at 0% 0%, oklch(0.34 0.10 254 / 0.60), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 0%, oklch(0.30 0.11 200 / 0.50), transparent 60%),
+      radial-gradient(ellipse 80% 45% at 50% 100%, oklch(0.28 0.08 285 / 0.45), transparent 60%),
       var(--background);
   }
   /* Every control stays thumb-sized on touch screens. */
@@ -156,13 +160,16 @@
    ============================================================ */
 @layer utilities {
   .glass {
-    background: color-mix(in oklch, var(--card) 70%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in oklch, white 45%, transparent) 0%, transparent 38%),
+      color-mix(in oklch, var(--card) 72%, transparent);
     backdrop-filter: blur(18px) saturate(140%);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid color-mix(in oklch, white 60%, transparent);
+    border: 1px solid color-mix(in oklch, white 62%, transparent);
     box-shadow:
-      0 1px 0 0 color-mix(in oklch, white 80%, transparent) inset,
-      0 8px 32px -8px oklch(0.40 0.10 254 / 0.12);
+      0 1px 0 0 color-mix(in oklch, white 85%, transparent) inset,
+      0 10px 36px -10px oklch(0.40 0.10 254 / 0.16);
+    transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
   }
   .dark .glass {
     background: color-mix(in oklch, var(--card) 55%, transparent);
@@ -305,4 +312,58 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
   }
+}
+
+/* ============================================================
+   PENYEGARAN TAMPILAN (7 Sep 2026)
+   ============================================================ */
+@layer utilities {
+  /* Kartu yang bisa dibuka: sedikit terangkat saat disentuh/dihover. */
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 1px 0 0 color-mix(in oklch, white 85%, transparent) inset,
+      0 18px 44px -14px oklch(0.40 0.12 254 / 0.28);
+    border-color: color-mix(in oklch, oklch(0.55 0.18 254) 35%, transparent);
+  }
+  .dark .card-hover:hover {
+    box-shadow:
+      0 1px 0 0 color-mix(in oklch, white 10%, transparent) inset,
+      0 18px 44px -14px oklch(0 0 0 / 0.6);
+  }
+  /* Pita judul modul: gradasi lembut di belakang h1 supaya tiap layar punya "kepala". */
+  .hero-strip {
+    background:
+      linear-gradient(120deg,
+        color-mix(in oklch, oklch(0.55 0.18 254) 14%, transparent) 0%,
+        color-mix(in oklch, oklch(0.70 0.15 200) 10%, transparent) 55%,
+        transparent 100%);
+    border: 1px solid color-mix(in oklch, white 55%, transparent);
+    border-radius: 1.25rem;
+  }
+  .dark .hero-strip {
+    background:
+      linear-gradient(120deg,
+        color-mix(in oklch, oklch(0.65 0.18 254) 18%, transparent) 0%,
+        color-mix(in oklch, oklch(0.70 0.15 200) 12%, transparent) 55%,
+        transparent 100%);
+    border-color: color-mix(in oklch, white 12%, transparent);
+  }
+  /* Angka besar di kartu statistik: sedikit lebih rapat, tabular. */
+  .stat-number {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  /* Tombol utama: kilau di atas dan bayangan berwarna. */
+  .btn-primary-glow {
+    box-shadow:
+      0 1px 0 0 color-mix(in oklch, white 30%, transparent) inset,
+      0 10px 24px -8px oklch(0.55 0.18 254 / 0.55);
+  }
+}
+
+/* Gerak masuk yang lebih halus untuk kartu (dipakai animate-fade-in yang ada). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in { animation: none; }
+  .card-hover:hover { transform: none; }
 }

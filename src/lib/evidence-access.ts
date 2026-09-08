@@ -2,7 +2,7 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
-import { isDailyLocked, isWeeklyLocked } from '@/lib/lock'
+import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence } from '@/lib/lock'
 
 /**
  * Who may attach evidence to a report line, and who may read it back.
@@ -13,7 +13,7 @@ import { isDailyLocked, isWeeklyLocked } from '@/lib/lock'
  * minted for a file inside the caller's own subtree.
  */
 
-export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK'])
+export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT'])
 
 type Result = { ok: true; entityId: string } | { ok: false; status: number; error: string }
 
@@ -87,6 +87,35 @@ async function targetEntity(
           entityId: t.entityId,
           picUserId: t.project.picUserId,
           locked: isDailyLocked(t.workDate),
+        }
+      : null
+  }
+
+  if (targetType === 'PROGRESS_REPORT') {
+    const p = await db.projectProgressReport.findUnique({
+      where: { id: targetId },
+      select: {
+        entityId: true,
+        cadence: true,
+        periodKey: true,
+        periodStart: true,
+        periodEnd: true,
+        isLocked: true,
+        project: { select: { picUserId: true } },
+      },
+    })
+    return p
+      ? {
+          entityId: p.entityId,
+          picUserId: p.project.picUserId,
+          locked:
+            p.isLocked ||
+            isProgressLocked({
+              cadence: p.cadence as ProgressCadence,
+              key: p.periodKey,
+              start: p.periodStart,
+              end: p.periodEnd,
+            }),
         }
       : null
   }

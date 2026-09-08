@@ -38,6 +38,7 @@ model Entity {
   kpiSnapshots   KpiSnapshot[]
   adminAppointments AdminAppointment[]
   tasks          Task[]
+  progressReports ProjectProgressReport[]
 }
 
 model DivisionType {
@@ -84,11 +85,66 @@ model Project {
   targetEndDate  DateTime?
   approvedByName String?
   approvedAt     DateTime?
+  /// Pengajuan proyek (7 Sep 2026): Admin PT mengajukan, tiga pihak menyetujui.
+  description    String?
+  proposedById   String?
+  proposedBy     User?    @relation("ProjectProposer", fields: [proposedById], references: [id])
+  proposedAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  dailyReports DailyProjectReport[]
-  tasks        Task[]
+  dailyReports    DailyProjectReport[]
+  tasks           Task[]
+  approvals       ProjectApproval[]
+  progressReports ProjectProgressReport[]
+}
+
+/// Satu keputusan per pihak penyetuju atas satu pengajuan proyek. Proyek
+/// menjadi AKTIF ketika ketiga peran (DIREKTUR_ENTITAS, DIREKTUR_SDM_GA,
+/// MANAJEMEN) sudah DISETUJUI; satu DITOLAK membuat lifecycle DITOLAK.
+model ProjectApproval {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role        String   // DIREKTUR_ENTITAS | DIREKTUR_SDM_GA | MANAJEMEN
+  decision    String   // DISETUJUI | DITOLAK
+  note        String?
+  decidedById String?
+  decidedBy   User?    @relation("ProjectApprover", fields: [decidedById], references: [id])
+  decidedAt   DateTime @default(now())
+
+  @@unique([projectId, role])
+  @@index([projectId])
+}
+
+/// Laporan kemajuan proyek per MINGGU atau per BULAN — pelengkap laporan
+/// harian, ditulis oleh PIC proyek yang sama. Satu baris per proyek per periode.
+model ProjectProgressReport {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entityId      String
+  entity        Entity   @relation(fields: [entityId], references: [id])
+  cadence       String   // MINGGUAN | BULANAN
+  periodKey     String   // "2026-W36" atau "2026-09"
+  periodStart   DateTime
+  periodEnd     DateTime
+  status        String   // SELESAI | ON_PROGRESS | TERKENDALA | MENUNGGU_KEPUTUSAN | TIDAK_ADA_PERUBAHAN
+  progressPct   Int      @default(0)
+  summary       String
+  obstacle      String?
+  followUp      String?
+  evidenceCount Int      @default(0)
+  submittedById String?
+  submittedBy   User?    @relation("ProgressSubmitter", fields: [submittedById], references: [id])
+  submittedAt   DateTime?
+  isLocked      Boolean  @default(false)
+  lockedAt      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([projectId, cadence, periodKey])
+  @@index([entityId, cadence, periodKey])
 }
 
 model AdminAppointment {
@@ -175,6 +231,9 @@ model User {
   weeklySubmitted        WeeklyDivisionReport[] @relation("WeeklySubmitter")
   weeklyForwarded        WeeklyDivisionReport[] @relation("WeeklyForwarder")
   projectsAsPic          Project[]  @relation("ProjectPic")
+  projectsProposed       Project[]  @relation("ProjectProposer")
+  projectApprovals       ProjectApproval[] @relation("ProjectApprover")
+  progressSubmitted      ProjectProgressReport[] @relation("ProgressSubmitter")
   tasksAsPic             Task[]     @relation("TaskPic")
   tasksCreated           Task[]     @relation("TaskCreator")
   divisionsAsHead        Division[] @relation("DivisionHead")
@@ -465,6 +524,7 @@ model Task {
 
   status      String   @default("BELUM_MULAI") // BELUM_MULAI | BERJALAN | SELESAI | TERKENDALA | MENUNGGU_KEPUTUSAN
   progressPct Int      @default(0)
+  urgency     String   @default("SEDANG") // RENDAH | SEDANG | TINGGI | KRITIS
 
   obstacle       String? // required when TERKENDALA
   decisionNeeded String? // required when MENUNGGU_KEPUTUSAN

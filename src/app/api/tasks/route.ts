@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
-import { DAILY_CUTOFF_LABEL, TASK_STATUSES, isDailyLocked, startOfWibDay } from '@/lib/lock'
+import { DAILY_CUTOFF_LABEL, TASK_STATUSES, TASK_URGENCIES, isDailyLocked, startOfWibDay } from '@/lib/lock'
 import { rollupDailyReport } from '@/lib/daily-rollup'
 
 /**
@@ -81,6 +81,10 @@ function readBody(body: Record<string, unknown>, day: Date) {
       ? str('status')
       : 'BELUM_MULAI',
     progressPct: Math.max(0, Math.min(100, Number(body.progressPct) || 0)),
+    // Empat kategori urgensi (7 Sep 2026); yang tidak dikenal jatuh ke SEDANG.
+    urgency: TASK_URGENCIES.includes(str('urgency') as (typeof TASK_URGENCIES)[number])
+      ? str('urgency')
+      : 'SEDANG',
     obstacle: str('obstacle') || null,
     decisionNeeded: str('decisionNeeded') || null,
     startAt,
@@ -214,7 +218,7 @@ export async function POST(req: NextRequest) {
       action: 'CREATE_TASK',
       targetType: 'TASK',
       targetId: task.id,
-      afterData: JSON.stringify({ title: task.title, status: task.status, subtasks: subtasks.length }),
+      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, subtasks: subtasks.length }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })

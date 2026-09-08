@@ -11,6 +11,7 @@ import {
   validateDailyReport,
 } from '@/lib/lock'
 import { computeRollup, rollupDailyReport } from '@/lib/daily-rollup'
+import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
  * The daily reporting desk.
@@ -103,6 +104,73 @@ export async function GET() {
       }
     }),
   })
+}
+
+/**
+ * DELETE ?projectId= — hapus laporan HARI INI selama belum dikunci dan belum
+ * diteruskan Admin PT. Task harinya tidak ikut dihapus (mereka punya tombol
+ * hapus sendiri); hanya laporan ringkasnya beserta lampiran di levelnya.
+ */
+export async function DELETE(req: NextRequest) {
+  const user = await requireApiUser()
+  if (user instanceof NextResponse) return user
+  if (!can(user.role, 'daily:input')) {
+    return NextResponse.json({ error: 'Peran Anda tidak melakukan input harian' }, { status: 403 })
+  }
+
+  const projectId = req.nextUrl.searchParams.get('projectId') || ''
+  const project = await db.project.findUnique({ where: { id: projectId } })
+  if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
+
+  const owns =
+    user.role === 'PIC_PROYEK'
+      ? project.picUserId === user.id
+      : user.role === 'TI'
+        ? true
+        : project.entityId === user.scopeEntityId
+  if (!owns) {
+    return NextResponse.json({ error: 'Proyek ini bukan tanggung jawab Anda' }, { status: 403 })
+  }
+
+  const today = startOfWibDay(new Date())
+  const existing = await db.dailyProjectReport.findUnique({
+    where: { projectId_reportDate: { projectId, reportDate: today } },
+  })
+  if (!existing) return NextResponse.json({ error: 'Belum ada laporan hari ini' }, { status: 404 })
+  if (existing.isLocked || isDailyLocked(today)) {
+    return NextResponse.json({ error: 'Laporan hari ini sudah dikunci', locked: true }, { status: 409 })
+  }
+  if (existing.forwardedAt) {
+    return NextResponse.json({ error: 'Laporan yang sudah diteruskan tidak dapat dihapus' }, { status: 409 })
+  }
+
+  const files = await db.evidence.findMany({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
+  if (storageConfigured()) {
+    for (const f of files) {
+      if (!f.url) {
+        try {
+          await removeEvidence(f.storageKey)
+        } catch {
+          // Objek yang sudah hilang tidak boleh menggagalkan penghapusan laporan.
+        }
+      }
+    }
+  }
+  await db.evidence.deleteMany({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
+  await db.dailyProjectReport.delete({ where: { id: existing.id } })
+
+  await db.auditLog.create({
+    data: {
+      actorId: user.id,
+      action: 'DELETE_DAILY_REPORT',
+      targetType: 'DAILY_REPORT',
+      targetId: existing.id,
+      beforeData: JSON.stringify({ status: existing.status, progressPct: existing.progressPct }),
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+    },
+  })
+
+  return NextResponse.json({ ok: true })
 }
 
 export async function PUT(req: NextRequest) {

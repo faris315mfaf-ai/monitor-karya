@@ -77,11 +77,16 @@ export async function GET() {
     const byId = new Map(entities.map((e) => [e.id, e]))
     const subHoldings = entities.filter((e) => e.type === 'SUB_HOLDING')
 
-    /** The sub-holding a PT sits under, found through the materialized path. */
+    /**
+     * Kelompok tempat sebuah PT dihitung: sub-holding di atasnya bila ada.
+     * Pada struktur datar (holding -> PT, sejak 7 Sep 2026) tidak ada
+     * sub-holding, jadi tiap PT menjadi kelompoknya sendiri — grafik
+     * "per sub-holding" lalu terbaca "per anak perusahaan".
+     */
     const groupOf = (entityId: string) => {
       const e = byId.get(entityId)
       if (!e) return null
-      return subHoldings.find((sh) => e.path.startsWith(sh.path)) ?? null
+      return subHoldings.find((sh) => e.path.startsWith(sh.path)) ?? (e.type === 'PT' ? e : null)
     }
 
     // ---- 1. Six-month trend ------------------------------------------------

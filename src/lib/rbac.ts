@@ -14,6 +14,8 @@ export type Capability =
   | 'escalation:raise'
   | 'escalation:followup'
   | 'escalation:decide'
+  | 'project:propose' // Admin PT mengajukan proyek baru
+  | 'project:approve' // Direktur Entitas, Direktur SDM&GA, Manajemen menyetujui
   | 'unlock:request'
   | 'unlock:approve'
   | 'unlock:execute'
@@ -30,6 +32,8 @@ const ALL_CAPABILITIES: Capability[] = [
   'escalation:raise',
   'escalation:followup',
   'escalation:decide',
+  'project:propose',
+  'project:approve',
   'unlock:request',
   'unlock:approve',
   'unlock:execute',
@@ -54,17 +58,19 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     'weekly:input',
     'weekly:forward',
     'escalation:raise',
+    'project:propose',
     'unlock:request',
   ],
 
   // Answers for reporting compliance in their entity and chases blocked items.
-  DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'audit:read'],
+  DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'project:approve', 'audit:read'],
 
   // Process owner: reviews the dashboard, keeps notes and the escalation list,
   // and reports to Management.
   DIREKTUR_SDM_GA: [
     'escalation:raise',
     'escalation:followup',
+    'project:approve',
     'unlock:approve',
     'audit:read',
     'group:read',
@@ -75,7 +81,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   TI: ALL_CAPABILITIES,
 
   // Receives reports, decides escalated issues, watches compliance.
-  MANAJEMEN: ['escalation:decide', 'escalation:followup', 'audit:read', 'group:read'],
+  MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:approve', 'audit:read', 'group:read'],
 
   AUDITOR: ['audit:read', 'group:read'],
 }
@@ -107,6 +113,9 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
 }
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']
+
+/** The three signatures a proposed project needs before it becomes active. */
+export const PROJECT_APPROVER_ROLES = ['DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'MANAJEMEN'] as const
 
 export function can(role: string, capability: Capability): boolean {
   return (ROLE_CAPABILITIES[role] ?? []).includes(capability)

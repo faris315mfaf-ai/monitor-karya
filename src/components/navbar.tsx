@@ -3,18 +3,20 @@
 import { useApp } from '@/components/app-provider'
 import { UserMenu } from '@/components/user-menu'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { SettingsDialog } from '@/components/settings-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Activity, Bell, Globe2, ShieldCheck, Zap } from 'lucide-react'
-import { ROLE_LABELS } from '@/lib/constants'
+import { Activity, Bell, Globe2, Settings, ShieldCheck, Zap } from 'lucide-react'
+import { NAV_TABS, ROLE_LABELS } from '@/lib/constants'
+import { DAILY_CUTOFF_HOUR } from '@/lib/lock'
 import { useEffect, useState } from 'react'
 import { formatTime } from '@/lib/format'
-import { DAILY_CUTOFF_HOUR } from '@/lib/lock'
 
 export function Navbar() {
   const { user, activeTab } = useApp()
   const [now, setNow] = useState(new Date())
   const [notifCount, setNotifCount] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30000)
@@ -28,6 +30,8 @@ export function Navbar() {
       .catch(() => {})
   }, [])
 
+  const tabLabel = NAV_TABS.find((t) => t.id === activeTab)?.label ?? activeTab
+
   return (
     <header className="glass-nav sticky top-0 z-50 px-3 sm:px-4 lg:px-6 py-2.5">
       <div className="mx-auto max-w-[1600px] flex items-center gap-3">
@@ -40,9 +44,7 @@ export function Navbar() {
           <div className="hidden sm:flex flex-col leading-tight min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight">MonitorKarya</span>
-              <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 text-[11px] px-1.5 py-0 h-4 font-semibold">
-                v1.0
-              </Badge>
+              <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 text-[11px] px-1.5 py-0 h-4 font-semibold">v2</Badge>
             </div>
             <span className="text-xs text-slate-500 dark:text-slate-400 hidden md:inline">Pemantauan Bisnis Holding</span>
           </div>
@@ -50,44 +52,33 @@ export function Navbar() {
 
         {/* Center — status indicators (hidden on mobile) */}
         <div className="hidden lg:flex items-center gap-1.5 ml-2">
-          <StatusChip
-            icon={<Globe2 className="h-3 w-3" />}
-            label="WIB"
-            value={formatTime(now)}
-            color="text-blue-600"
-          />
-          <StatusChip
-            icon={<ShieldCheck className="h-3 w-3" />}
-            label="Sistem"
-            value="Aktif"
-            color="text-emerald-600"
-          />
-          <StatusChip
-            icon={<Zap className="h-3 w-3" />}
-            label="Kunci"
-            value={`${String(DAILY_CUTOFF_HOUR).padStart(2, '0')}:00`}
-            color="text-amber-600"
-          />
+          <StatusChip icon={<Globe2 className="h-3 w-3" />} label="WIB" value={formatTime(now)} color="text-blue-600" />
+          <StatusChip icon={<ShieldCheck className="h-3 w-3" />} label="Sistem" value="Aktif" color="text-emerald-600" />
+          <StatusChip icon={<Zap className="h-3 w-3" />} label="Kunci" value={`${String(DAILY_CUTOFF_HOUR).padStart(2, '0')}:00`} color="text-amber-600" />
         </div>
 
         <div className="flex-1" />
 
         {/* Right side */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Active tab hint */}
-          <div className="hidden md:flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 pr-2 border-r border-slate-200/60">
-            <span className="capitalize">{activeTab.replace('-', ' ')}</span>
+          <div className="hidden md:flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 pr-2 border-r border-slate-200/60 dark:border-white/10">
+            <span>{tabLabel}</span>
           </div>
 
           <ThemeToggle />
 
-          {/* Notifications */}
           <Button
             variant="ghost"
             size="icon-sm"
-            className="glass relative hover:bg-blue-500/10"
-            aria-label="Notifikasi"
+            className="glass hover:bg-blue-500/10"
+            aria-label="Pengaturan"
+            title="Pengaturan"
+            onClick={() => setSettingsOpen(true)}
           >
+            <Settings className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+          </Button>
+
+          <Button variant="ghost" size="icon-sm" className="glass relative hover:bg-blue-500/10" aria-label="Notifikasi">
             <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
             {notifCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
@@ -105,28 +96,17 @@ export function Navbar() {
         <span className="truncate">
           Masuk sebagai <strong className="text-slate-700 dark:text-slate-200">{user.name}</strong>
         </span>
-        <Badge
-          variant="outline"
-          className="shrink-0 ml-2 text-[11px] h-4 px-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/10"
-        >
+        <Badge variant="outline" className="shrink-0 ml-2 text-[11px] h-4 px-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/10">
           {ROLE_LABELS[user.role] ?? user.role}
         </Badge>
       </div>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   )
 }
 
-function StatusChip({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  color: string
-}) {
+function StatusChip({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   return (
     <div className="glass rounded-full px-2.5 py-1 flex items-center gap-1.5">
       <span className={color}>{icon}</span>

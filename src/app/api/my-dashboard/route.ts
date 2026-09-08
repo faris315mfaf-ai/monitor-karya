@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
-import { dailyCountdown, isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import { dailyCountdown, dailyLockAt, isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
 import { monthKeyNow } from '@/lib/wib'
 
 /**
@@ -21,7 +21,7 @@ async function picDashboard(user: SessionUser) {
 
   const projects = await db.project.findMany({
     where: { picUserId: user.id, lifecycle: 'AKTIF' },
-    select: { id: true, code: true, name: true, phase: true },
+    select: { id: true, code: true, name: true, phase: true, targetEndDate: true, entity: { select: { name: true } } },
     orderBy: { code: 'asc' },
   })
   const ids = projects.map((p) => p.id)
@@ -45,6 +45,7 @@ async function picDashboard(user: SessionUser) {
   return {
     kind: 'PIC' as const,
     countdown: dailyCountdown(),
+    lockAt: dailyLockAt(new Date()).toISOString(),
     summary: {
       projects: projects.length,
       submitted,
@@ -55,7 +56,12 @@ async function picDashboard(user: SessionUser) {
     projects: projects.map((p) => {
       const r = byProject.get(p.id)
       return {
-        ...p,
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        phase: p.phase,
+        targetEndDate: p.targetEndDate,
+        entityName: p.entity.name,
         status: r?.status ?? null,
         progressPct: r?.progressPct ?? null,
         evidenceCount: r?.evidenceCount ?? 0,

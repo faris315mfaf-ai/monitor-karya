@@ -172,6 +172,8 @@ export async function syncEvidenceCount(targetType: string, targetId: string): P
     if (task) await rollupDailyReport(task.projectId, task.workDate)
   } else if (targetType === 'WEEKLY_ITEM') {
     await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
+  } else if (targetType === 'PROGRESS_REPORT') {
+    await db.projectProgressReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
   }
 
   return count

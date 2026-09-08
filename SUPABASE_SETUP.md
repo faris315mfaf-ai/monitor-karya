@@ -143,7 +143,7 @@ grup. Peran lain dikunci pada `scopeEntityId` miliknya beserta seluruh turunanny
 — dipaksakan di sisi server, sehingga parameter query tidak bisa dipakai untuk
 melebarkan akses. Contoh nyata pada data seed:
 
-| Endpoint | Manajemen | Admin PT-001 | Direktur Sub-Holding |
+| Endpoint | Manajemen | Admin PT Sigma | Direktur PT Sigma |
 |---|---|---|---|
 | `/api/projects` | 40 | 4 | 28 |
 | `/api/daily-reports` | 761 | 74 | 539 |
@@ -155,13 +155,13 @@ Riwayat notifikasi bersifat personal: peran non-global hanya melihat miliknya.
 ## 3c. Peran, modul, dan alur proses
 
 Tujuh akun demo, satu per peran. Kata sandi semuanya dari `SEED_PASSWORD` di `.env`.
-Buat/segarkan dengan `npm run db:demo`.
+Sejak seed 7 Sep 2026 ketujuh akun ini **ditanam langsung oleh `prisma/seed.sql`** pada PT Sigma — `npm run db:demo` tinggal alat perbaikan bila akunnya terhapus.
 
 | Peran | Email | Cakupan | Modul yang terbuka |
 |---|---|---|---|
-| PIC Proyek | `pic@karya.co.id` | PT-001 (4 proyek) | Dashboard, Lapor Harian, Modul Proyek |
-| Kepala Divisi | `kadiv@karya.co.id` | 1 divisi PT-001 | Dashboard, Capaian Mingguan, Modul Divisi |
-| Admin PT | `adminpt@karya.co.id` | PT-001 | + Meja Kerja, Penerimaan, kedua modul input, Eskalasi |
+| PIC Proyek | `pic@karya.co.id` | PT Sigma (1 proyek) | Dashboard, Laporan Kemajuan (harian/mingguan/bulanan), Modul Proyek |
+| Kepala Divisi | `kadiv@karya.co.id` | 1 divisi PT Sigma | Dashboard, Capaian Mingguan, Modul Divisi |
+| Admin PT | `adminpt@karya.co.id` | PT Sigma | + Meja Kerja, Penerimaan, kedua modul input, Eskalasi, **Ajukan Proyek** |
 | Direktur Anak Perusahaan | `direktur@karya.co.id` | Sub-holding | Dashboard, Proyek, Divisi, Eskalasi, Entitas |
 | Direktur SDM & GA | `sdmga@karya.co.id` | Seluruh grup | + Audit Trail |
 | Pengelola Sistem IT | `it@karya.co.id` | Seluruh grup | Semua modul + Sistem & Akses |
@@ -189,7 +189,7 @@ tombol saja tidak pernah cukup.
 5. Setiap simpan, kirim, setujui, teruskan, dan lampir bukti tercatat di **jejak audit**
    lengkap dengan pelakunya.
 6. Data yang sudah masuk langsung terbaca di dashboard, dibatasi cakupan masing-masing
-   peran (PT → sub-holding → grup).
+   peran (PT → grup).
 
 ### Dashboard per peran
 
@@ -309,7 +309,7 @@ Peran Manajemen mendapat enam grafik, masing-masing menjawab satu pertanyaan:
 | Grafik | Pertanyaan yang dijawab |
 |---|---|
 | Arah Kepatuhan 6 Bulan | Apakah grup membaik atau memburuk? |
-| Kepatuhan per Sub-Holding | Bagian grup mana yang tertinggal? |
+| Kepatuhan per Sub-Holding | Bagian grup mana yang tertinggal? Pada struktur datar (holding → PT) tiap PT menjadi kelompoknya sendiri. |
 | Status Laporan Hari Ini | Bagaimana kondisi pelaporan hari ini? |
 | Eskalasi Menunggu Keputusan | Apa yang tertahan, dan sudah berapa lama? |
 | Penyerahan Mingguan | Divisi mana yang belum menyerahkan capaian? |
@@ -355,6 +355,58 @@ Cara kerjanya:
   pada laporan yang sudah disegel masih bisa berubah. Membaca bukti lama tetap boleh.
 - Batas yang ditegakkan: 20 MB per berkas (`413`), hanya gambar/PDF/Office/teks (`415`),
   berkas kosong ditolak (`422`), dan bukti di luar entitas pemanggil ditolak (`403`).
+
+### Struktur perusahaan (seed 7 Sep 2026)
+
+Seed sekarang membuat **Holding PT Bike** dengan delapan anak perusahaan langsung di
+bawahnya — tanpa sub-holding, sektor, atau wilayah:
+
+| Kode | Nama |
+|---|---|
+| `HOLDING-BIKE` | Holding PT Bike |
+| `PT-SIGMA` | PT Sigma (rumah akun demo) |
+| `PT-CIPTA` | PT Cipta |
+| `PT-FAHREZA` | PT Fahreza |
+| `PT-KBI` | PT kBI |
+| `PT-SMI` | PT SMI |
+| `PT-PRAMBANAN` | PT Prambanan |
+| `PT-RATUKARYA` | PT Ratu Karya |
+| `PT-SPKD` | PT SPKD |
+
+Tiap PT punya 3 divisi (masing-masing dengan kepala divisi), 2 proyek aktif yang
+masing-masing dipegang **satu** PIC, satu Admin PT, dan satu Direktur Entitas.
+Alurnya: holding → anak perusahaan → proyek → laporan harian, mingguan, bulanan.
+
+### Laporan kemajuan tiga kadens (7 Sep 2026)
+
+Modul "Laporan Kemajuan" (tab `daily-input`) bertab **Harian / Mingguan / Bulanan**.
+
+- **Harian**: tombol besar **Tambah Progress** membuka dialog layar penuh — judul,
+  proyek (dropdown proyek yang dipegang; terkunci bila hanya satu), periode
+  pengerjaan (tanggal + jam), PIC pelaksana, subtask, status, **urgensi** (Rendah /
+  Sedang / Tinggi / Kritis), kendala, lampiran. Laporan hari yang belum dikunci
+  dan belum diteruskan bisa dihapus (`DELETE /api/daily-input?projectId=`).
+- **Mingguan & Bulanan**: tabel `ProjectProgressReport` (satu baris per proyek per
+  periode). Endpoint `/api/progress-reports` (GET/PUT/DELETE). Mingguan mengunci
+  Jumat 17.00 WIB seperti bundel divisi; bulanan mengunci tanggal 3 bulan
+  berikutnya pukul 17.00 WIB. Sebelum terkunci, laporan bisa diubah/dihapus.
+- Semua laporan menerima lampiran dokumen/foto; **foto tampil sebagai galeri**
+  (signed URL 5 menit) saat laporan dibuka.
+
+### Pengajuan proyek (7 Sep 2026)
+
+Admin PT mengajukan lewat pop-up **Ajukan Proyek** (`POST /api/projects`). Proyek
+lahir sebagai `DIUSULKAN` dan menjadi `AKTIF` setelah tiga persetujuan lewat
+`POST /api/projects/approve`: **Direktur Entitas** (PT yang sama), **Direktur
+SDM & GA**, dan **Manajemen**. Satu penolakan → `DITOLAK`. Kartu proyek
+menampilkan tiga slot tanda tangan itu. Seed menyertakan satu pengajuan yang
+masih menunggu di PT Sigma.
+
+### Pengaturan
+
+Roda gigi di samping tombol tema membuka **Pengaturan**: profil (nama & telepon
+bisa diubah sendiri), penempatan (PT / proyek / divisi — diatur TI), dan tema.
+Endpoint `GET/PATCH /api/profile`.
 
 ## 4. Jalankan aplikasi
 
@@ -407,7 +459,7 @@ database produksi yang sudah berisi data asli.
 ## 8. Struktur data singkat
 
 ```
-Entity (HOLDING → SUB_HOLDING → SECTOR → REGION → PT)
+Entity (HOLDING → PT; struktur berjenjang SUB_HOLDING/SECTOR/REGION tetap didukung kode tapi tidak dipakai seed)
  ├─ Division ──┐
  ├─ Project ───┤
  ├─ DailyProjectReport (harian, kunci 17:00 WIB)
