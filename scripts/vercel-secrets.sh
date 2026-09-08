@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Push the four secret environment variables to Vercel Production.
+# Push the five secret environment variables to Vercel Production, then
+# redeploy so they take effect.
 #
 # Three are copied from the local .env because they name the same Supabase
-# project. AUTH_SECRET is generated fresh instead: a leaked development secret
-# must not be able to forge production sessions.
+# project. AUTH_SECRET and CRON_SECRET are generated fresh instead: a leaked
+# development secret must not be able to forge production sessions or fire
+# the reminder cron.
 #
 # Run from the repository root:
 #   PowerShell / cmd :  .\scripts\vercel-secrets.cmd   (finds Git Bash itself)
 #   Git Bash         :  bash scripts/vercel-secrets.sh
-# DRY_RUN=1 exercises everything except the push to Vercel.
+# DRY_RUN=1 exercises everything except the push (and the deploy).
+# NO_DEPLOY=1 pushes but leaves the redeploy for later.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -66,33 +69,62 @@ push() {
 # Prove the connection strings work before any of them leaves this machine. A
 # value that cannot open the database here will not open it from Vercel either,
 # and pushing it would take the live site down until someone notices.
-echo "Menguji koneksi database dengan nilai dari .env..."
-for key in DATABASE_URL DIRECT_URL; do
-  if ! DB_URL="$(read_env "$key")" node --input-type=module -e '
+# One connection attempt with a generous timeout. The pooler answers in
+# 5-10 seconds on a slow evening, which is longer than the default budget.
+test_db() {
+  DB_URL="$1" node --input-type=module -e '
     import { PrismaClient } from "@prisma/client"
-    const db = new PrismaClient({ datasources: { db: { url: process.env.DB_URL } }, log: [] })
+    const sep = process.env.DB_URL.includes("?") ? "&" : "?"
+    const url = process.env.DB_URL + sep + "connect_timeout=30&pool_timeout=30"
+    const db = new PrismaClient({ datasources: { db: { url } }, log: [] })
     try { await db.$queryRaw`SELECT 1` }
     catch (e) {
       const NL = String.fromCharCode(10)
       const lines = String(e && e.message ? e.message : e).split(NL).map((l) => l.trim()).filter(Boolean)
-      // Prefer the line that names the cause over the generic first line from Prisma.
-      const reason = lines.find((l) => /P1[0-9]{3}|authentication|password|tenant|not found|refused|timed out|ENOTFOUND/i.test(l)) || lines[0] || "tidak ada pesan"
-      console.error("    " + reason.replace(/:[/][/][^@ ]+@/g, "://***@").slice(0, 200))
+      // Prisma puts a generic "Invalid invocation" header first; the cause comes after it.
+      const body = lines.filter((l) => !/invocation:/.test(l))
+      const reason = body.find((l) => /P1[0-9]{3}|authentication|password|tenant|not found|refused|timed out|reach|ENOTFOUND/i.test(l)) || body[0] || lines[0] || "tidak ada pesan"
+      const code = e && e.code ? " [" + e.code + "]" : ""
+      console.error("    " + reason.replace(/:[/][/][^@ ]+@/g, "://***@").slice(0, 200) + code)
       process.exit(1)
     } finally { await db.$disconnect() }
-  '; then
+  '
+}
+
+# DATABASE_URL is what the running site uses, so it must pass. DIRECT_URL
+# (port 5432) is only reached by migrations and seeds from this machine, and
+# the pooler drops that port now and then: it gets three tries and, failing
+# that, is left as it already is in Vercel instead of blocking the rest.
+echo "Menguji koneksi database dengan nilai dari .env..."
+skip_direct=0
+for key in DATABASE_URL DIRECT_URL; do
+  ok=0
+  for attempt in 1 2 3; do
+    if test_db "$(read_env "$key")"; then ok=1; break; fi
+    [ "$attempt" -lt 3 ] && echo "    percobaan $attempt gagal, mencoba lagi..."
+  done
+  if [ "$ok" -eq 1 ]; then
+    echo "  OK   $key terhubung"
+  elif [ "$key" = "DIRECT_URL" ]; then
+    echo "  LEWAT $key tidak terjangkau saat ini (port 5432 kadang ditutup pooler)." >&2
+    echo "        Situs tidak memakainya; nilai yang sudah ada di Vercel dibiarkan, rahasia lain tetap dikirim." >&2
+    skip_direct=1
+  else
     echo "ERROR: $key di .env tidak bisa terhubung ke database. Tidak ada yang dikirim ke Vercel." >&2
     echo "       Periksa password dan bentuk URL (harus postgresql://user:password@host:port/db)." >&2
     exit 1
   fi
-  echo "  OK   $key terhubung"
 done
 echo
 
 echo "Mengirim rahasia ke Vercel Production..."
 fail=0
 push DATABASE_URL              "$(read_env DATABASE_URL)"              || fail=1
-push DIRECT_URL                "$(read_env DIRECT_URL)"                || fail=1
+if [ "$skip_direct" -eq 1 ]; then
+  echo "  LEWAT DIRECT_URL — nilai yang sudah ada di Vercel dipertahankan"
+else
+  push DIRECT_URL              "$(read_env DIRECT_URL)"                || fail=1
+fi
 push SUPABASE_SERVICE_ROLE_KEY "$(read_env SUPABASE_SERVICE_ROLE_KEY)" || fail=1
 push AUTH_SECRET               "$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))')" || fail=1
 # Rahasia cron pengingat divisi: dibuat baru di sini, Vercel memakainya untuk
@@ -115,3 +147,18 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 echo; echo "Selesai. Lima rahasia sudah ada di Production."
+
+# A pushed variable only reaches the site on the next deployment, so finish
+# the job here instead of leaving a second step to remember.
+if [ "${NO_DEPLOY:-}" = "1" ]; then
+  echo "NO_DEPLOY=1: tidak men-deploy ulang. Nilai baru berlaku pada deploy berikutnya."
+  exit 0
+fi
+echo
+echo "Men-deploy ulang Production supaya nilai baru dipakai (NO_DEPLOY=1 untuk melewati)..."
+if npx --yes vercel deploy --prod --yes; then
+  echo; echo "Deploy selesai. Cron pengingat divisi kini berjalan dengan CRON_SECRET yang baru."
+else
+  echo; echo "Deploy gagal. Jalankan manual: npx vercel deploy --prod --yes" >&2
+  exit 1
+fi
