@@ -4,9 +4,10 @@ import { useApp } from '@/components/app-provider'
 import { UserMenu } from '@/components/user-menu'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SettingsDialog } from '@/components/settings-dialog'
+import { NotificationBell } from '@/components/notification-bell'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Activity, Bell, Globe2, Settings, ShieldCheck, Zap } from 'lucide-react'
+import { Activity, Globe2, Settings, ShieldCheck, Zap } from 'lucide-react'
 import { NAV_TABS, ROLE_LABELS } from '@/lib/constants'
 import { DAILY_CUTOFF_HOUR } from '@/lib/lock'
 import { useEffect, useState } from 'react'
@@ -15,19 +16,11 @@ import { formatTime } from '@/lib/format'
 export function Navbar() {
   const { user, activeTab } = useApp()
   const [now, setNow] = useState(new Date())
-  const [notifCount, setNotifCount] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30000)
     return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    fetch('/api/notifications?status=FAILED&page=1&pageSize=1')
-      .then((r) => r.json())
-      .then((d) => setNotifCount(d.total || 0))
-      .catch(() => {})
   }, [])
 
   const tabLabel = NAV_TABS.find((t) => t.id === activeTab)?.label ?? activeTab
@@ -78,14 +71,7 @@ export function Navbar() {
             <Settings className="h-5 w-5 text-slate-600 dark:text-slate-300" />
           </Button>
 
-          <Button variant="ghost" size="icon-sm" className="glass relative hover:bg-blue-500/10" aria-label="Notifikasi">
-            <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-            {notifCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
-                {notifCount > 9 ? '9+' : notifCount}
-              </span>
-            )}
-          </Button>
+          <NotificationBell />
 
           <UserMenu />
         </div>

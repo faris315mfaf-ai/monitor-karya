@@ -95,6 +95,9 @@ push DATABASE_URL              "$(read_env DATABASE_URL)"              || fail=1
 push DIRECT_URL                "$(read_env DIRECT_URL)"                || fail=1
 push SUPABASE_SERVICE_ROLE_KEY "$(read_env SUPABASE_SERVICE_ROLE_KEY)" || fail=1
 push AUTH_SECRET               "$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))')" || fail=1
+# Rahasia cron pengingat divisi: dibuat baru di sini, Vercel memakainya untuk
+# header Authorization saat memanggil /api/cron/remind-divisions.
+push CRON_SECRET               "$(node -e 'console.log(require("crypto").randomBytes(24).toString("base64url"))')" || fail=1
 
 if [ "${DRY_RUN:-}" = "1" ]; then
   echo; echo "Mode uji-coba selesai: tidak ada yang dikirim ke Vercel."; exit "$fail"
@@ -103,7 +106,7 @@ fi
 echo
 echo "Memeriksa hasil..."
 listed=$(npx --yes vercel env ls production 2>&1)
-for v in DATABASE_URL DIRECT_URL SUPABASE_SERVICE_ROLE_KEY AUTH_SECRET; do
+for v in DATABASE_URL DIRECT_URL SUPABASE_SERVICE_ROLE_KEY AUTH_SECRET CRON_SECRET; do
   if echo "$listed" | grep -qE "^ $v "; then echo "  ada     $v"; else echo "  HILANG  $v"; fail=1; fi
 done
 
@@ -111,4 +114,4 @@ if [ "$fail" -ne 0 ]; then
   echo; echo "Ada yang gagal. Jalankan lagi, atau tambahkan lewat dashboard Vercel." >&2
   exit 1
 fi
-echo; echo "Selesai. Empat rahasia sudah ada di Production."
+echo; echo "Selesai. Lima rahasia sudah ada di Production."

@@ -199,7 +199,14 @@ export function DailyInputView() {
                     </select>
                   </div>
                 )}
-                {cadenceProject && <ProgressReportPanel projectId={cadenceProject} cadence={c} />}
+                {cadenceProject && (
+                  <ProgressReportPanel
+                    projectId={cadenceProject}
+                    projectName={options.find((p) => p.id === cadenceProject)?.name}
+                    projects={options}
+                    cadence={c}
+                  />
+                )}
               </>
             )}
           </TabsContent>

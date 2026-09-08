@@ -52,8 +52,10 @@ export type Rollup = {
 
 /** Computes the derived values without writing anything. */
 export async function computeRollup(projectId: string, workDate: Date): Promise<Rollup | null> {
+  // Hanya capaian harian yang membentuk laporan hari itu; kartu bercakupan
+  // MINGGUAN adalah capaian minggu dan hidup di papan mingguan.
   const tasks = await db.task.findMany({
-    where: { projectId, workDate },
+    where: { projectId, workDate, scope: 'HARIAN' },
     select: { id: true, title: true, status: true, progressPct: true, obstacle: true, decisionNeeded: true },
   })
   if (tasks.length === 0) return null

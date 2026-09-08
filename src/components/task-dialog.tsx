@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { EvidencePanel, type EvidenceItem } from '@/components/evidence-panel'
+import { wibKey } from '@/components/weekly-board'
 import { URGENCY_META } from '@/lib/constants'
 import { formatDateLong } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -113,6 +114,7 @@ export function TaskDialog({
   task,
   locked,
   onSaved,
+  weekly,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -123,12 +125,19 @@ export function TaskDialog({
   task: TaskRecord | null
   locked: boolean
   onSaved: () => void
+  /**
+   * Dibuka dari papan mingguan (8 Sep 2026): hari pengerjaan bisa dipilih di
+   * antara tujuh hari minggu itu, atau "Capaian mingguan" tanpa hari tertentu.
+   * `lane` = "YYYY-MM-DD" atau "MINGGUAN".
+   */
+  weekly?: { week: string; days: string[]; lane: string }
 }) {
   const editing = Boolean(task)
   const options: ProjectOption[] =
     projects && projects.length > 0 ? projects : [{ id: projectId, code: '', name: projectName }]
 
   const [chosenProject, setChosenProject] = useState(task?.projectId ?? projectId)
+  const [lane, setLane] = useState(weekly?.lane ?? '')
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [picName, setPicName] = useState(task?.picName ?? '')
@@ -184,6 +193,14 @@ export function TaskDialog({
         obstacle,
         decisionNeeded,
         subtasks,
+        ...(weekly
+          ? {
+              context: 'MINGGUAN',
+              week: weekly.week,
+              scope: lane === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN',
+              workDate: lane === 'MINGGUAN' ? undefined : lane,
+            }
+          : {}),
       }
       const res = await fetch('/api/tasks', {
         method: editing ? 'PUT' : 'POST',
@@ -225,7 +242,7 @@ export function TaskDialog({
                 {editing ? 'Ubah Progress' : 'Tambah Progress'}
               </DialogTitle>
               <DialogDescription className="text-sm mt-1">
-                {formatDateLong(new Date())} · {project?.name ?? projectName}
+                {weekly ? (lane === 'MINGGUAN' ? 'Capaian mingguan' : formatDateLong(lane)) : formatDateLong(new Date())} · {project?.name ?? projectName}
               </DialogDescription>
             </div>
             <button
@@ -290,14 +307,35 @@ export function TaskDialog({
             </div>
           </Section>
 
-          <Section icon={Clock} title="Periode pengerjaan" hint="Tanggal hari ini (WIB); isi jam mulai dan selesai.">
+          <Section
+            icon={Clock}
+            title="Periode pengerjaan"
+            hint={weekly ? 'Pilih hari di minggu ini, atau jadikan capaian mingguan tanpa hari tertentu.' : 'Tanggal hari ini (WIB); isi jam mulai dan selesai.'}
+          >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-sm">Tanggal</Label>
-                <div className="h-11 flex items-center gap-2 rounded-md border border-slate-200/70 dark:border-slate-700 bg-slate-500/5 px-3 text-base text-slate-700 dark:text-slate-200">
-                  <CalendarDays className="h-4 w-4 text-slate-400" />
-                  {formatDateLong(new Date())}
-                </div>
+                <Label htmlFor="task-day" className="text-sm">{weekly ? 'Hari pengerjaan' : 'Tanggal'}</Label>
+                {weekly ? (
+                  <select
+                    id="task-day"
+                    value={lane}
+                    onChange={(e) => setLane(e.target.value)}
+                    disabled={locked}
+                    className="h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/50 px-3 text-base text-slate-800 dark:text-slate-100 disabled:opacity-70"
+                  >
+                    {weekly.days.map((d) => (
+                      <option key={d} value={wibKey(d)}>
+                        {formatDateLong(d)}
+                      </option>
+                    ))}
+                    <option value="MINGGUAN">Capaian mingguan (tanpa hari)</option>
+                  </select>
+                ) : (
+                  <div className="h-11 flex items-center gap-2 rounded-md border border-slate-200/70 dark:border-slate-700 bg-slate-500/5 px-3 text-base text-slate-700 dark:text-slate-200">
+                    <CalendarDays className="h-4 w-4 text-slate-400" />
+                    {formatDateLong(new Date())}
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="task-start" className="text-sm">Mulai</Label>

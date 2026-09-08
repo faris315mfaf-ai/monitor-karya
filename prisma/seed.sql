@@ -94,7 +94,7 @@ DECLARE
   -- variabel kerja
   i int; j int; k int; n int; m int;
   pt_id text; pt_path text; cur_admin text; cur_dir text; div_id text; kdv_id text; proj_id text; cur_pic text; wr_id text; rep_id text;
-  dt_code text; dt_name text; rd date; st text; is_today bool; is_late bool; prog int; needs_esc bool;
+  dt_code text; dt_name text; rd date; wk_start date; st text; is_today bool; is_late bool; prog int; needs_esc bool;
   period_end date; period_start date; iso_y int; iso_w int; is_cur bool; approved bool; locked bool; hdr text;
   pri_code text; item_cnt int; raised timestamp; ust text; period_key text; nm text; em text; slug text;
   daily_cnt int := 0; weekly_cnt int := 0; progress_cnt int := 0; name_i int := 0;
@@ -251,24 +251,36 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- ---------- task hari ini untuk proyek PIC demo (menunjukkan urgensi) ----------
+  -- ---------- task minggu berjalan untuk proyek PIC demo (papan mingguan, urgensi) ----------
+  -- Senin s.d. hari ini: 2-3 capaian per hari (hari ini 4, memuat keempat urgensi),
+  -- ditambah satu capaian bercakupan MINGGUAN tanpa hari tertentu.
   SELECT * INTO r FROM tmp_proj WHERE tmp_proj.pic_id = (SELECT id FROM tmp_user WHERE email = 'pic@karya.co.id');
-  FOR k IN 1..4 LOOP
-    proj_id := gen_random_uuid()::text;
-    st := (ARRAY['SELESAI','BERJALAN','BERJALAN','TERKENDALA'])[k];
-    INSERT INTO "Task"(id,"projectId","entityId","workDate",title,description,tags,"picName","startAt","endAt","durationMin",status,"progressPct",urgency,obstacle,"createdById","updatedAt")
-    VALUES (proj_id, r.id, r.entity_id, today_wib::timestamp - interval '7 hours', task_titles[k],
-      'Rincian pekerjaan hari ini untuk '||r.name||'.', ARRAY['Lapangan'],
-      r.pic_name,
-      today_wib::timestamp - interval '7 hours' + ((7+k) * interval '1 hour'),
-      today_wib::timestamp - interval '7 hours' + ((9+k) * interval '1 hour'), 120,
-      st, CASE WHEN st='SELESAI' THEN 100 WHEN st='TERKENDALA' THEN 40 ELSE 30+k*10 END,
-      task_urg[k], CASE WHEN st='TERKENDALA' THEN obstacles[1] END, r.pic_id, now_utc);
-    INSERT INTO "Subtask"(id,"taskId",title,"isDone",position) VALUES
-      (gen_random_uuid()::text, proj_id, 'Persiapan alat dan bahan', true, 0),
-      (gen_random_uuid()::text, proj_id, 'Pelaksanaan pekerjaan', st IN ('SELESAI'), 1),
-      (gen_random_uuid()::text, proj_id, 'Dokumentasi hasil', st = 'SELESAI', 2);
+  wk_start := today_wib - (extract(isodow from today_wib)::int - 1);
+  FOR n IN 0..(extract(isodow from today_wib)::int - 1) LOOP
+    rd := wk_start + n;
+    is_today := (rd = today_wib);
+    FOR k IN 1..(CASE WHEN is_today THEN 4 ELSE 2 + (n % 2) END) LOOP
+      proj_id := gen_random_uuid()::text;
+      st := CASE WHEN is_today THEN (ARRAY['SELESAI','BERJALAN','BERJALAN','TERKENDALA'])[k]
+                 ELSE (ARRAY['SELESAI','SELESAI','BERJALAN'])[k] END;
+      INSERT INTO "Task"(id,"projectId","entityId","workDate",title,description,tags,"picName","startAt","endAt","durationMin",status,"progressPct",urgency,obstacle,"createdById","sortOrder",scope,"updatedAt")
+      VALUES (proj_id, r.id, r.entity_id, rd::timestamp - interval '7 hours', task_titles[((n*3 + k - 1) % 6) + 1],
+        'Rincian pekerjaan '||to_char(rd,'DD/MM')||' untuk '||r.name||'.', ARRAY['Lapangan'],
+        r.pic_name,
+        rd::timestamp - interval '7 hours' + ((7+k) * interval '1 hour'),
+        rd::timestamp - interval '7 hours' + ((9+k) * interval '1 hour'), 120,
+        st, CASE WHEN st='SELESAI' THEN 100 WHEN st='TERKENDALA' THEN 40 ELSE 30+k*10 END,
+        CASE WHEN is_today THEN task_urg[k] ELSE task_urg[((n + k) % 4) + 1] END,
+        CASE WHEN st='TERKENDALA' THEN obstacles[1] END, r.pic_id, k-1, 'HARIAN', now_utc);
+      INSERT INTO "Subtask"(id,"taskId",title,"isDone",position) VALUES
+        (gen_random_uuid()::text, proj_id, 'Persiapan alat dan bahan', true, 0),
+        (gen_random_uuid()::text, proj_id, 'Pelaksanaan pekerjaan', st IN ('SELESAI'), 1),
+        (gen_random_uuid()::text, proj_id, 'Dokumentasi hasil', st = 'SELESAI', 2);
+    END LOOP;
   END LOOP;
+  INSERT INTO "Task"(id,"projectId","entityId","workDate",title,description,tags,"picName",status,"progressPct",urgency,"createdById","sortOrder",scope,"updatedAt")
+  VALUES (gen_random_uuid()::text, r.id, r.entity_id, wk_start::timestamp - interval '7 hours', 'Penyusunan laporan progres mingguan',
+    'Rekap capaian sepekan untuk '||r.name||'.', ARRAY['Laporan'], r.pic_name, 'BERJALAN', 60, 'SEDANG', r.pic_id, 0, 'MINGGUAN', now_utc);
 
   -- ---------- laporan kemajuan proyek: mingguan (4 minggu) & bulanan (3 bulan) ----------
   FOR n IN REVERSE 3..0 LOOP
@@ -320,10 +332,10 @@ BEGIN
 
   -- ---------- laporan mingguan divisi (4 minggu terakhir) ----------
   FOR n IN REVERSE 3..0 LOOP
-    period_end := today_wib - n*7;
-    period_start := period_end - 6;
-    iso_y := extract(isoyear from period_end)::int;
-    iso_w := extract(week from period_end)::int;
+    period_start := (today_wib - n*7) - (extract(isodow from today_wib - n*7)::int - 1);   -- Senin
+    period_end := period_start + 6;                                                        -- Minggu
+    iso_y := extract(isoyear from period_start)::int;
+    iso_w := extract(week from period_start)::int;
     is_cur := (n = 0);
     FOR r IN SELECT * FROM tmp_div LOOP
       CONTINUE WHEN random() < 0.1;
@@ -344,14 +356,17 @@ BEGIN
         j := ((k-1) % 8) + 1;
         st := weekly_statuses[1+floor(random()*5)::int];
         pri_code := (ARRAY['TINGGI','SEDANG','RENDAH'])[1+floor(random()*3)::int];
+        -- Empat item pertama menempati Senin..Kamis di papan; sisanya capaian mingguan tanpa hari.
         INSERT INTO "WeeklyReportItem"(id,"weeklyReportId","aspectCategoryId","workItem","targetOutput","picName","picTitle","targetDate",status,
-          "progressPct","achievementThisWeek","obstacleFollowUp","priorityId","needsEscalation","evidenceCount","updatedAt")
+          "progressPct","achievementThisWeek","obstacleFollowUp","followUp","workDate",position,"priorityId","needsEscalation","evidenceCount","updatedAt")
         SELECT gen_random_uuid()::text, wr_id, ac.id, wk_work[j], 'Target minggu ke-'||iso_w||': '||(10+floor(random()*40)::int)||' unit',
           wk_pic[j], wk_pic[j], period_end::timestamp - interval '7 hours' + (floor(random()*14)::int) * interval '1 day', st,
           CASE WHEN st='SELESAI' THEN 100 WHEN st='BELUM_MULAI' THEN 0 ELSE floor(random()*90)::int + 5 END,
           CASE WHEN st='SELESAI' THEN achievements[1+floor(random()*10)::int] WHEN st='BELUM_MULAI' THEN 'Persiapan tahap awal'
                ELSE 'Progres '||(floor(random()*80)::int+10)||'% dari target' END,
           CASE WHEN st='TERKENDALA' THEN obstacles[1+floor(random()*8)::int] END,
+          CASE WHEN st='TERKENDALA' THEN 'Koordinasi ulang jadwal dengan pemasok; eskalasi bila belum tuntas pekan depan' END,
+          CASE WHEN k <= 4 THEN (period_start + (k-1))::timestamp - interval '7 hours' END, k-1,
           pr.id, (st='TERKENDALA' AND pri_code='TINGGI'),
           CASE WHEN st='SELESAI' THEN 1 ELSE 0 END, now_utc
         FROM "AspectCategory" ac, "Priority" pr WHERE ac.code = wk_aspect[j] AND pr.code = pri_code;
@@ -423,6 +438,14 @@ BEGIN
       json_build_object('template', hdr, 'entityId', r.scope)::text, ust,
       CASE WHEN ust='FAILED' THEN 'Connection timeout' END, CASE WHEN ust='SENT' THEN now_utc - i * interval '1 hour' END);
   END LOOP;
+  -- Satu pengingat dalam aplikasi (belum dibaca) untuk Kepala Divisi demo, supaya loncengnya terisi.
+  INSERT INTO "NotificationLog"(id,"userId",channel,recipient,template,payload,status,"sentAt")
+  SELECT gen_random_uuid()::text, u.id, 'APLIKASI', u.email, 'PENGINGAT_MINGGUAN_DIVISI',
+    json_build_object('title','Laporan mingguan divisi belum diserahkan',
+      'body','Minggu berjalan masih berstatus draft. Serahkan paling lambat Kamis 17.00 WIB.',
+      'tab','weekly-input','source','CRON')::text,
+    'SENT', now_utc - interval '2 hours'
+  FROM tmp_user u WHERE u.email = 'kadiv@karya.co.id';
 
   -- ---------- audit log (20) — menunjuk laporan sungguhan ----------
   i := 0;

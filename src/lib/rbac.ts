@@ -16,6 +16,7 @@ export type Capability =
   | 'escalation:decide'
   | 'project:propose' // Admin PT mengajukan proyek baru
   | 'project:approve' // Direktur Entitas, Direktur SDM&GA, Manajemen menyetujui
+  | 'notify:remind' // kirim pengingat ke divisi yang belum melapor (8 Sep 2026)
   | 'unlock:request'
   | 'unlock:approve'
   | 'unlock:execute'
@@ -34,6 +35,7 @@ const ALL_CAPABILITIES: Capability[] = [
   'escalation:decide',
   'project:propose',
   'project:approve',
+  'notify:remind',
   'unlock:request',
   'unlock:approve',
   'unlock:execute',
@@ -59,11 +61,12 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     'weekly:forward',
     'escalation:raise',
     'project:propose',
+    'notify:remind',
     'unlock:request',
   ],
 
   // Answers for reporting compliance in their entity and chases blocked items.
-  DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'project:approve', 'audit:read'],
+  DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'project:approve', 'notify:remind', 'audit:read'],
 
   // Process owner: reviews the dashboard, keeps notes and the escalation list,
   // and reports to Management.
@@ -71,6 +74,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     'escalation:raise',
     'escalation:followup',
     'project:approve',
+    'notify:remind',
     'unlock:approve',
     'audit:read',
     'group:read',
@@ -92,7 +96,9 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 export const ROLE_TABS: Record<string, NavTabId[]> = {
   PIC_PROYEK: ['dashboard', 'daily-input', 'projects'],
   KEPALA_DIVISI: ['dashboard', 'weekly-input', 'divisions'],
-  ADMIN_PT: ['dashboard', 'work-desk', 'inbox', 'daily-input', 'weekly-input', 'projects', 'divisions', 'escalations'],
+  // Sejak 8 Sep 2026 isian mingguan divisi untuk Admin PT ada di Modul Divisi
+  // (pilih entitas & divisi), jadi tab Capaian Mingguan tidak lagi dobel.
+  ADMIN_PT: ['dashboard', 'work-desk', 'inbox', 'daily-input', 'projects', 'divisions', 'escalations'],
   DIREKTUR_ENTITAS: ['dashboard', 'projects', 'divisions', 'escalations', 'entities'],
   DIREKTUR_SDM_GA: ['dashboard', 'projects', 'divisions', 'escalations', 'entities', 'audit'],
   TI: [

@@ -408,6 +408,63 @@ Roda gigi di samping tombol tema membuka **Pengaturan**: profil (nama & telepon
 bisa diubah sendiri), penempatan (PT / proyek / divisi — diatur TI), dan tema.
 Endpoint `GET/PATCH /api/profile`.
 
+### Papan mingguan: capaian task per hari (8 Sep 2026)
+
+Laporan mingguan Kepala Divisi dan PIC Proyek **tersusun dari capaian per
+hari**, bukan diketik ulang sebagai ringkasan:
+
+- **PIC Proyek** — tab *Mingguan* di Laporan Kemajuan memuat papan tujuh hari
+  (Senin–Minggu) ditambah lajur *Capaian mingguan* untuk hal yang tidak terikat
+  hari. Kartu = task harian; bisa **diseret antar hari**, diubah, dihapus, dan
+  ditambah dari lajur mana pun. Di bawahnya ada kartu *Ringkasan minggu & bukti*
+  (`ProjectProgressReport` MINGGUAN) untuk minggu yang sama.
+- **Kepala Divisi** — tab *Capaian Mingguan* memakai papan yang sama untuk item
+  divisinya (`WeeklyReportItem` kini punya `workDate`, `position`, `followUp`).
+- Kunci: di papan mingguan yang berlaku adalah **kunci Jumat 17.00 WIB** minggu
+  itu (bukan kunci 17.00 harian), sehingga capaian Senin masih bisa dirapikan
+  Rabu. Minggu lampau hanya dibaca. Task bercakupan `MINGGUAN` tidak ikut
+  membentuk laporan harian.
+- Seret-lepas memakai `@dnd-kit` (pointer, sentuh, papan ketik). API:
+  `PATCH /api/tasks` dan `PATCH /api/weekly-input` menerima daftar `moves`.
+
+### Modul Divisi untuk Admin PT (8 Sep 2026)
+
+Tab *Modul Divisi* bagi Admin PT (juga Kepala Divisi dan TI) diawali **meja
+isian**: pilih entitas yang dilaporkan (Admin PT terpaku pada PT-nya; TI bebas
+memilih), divisi, dan minggu. Tiap item memuat status, capaian minggu ini,
+kendala, tindak lanjut, dan tingkat prioritas; item bisa dihapus
+(`DELETE /api/weekly-input?itemId=`). Arsip seluruh laporan mingguan tetap ada
+di bawahnya. Tab *Capaian Mingguan* dilepas dari Admin PT agar tidak dobel.
+
+### Pengingat ke divisi yang belum melapor (8 Sep 2026)
+
+- "Belum melapor" = laporan minggu berjalan belum diserahkan (belum ada atau
+  masih DRAFT). Pengingat masuk ke **lonceng aplikasi** kepala divisinya
+  (`NotificationLog` kanal `APLIKASI`, kolom `readAt`), paling banyak sekali per
+  divisi per hari.
+- **Otomatis**: cron Vercel `0 2 * * 1-5` (09.00 WIB, Senin–Jumat) memanggil
+  `GET /api/cron/remind-divisions`. Endpoint ini menuntut header
+  `Authorization: Bearer <CRON_SECRET>`; tanpa variabel `CRON_SECRET` di Vercel
+  ia menjawab 503 dan tidak mengirim apa pun. `scripts/vercel-secrets.cmd`
+  kini ikut membuat dan mengirim `CRON_SECRET`.
+- **Manual**: tombol *Kirim pengingat* di meja divisi (Admin PT, Direktur, TI)
+  memanggil `POST /api/notifications/remind`; lingkupnya mengikuti entitas
+  pemanggil.
+- Lonceng di navbar: `GET /api/notifications?inbox=1`, tandai dibaca lewat
+  `PATCH /api/notifications`.
+
+### Dashboard pengawas: aktivitas per perusahaan (8 Sep 2026)
+
+Bagian teratas dashboard Manajemen (dan peran pengawas lain, sesuai cakupan)
+adalah **satu bagian per PT** berisi apa yang dikerjakannya — proyek (task,
+laporan harian, laporan kemajuan) dan divisi (item mingguan) — dengan
+pengaturan **tanggal**, **jenis laporan** (harian/mingguan/bulanan), dan
+**skala prioritas** di atasnya (`GET /api/entity-activity`). Bagian Tren KPI
+6 bulan, Peta Kepatuhan, empat indikator KPI, dan paket grafik Manajemen
+(arah kepatuhan, per sub-holding, status hari ini, eskalasi menunggu,
+penyerahan mingguan, 10 PT terendah) **disembunyikan**; komponennya masih ada
+di `src/components/dashboard/` dan `management-charts.tsx` bila diperlukan lagi.
+
 ## 4. Jalankan aplikasi
 
 ```bash

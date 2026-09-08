@@ -5,23 +5,20 @@ import {
   AdminDashboard, KadivDashboard, OversightExtras, PicDashboard,
   type AdminData, type KadivData, type OversightPanel, type PicData,
 } from '@/components/views/role-dashboards'
-import { ManagementCharts } from '@/components/views/management-charts'
+import { EntityActivityBoard } from '@/components/views/entity-activity-board'
 import { useApp } from '@/components/app-provider'
 import { StatCard, ComplianceBadge, EscalationStatusBadge } from '@/components'
 import { LoadingCard, LoadingSpinner, EmptyState } from '@/components/loading-states'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  Building2, FolderKanban, CheckCircle2, AlertTriangle, Siren, Lock, TrendingUp, TrendingDown, Clock, Trophy, ChevronRight,
+  Building2, CheckCircle2, AlertTriangle, Siren, Lock, TrendingUp, TrendingDown, Clock, Trophy, ChevronRight,
   BadgeCheck,
 } from 'lucide-react'
 import { formatNumber, formatPercent, formatRelative, formatDateLong } from '@/lib/format'
 import { ESCALATION_NEEDED_LABELS, ROLE_LABELS } from '@/lib/constants'
 import { ROLE_DUTIES } from '@/lib/rbac'
-import { ComplianceTreemap } from '@/components/dashboard/compliance-treemap'
-import { KpiTrendChart } from '@/components/dashboard/kpi-trend-chart'
 
 type DashboardData = {
   summary: {
@@ -131,6 +128,11 @@ function AggregateDashboard() {
         </div>
       )}
 
+      {/* Bagian teratas (8 Sep 2026): apa yang dikerjakan tiap perusahaan.
+          Tren KPI, peta kepatuhan, indikator KPI, dan paket grafik manajemen
+          disembunyikan atas permintaan; komponennya tetap ada di repo. */}
+      <EntityActivityBoard />
+
       {/* KPI cards grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         <StatCard
@@ -163,47 +165,6 @@ function AggregateDashboard() {
           icon={Lock}
           tone="violet"
         />
-      </div>
-
-      {/* KPI trend + compliance treemap */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="glass lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Tren KPI 6 Bulan</CardTitle>
-                <CardDescription className="text-sm">Indikator kepatuhan agregat</CardDescription>
-              </div>
-              <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
-                Bulanan
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <KpiTrendChart scopeEntityId={user?.scopeEntityId} />
-          </CardContent>
-        </Card>
-
-        <Card className="glass">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">Peta Kepatuhan</CardTitle>
-            <CardDescription className="text-sm">Hierarki holding → PT</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ComplianceTreemap scopeEntityId={user?.scopeEntityId} onSelectEntity={(id) => {
-              setSelectedEntityId(id)
-              setActiveTab('entities')
-            }} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* KPI Indicators grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiIndicator label="Ketepatan Waktu Harian" value={s.avgOnTime} target={95} icon={Clock} tone="blue" />
-        <KpiIndicator label="Kelengkapan Mingguan" value={s.avgWeeklyCompleteness} target={100} icon={CheckCircle2} tone="emerald" />
-        <KpiIndicator label="Kelengkapan Bukti" value={s.avgEvidenceCompleteness} target={100} icon={CheckCircle2} tone="cyan" />
-        <KpiIndicator label="Penyelesaian Prioritas Tinggi" value={s.avgHighPriorityCompletion} target={85} icon={Trophy} tone="amber" />
       </div>
 
       {/* Attention + Escalations + Top Performers */}
@@ -402,49 +363,6 @@ function AggregateDashboard() {
   )
 }
 
-function KpiIndicator({
-  label,
-  value,
-  target,
-  icon: Icon,
-  tone,
-}: {
-  label: string
-  value: number
-  target: number
-  icon: any
-  tone: 'blue' | 'emerald' | 'cyan' | 'amber'
-}) {
-  const tones: Record<string, string> = {
-    blue: 'text-blue-600 bg-blue-500/10',
-    emerald: 'text-emerald-600 bg-emerald-500/10',
-    cyan: 'text-cyan-600 bg-cyan-500/10',
-    amber: 'text-amber-600 bg-amber-500/10',
-  }
-  const barColor: Record<string, string> = {
-    blue: 'bg-blue-500',
-    emerald: 'bg-emerald-500',
-    cyan: 'bg-cyan-500',
-    amber: 'bg-amber-500',
-  }
-  const pct = Math.min(100, value)
-  return (
-    <div className="glass rounded-2xl p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`h-7 w-7 rounded-lg flex items-center justify-center ${tones[tone]}`}>
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300 truncate">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums">{formatPercent(value, 1)}</span>
-        <span className="text-xs text-slate-400 dark:text-slate-500">/ target {target}%</span>
-      </div>
-      <Progress value={pct} className={`h-1.5 mt-2 ${barColor[tone]}`} />
-    </div>
-  )
-}
-
 type MyDashboard =
   | PicData
   | KadivData
@@ -457,7 +375,6 @@ type MyDashboard =
  * people who oversee get the aggregate plus the decisions waiting on them.
  */
 export function DashboardView() {
-  const { user } = useApp()
   const { data, loading, error } = useFetch<MyDashboard>('/api/my-dashboard')
 
   if (loading) {
@@ -485,8 +402,6 @@ export function DashboardView() {
     <div className="space-y-4 sm:space-y-5">
       <AggregateDashboard />
       <OversightExtras panel={data.panel} />
-      {/* Management gets the full chart pack: they read, decide, and monitor. */}
-      {user.role === 'MANAJEMEN' && <ManagementCharts />}
     </div>
   )
 }

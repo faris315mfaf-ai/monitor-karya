@@ -59,7 +59,7 @@ export async function GET() {
   // A project with tasks has its status and progress derived from them.
   const taskCounts = await db.task.groupBy({
     by: ['projectId'],
-    where: { projectId: { in: projects.map((p) => p.id) }, workDate: today },
+    where: { projectId: { in: projects.map((p) => p.id) }, workDate: today, scope: 'HARIAN' },
     _count: { _all: true },
   })
   const tasksByProject = new Map(taskCounts.map((t) => [t.projectId, t._count._all]))

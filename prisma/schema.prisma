@@ -342,8 +342,16 @@ model WeeklyReportItem {
   tags                String[] @default([])
   subtasks            Subtask[]
   carriedOverFromId   String?
+  /// Papan mingguan (8 Sep 2026): hari pengerjaan (null = capaian minggu tanpa
+  /// hari tertentu), urutan kartu hasil seret-lepas, dan tindak lanjut yang
+  /// dipisah dari uraian kendala.
+  workDate            DateTime?
+  position            Int      @default(0)
+  followUp            String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  @@index([weeklyReportId, workDate])
 }
 
 // ============================================================
@@ -463,14 +471,18 @@ model NotificationLog {
   id          String   @id @default(cuid())
   userId      String?
   user        User?    @relation(fields: [userId], references: [id])
-  channel     String   // EMAIL | WHATSAPP
+  channel     String   // EMAIL | WHATSAPP | APLIKASI
   recipient   String
   template    String
-  payload     String   // JSON string
+  payload     String   // JSON string — untuk APLIKASI: { title, body, tab? }
   status      String   // PENDING | SENT | FAILED
   error       String?
   sentAt      DateTime?
+  /// Kapan penerima membukanya di lonceng aplikasi (8 Sep 2026).
+  readAt      DateTime?
   createdAt   DateTime @default(now())
+
+  @@index([userId, readAt])
 }
 
 model KpiSnapshot {
@@ -525,6 +537,11 @@ model Task {
   status      String   @default("BELUM_MULAI") // BELUM_MULAI | BERJALAN | SELESAI | TERKENDALA | MENUNGGU_KEPUTUSAN
   progressPct Int      @default(0)
   urgency     String   @default("SEDANG") // RENDAH | SEDANG | TINGGI | KRITIS
+
+  /// Papan mingguan (8 Sep 2026): urutan kartu hasil seret-lepas, dan cakupan
+  /// HARIAN (capaian hari itu) atau MINGGUAN (capaian minggu tanpa hari tertentu).
+  sortOrder   Int      @default(0)
+  scope       String   @default("HARIAN") // HARIAN | MINGGUAN
 
   obstacle       String? // required when TERKENDALA
   decisionNeeded String? // required when MENUNGGU_KEPUTUSAN

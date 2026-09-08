@@ -11,11 +11,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { DailyStatusBadge } from '@/components/status-badges'
 import { EvidencePanel, type EvidenceItem } from '@/components/evidence-panel'
+import { WeeklyTaskBoard, weekKeyOf } from '@/components/weekly-task-board'
+import type { ProjectOption } from '@/components/task-dialog'
 import { DAILY_STATUS_META } from '@/lib/constants'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
-  AlertTriangle, CalendarRange, Check, CheckCircle2, ChevronDown, Loader2, Lock, Pencil, Send, Trash2, X,
+  AlertTriangle, CalendarRange, Check, CheckCircle2, ChevronDown, FileText, Loader2, Lock, Pencil, Send, Trash2, X,
 } from 'lucide-react'
 
 type Report = {
@@ -59,23 +61,59 @@ function periodLabel(cadence: Data['cadence'], p: PeriodRow) {
 }
 
 /**
- * Laporan kemajuan per MINGGU atau per BULAN untuk satu proyek. Periode
- * berjalan tampil terbuka; periode lampau terlipat. Laporan yang belum
- * terkunci bisa diubah atau dihapus; yang terkunci hanya dibaca.
+ * Laporan kemajuan per MINGGU atau per BULAN untuk satu proyek.
+ *
+ * Mingguan (8 Sep 2026): laporannya adalah papan capaian task per hari —
+ * kartu bisa diseret antar hari, diubah, dihapus, ditambah — lalu satu kartu
+ * ringkasan & bukti untuk minggu yang sama. Bulanan: daftar periode; periode
+ * berjalan terbuka, yang lampau terlipat. Laporan yang belum terkunci bisa
+ * diubah atau dihapus; yang terkunci hanya dibaca.
  */
 export function ProgressReportPanel({
   projectId,
+  projectName,
+  projects,
   cadence,
 }: {
   projectId: string
+  projectName?: string
+  projects?: ProjectOption[]
   cadence: 'MINGGUAN' | 'BULANAN'
 }) {
   const { data, loading, error, reload } = useResource<Data>(
     `/api/progress-reports?projectId=${projectId}&cadence=${cadence}`
   )
+  const [weekKey, setWeekKey] = useState(() => weekKeyOf())
 
   if (loading) return <LoadingSpinner className="py-8" />
   if (error || !data) return <ErrorState message={error ?? 'Data tidak tersedia'} />
+
+  if (cadence === 'MINGGUAN') {
+    const period = data.periods.find((p) => p.key === weekKey) ?? null
+    return (
+      <div className="space-y-4">
+        <WeeklyTaskBoard
+          projectId={projectId}
+          projectName={projectName ?? data.project.name}
+          projects={projects}
+          weekKey={weekKey}
+          onWeekChange={setWeekKey}
+        />
+
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200 px-1">
+          <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          Ringkasan minggu &amp; bukti
+        </div>
+        {period ? (
+          <PeriodCard key={period.key} period={period} cadence="MINGGUAN" projectId={projectId} onChanged={reload} />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400 px-1">
+            Ringkasan hanya tersedia untuk {data.periods.length} minggu terakhir.
+          </p>
+        )}
+      </div>
+    )
+  }
 
   const done = data.periods.filter((p) => p.report?.submittedAt).length
 
@@ -127,7 +165,17 @@ function PeriodCard({
       const res = await fetch('/api/progress-reports', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, cadence, periodKey: p.key, action, status, progressPct, summary, obstacle: obstacle || null, followUp: followUp || null }),
+        body: JSON.stringify({
+          projectId,
+          cadence,
+          periodKey: p.key,
+          action,
+          status,
+          progressPct,
+          summary,
+          obstacle: obstacle || null,
+          followUp: followUp || null,
+        }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -175,7 +223,11 @@ function PeriodCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-base font-semibold text-slate-800 dark:text-slate-100">{periodLabel(cadence, p)}</span>
-            {p.current && <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5">Berjalan</span>}
+            {p.current && (
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5">
+                Berjalan
+              </span>
+            )}
           </div>
           <div className="text-[13px] text-slate-500 dark:text-slate-400 mt-0.5">
             {p.locked ? `Dikunci ${formatDateTime(p.lockAt)}` : `Batas ${formatDateTime(p.lockAt)}`}
@@ -199,17 +251,28 @@ function PeriodCard({
               </div>
               <p className="text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{r.summary}</p>
               {r.obstacle && (
-                <p className="text-sm rounded-lg bg-rose-500/10 border border-rose-500/25 px-3 py-2 text-rose-700 dark:text-rose-300"><strong>Kendala:</strong> {r.obstacle}</p>
+                <p className="text-sm rounded-lg bg-rose-500/10 border border-rose-500/25 px-3 py-2 text-rose-700 dark:text-rose-300">
+                  <strong>Kendala:</strong> {r.obstacle}
+                </p>
               )}
               {r.followUp && (
-                <p className="text-sm rounded-lg bg-blue-500/10 border border-blue-500/25 px-3 py-2 text-blue-700 dark:text-blue-300"><strong>Tindak lanjut:</strong> {r.followUp}</p>
+                <p className="text-sm rounded-lg bg-blue-500/10 border border-blue-500/25 px-3 py-2 text-blue-700 dark:text-blue-300">
+                  <strong>Tindak lanjut:</strong> {r.followUp}
+                </p>
               )}
               <EvidencePanel targetType="PROGRESS_REPORT" targetId={r.id} items={r.evidence} disabled={!editable} onChanged={onChanged} required={needsEvidence} />
               {editable && (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Ubah</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                    <Pencil className="h-3.5 w-3.5" /> Ubah
+                  </Button>
                   {!r.submittedAt && (
-                    <Button size="sm" onClick={() => send('submit')} disabled={busy !== null || (needsEvidence && r.evidenceCount < 1)} className="bg-gradient-to-r from-blue-600 to-blue-500 text-white">
+                    <Button
+                      size="sm"
+                      onClick={() => send('submit')}
+                      disabled={busy !== null || (needsEvidence && r.evidenceCount < 1)}
+                      className="bg-gradient-to-r from-blue-600 to-blue-500 text-white"
+                    >
                       {busy === 'submit' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Kirim
                     </Button>
                   )}
@@ -224,7 +287,9 @@ function PeriodCard({
           {showForm && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-sm">Status <span className="text-rose-500">*</span></Label>
+                <Label className="text-sm">
+                  Status <span className="text-rose-500">*</span>
+                </Label>
                 <div className="flex flex-wrap gap-1.5">
                   {STATUS_OPTIONS.map((s) => (
                     <button
@@ -245,17 +310,30 @@ function PeriodCard({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`pp-${p.key}`} className="text-sm">Progres kumulatif ({progressPct}%)</Label>
+                <Label htmlFor={`pp-${p.key}`} className="text-sm">
+                  Progres kumulatif ({progressPct}%)
+                </Label>
                 <Input id={`pp-${p.key}`} type="range" min={0} max={100} value={progressPct} onChange={(e) => setProgressPct(Number(e.target.value))} className="h-9 cursor-pointer" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`sum-${p.key}`} className="text-sm">Ringkasan capaian {cadence === 'MINGGUAN' ? 'minggu' : 'bulan'} ini <span className="text-rose-500">*</span></Label>
-                <Textarea id={`sum-${p.key}`} rows={3} value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Apa yang tercapai, angka yang penting, dan hal yang perlu diketahui atasan." className="bg-white/70 dark:bg-slate-900/50 text-base" />
+                <Label htmlFor={`sum-${p.key}`} className="text-sm">
+                  Ringkasan capaian {cadence === 'MINGGUAN' ? 'minggu' : 'bulan'} ini <span className="text-rose-500">*</span>
+                </Label>
+                <Textarea
+                  id={`sum-${p.key}`}
+                  rows={3}
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  placeholder="Apa yang tercapai, angka yang penting, dan hal yang perlu diketahui atasan."
+                  className="bg-white/70 dark:bg-slate-900/50 text-base"
+                />
               </div>
               {needsObstacle && (
                 <>
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Kendala <span className="text-rose-500">*</span></Label>
+                    <Label className="text-sm">
+                      Kendala <span className="text-rose-500">*</span>
+                    </Label>
                     <Textarea rows={2} value={obstacle} onChange={(e) => setObstacle(e.target.value)} className="bg-white/70 dark:bg-slate-900/50 text-base" />
                   </div>
                   <div className="space-y-1.5">
@@ -273,22 +351,38 @@ function PeriodCard({
                 <Button size="sm" variant="outline" onClick={() => send('save')} disabled={busy !== null || !status || !summary.trim()}>
                   {busy === 'save' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Simpan draft
                 </Button>
-                <Button size="sm" onClick={() => send('submit')} disabled={busy !== null || !status || !summary.trim() || (needsEvidence && (r?.evidenceCount ?? 0) < 1)} className="bg-gradient-to-r from-blue-600 to-blue-500 text-white">
+                <Button
+                  size="sm"
+                  onClick={() => send('submit')}
+                  disabled={busy !== null || !status || !summary.trim() || (needsEvidence && (r?.evidenceCount ?? 0) < 1)}
+                  className="bg-gradient-to-r from-blue-600 to-blue-500 text-white"
+                >
                   {busy === 'submit' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Kirim
                 </Button>
                 {r && (
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={busy !== null}><X className="h-3.5 w-3.5" /> Batal</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={busy !== null}>
+                    <X className="h-3.5 w-3.5" /> Batal
+                  </Button>
                 )}
               </div>
             </div>
           )}
 
           {!r && !editable && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2"><Lock className="h-4 w-4" /> Periode ini sudah lewat tanpa laporan.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <Lock className="h-4 w-4" /> Periode ini sudah lewat tanpa laporan.
+            </p>
           )}
 
           {msg && (
-            <div className={cn('flex items-start gap-2 rounded-lg p-2.5 text-[13px]', msg.kind === 'ok' ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300')}>
+            <div
+              className={cn(
+                'flex items-start gap-2 rounded-lg p-2.5 text-[13px]',
+                msg.kind === 'ok'
+                  ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300'
+              )}
+            >
               {msg.kind === 'ok' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
               {msg.text}
             </div>

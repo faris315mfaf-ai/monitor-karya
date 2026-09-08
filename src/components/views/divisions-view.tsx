@@ -15,12 +15,15 @@ import {
   PriorityBadge,
 } from '@/components/status-badges'
 import {
-  CalendarRange, Lock, CheckCircle2, AlertTriangle, Search, Filter,
+  Archive, CalendarRange, Lock, CheckCircle2, AlertTriangle, Search, Filter,
   ChevronLeft, ChevronRight, User, FileText, Target, ChevronDown,
 } from 'lucide-react'
 import { formatDate, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ASPECT_CATEGORY_LABELS } from '@/lib/constants'
+import { can } from '@/lib/rbac'
+import { useApp } from '@/components/app-provider'
+import { DivisionWeeklyDesk } from '@/components/division-weekly-desk'
 
 type WeeklyItem = {
   id: string
@@ -72,6 +75,8 @@ const STATUS_OPTIONS = [
 ]
 
 export function DivisionsView() {
+  const { user } = useApp()
+  const canInput = can(user.role, 'weekly:input')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statusHeader, setStatusHeader] = useState<string>('ALL')
@@ -91,9 +96,20 @@ export function DivisionsView() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Modul Divisi</h1>
         <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
-          Siklus pelaporan mingguan divisi
+          {canInput ? 'Pilih entitas dan divisi yang dilaporkan, lalu isi capaian per hari' : 'Siklus pelaporan mingguan divisi'}
         </p>
       </div>
+
+      {/* Meja isian (8 Sep 2026): Admin PT / Kepala Divisi / TI menyusun laporan
+          mingguan divisinya di sini; arsip seluruh laporan ada di bawahnya. */}
+      {canInput && (
+        <>
+          <DivisionWeeklyDesk />
+          <div className="flex items-center gap-2 pt-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
+            <Archive className="h-5 w-5 text-slate-500" /> Arsip laporan mingguan
+          </div>
+        </>
+      )}
 
       {/* Filter bar */}
       <Card className="glass">

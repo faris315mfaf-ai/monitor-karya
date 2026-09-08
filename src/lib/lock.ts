@@ -209,6 +209,47 @@ export function isProgressLocked(period: Period, now: Date = new Date()): boolea
 
 export const TASK_URGENCIES = ['RENDAH', 'SEDANG', 'TINGGI', 'KRITIS'] as const
 
+// ------------------------------------------------------------------
+// Papan mingguan — capaian task per hari (8 Sep 2026)
+// ------------------------------------------------------------------
+
+/** HARIAN: capaian hari tertentu. MINGGUAN: capaian minggu tanpa hari tertentu. */
+export const TASK_SCOPES = ['HARIAN', 'MINGGUAN'] as const
+export type TaskScope = (typeof TASK_SCOPES)[number]
+
+/** "2026-W37" -> periode minggu itu; null bila formatnya tidak dikenali. */
+export function parseWeekKey(key: string): Period | null {
+  const m = /^(\d{4})-W(\d{2})$/.exec(key)
+  if (!m) return null
+  const year = Number(m[1])
+  const week = Number(m[2])
+  if (week < 1 || week > 53) return null
+  // ISO: minggu ke-1 selalu memuat 4 Januari. Cari Senin minggu itu, lalu geser.
+  const jan4 = Date.UTC(year, 0, 4)
+  const jan4Dow = new Date(jan4).getUTCDay() || 7
+  const mondayW1 = jan4 - (jan4Dow - 1) * 86400000
+  const monday = new Date(mondayW1 + (week - 1) * 7 * 86400000 - WIB_OFFSET_MS)
+  const period = weekPeriodOf(monday)
+  return period.key === key ? period : null
+}
+
+/** Tujuh hari (Senin..Minggu) sebuah periode mingguan, tengah malam WIB sebagai UTC. */
+export function daysOfWeek(period: Period): Date[] {
+  return Array.from({ length: 7 }, (_, i) => new Date(period.start.getTime() + i * 86400000))
+}
+
+/** Apakah hari (tengah malam WIB) berada di dalam periode. */
+export function dayInPeriod(period: Period, day: Date): boolean {
+  return day.getTime() >= period.start.getTime() && day.getTime() <= period.end.getTime()
+}
+
+/** Kunci "YYYY-MM-DD" (WIB) -> tengah malam WIB sebagai UTC; null bila tidak valid. */
+export function parseWibDateKey(key: unknown): Date | null {
+  if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null
+  const d = new Date(`${key}T00:00:00+07:00`)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 export function validateProgressReport(input: {
   status: string
   summary: string

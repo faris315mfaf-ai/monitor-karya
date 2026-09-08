@@ -70,6 +70,24 @@ export const CADENCE_LABELS: Record<string, string> = {
   BULANAN: 'Bulanan',
 }
 
+/** Nama hari ISO (indeks 0 = Senin) untuk papan mingguan (8 Sep 2026). */
+export const DAY_LABELS_ID = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+export const DAY_SHORT_ID = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
+
+/** Skala prioritas untuk penyaring dashboard: urgensi task dan prioritas item divisi. */
+export const ACTIVITY_PRIORITY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'ALL', label: 'Semua prioritas' },
+  { value: 'KRITIS', label: 'Kritis' },
+  { value: 'TINGGI', label: 'Tinggi' },
+  { value: 'SEDANG', label: 'Sedang' },
+  { value: 'RENDAH', label: 'Rendah' },
+]
+
+/** Template notifikasi dalam aplikasi. */
+export const NOTIFICATION_TEMPLATE_LABELS: Record<string, string> = {
+  PENGINGAT_MINGGUAN_DIVISI: 'Pengingat laporan mingguan divisi',
+}
+
 export const PROJECT_APPROVER_LABELS: Record<string, string> = {
   DIREKTUR_ENTITAS: 'Direktur Entitas',
   DIREKTUR_SDM_GA: 'Direktur SDM & GA',

@@ -2,22 +2,47 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
-import { DAILY_CUTOFF_LABEL, TASK_STATUSES, TASK_URGENCIES, isDailyLocked, startOfWibDay } from '@/lib/lock'
+import {
+  DAILY_CUTOFF_LABEL,
+  TASK_STATUSES,
+  TASK_URGENCIES,
+  WEEKLY_LOCK_LABEL,
+  dayInPeriod,
+  daysOfWeek,
+  isDailyLocked,
+  isWeeklyLocked,
+  parseWeekKey,
+  parseWibDateKey,
+  startOfWibDay,
+  weekPeriodOf,
+  weeklyDeadlines,
+  type Period,
+  type TaskScope,
+} from '@/lib/lock'
 import { rollupDailyReport } from '@/lib/daily-rollup'
 
 /**
  * Daily tasks — the granular work a PIC plans and reports under one project.
  *
- *   GET  ?projectId= &date=  — tasks for a project on a WIB day
- *   POST                     — create a task (with its subtasks)
- *   PUT                      — update a task (replaces its subtask list)
- *   DELETE ?id=              — remove a task
+ *   GET    ?projectId= &date=          — tasks for a project on a WIB day
+ *   GET    ?projectId= &week=2026-W37  — the whole week, for the weekly board
+ *   POST                               — create a task (with its subtasks)
+ *   PUT                                — update a task (replaces its subtask list)
+ *   PATCH                              — move / reorder cards on the weekly board
+ *   DELETE ?id=                        — remove a task
  *
- * Everything is gated on owning the project and on the day not being locked,
- * the same rules the daily report itself follows.
+ * Two contexts share these handlers (8 Sep 2026). The daily desk follows the
+ * daily 17:00 lock of the task's own day. The weekly board — where the weekly
+ * report is composed from the week's daily tasks — follows the Friday lock of
+ * that week instead, so a PIC can still tidy Monday's achievements on Wednesday.
+ * Everything is gated on owning the project, the same rule the report follows.
  */
 
+type Context = 'HARIAN' | 'MINGGUAN'
 type Guard = { ok: true; project: { id: string; entityId: string } } | { ok: false; res: NextResponse }
+
+const contextOf = (raw: unknown): Context => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
+const scopeOf = (raw: unknown): TaskScope => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
 
 async function guardProject(user: SessionUser, projectId: string, opts?: { write?: boolean }): Promise<Guard> {
   const project = await db.project.findUnique({
@@ -50,6 +75,19 @@ async function guardProject(user: SessionUser, projectId: string, opts?: { write
   }
 
   return { ok: true, project }
+}
+
+/** The lock that applies: the day's own 17:00 on the daily desk, the week's
+ *  Friday 17:00 on the weekly board. Returns the 409 to send, or null. */
+function lockCheck(context: Context, workDate: Date): NextResponse | null {
+  if (context === 'HARIAN') {
+    return isDailyLocked(workDate)
+      ? NextResponse.json({ error: `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
+      : null
+  }
+  return isWeeklyLocked(weekPeriodOf(workDate).start)
+    ? NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+    : null
 }
 
 /** Parses "HH:MM" against a WIB day into a UTC instant. */
@@ -138,11 +176,63 @@ const TASK_INCLUDE = {
   escalation: { select: { id: true, status: true, needed: true, decisionText: true } },
 } as const
 
+/** Where-clause for the lane a card sits in: one day, or the week's "Mingguan" lane. */
+function laneWhere(projectId: string, scope: TaskScope, workDate: Date, period: Period | null) {
+  return scope === 'MINGGUAN' && period
+    ? { projectId, scope, workDate: { gte: period.start, lte: period.end } }
+    : { projectId, scope, workDate }
+}
+
+async function nextSortOrder(where: ReturnType<typeof laneWhere>) {
+  const last = await db.task.aggregate({ where, _max: { sortOrder: true } })
+  return (last._max.sortOrder ?? -1) + 1
+}
+
+async function attachEvidence<T extends { id: string }>(tasks: T[]) {
+  const evidence = await db.evidence.findMany({
+    where: { targetType: 'TASK', targetId: { in: tasks.map((t) => t.id) } },
+    select: { id: true, targetId: true, fileName: true, url: true, mime: true, size: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  return tasks.map((t) => ({ ...t, evidence: evidence.filter((e) => e.targetId === t.id) }))
+}
+
 export async function GET(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
 
   const projectId = req.nextUrl.searchParams.get('projectId') || ''
+  const guard = await guardProject(user, projectId)
+  if (!guard.ok) return guard.res
+
+  // Papan mingguan: seluruh task minggu itu, kedua cakupan, urut per hari lalu urutan kartu.
+  const weekKey = req.nextUrl.searchParams.get('week')
+  if (weekKey) {
+    const period = parseWeekKey(weekKey)
+    if (!period) return NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 })
+
+    const tasks = await db.task.findMany({
+      where: { projectId, workDate: { gte: period.start, lte: period.end } },
+      include: TASK_INCLUDE,
+      orderBy: [{ workDate: 'asc' }, { sortOrder: 'asc' }, { startAt: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    return NextResponse.json({
+      mode: 'MINGGUAN',
+      period: {
+        key: period.key,
+        start: period.start.toISOString(),
+        end: period.end.toISOString(),
+        lockAt: weeklyDeadlines(period.start).lockAt.toISOString(),
+        current: period.key === weekPeriodOf(new Date()).key,
+      },
+      locked: isWeeklyLocked(period.start),
+      today: startOfWibDay(new Date()).toISOString(),
+      days: daysOfWeek(period).map((d) => d.toISOString()),
+      tasks: await attachEvidence(tasks),
+    })
+  }
+
   const dateParam = req.nextUrl.searchParams.get('date')
   const parsed = dateParam ? new Date(dateParam) : new Date()
   if (Number.isNaN(parsed.getTime())) {
@@ -150,25 +240,18 @@ export async function GET(req: NextRequest) {
   }
   const day = startOfWibDay(parsed)
 
-  const guard = await guardProject(user, projectId)
-  if (!guard.ok) return guard.res
-
+  // Meja harian hanya memuat capaian hari itu; capaian bercakupan MINGGUAN
+  // hidup di papan mingguan.
   const tasks = await db.task.findMany({
-    where: { projectId, workDate: day },
+    where: { projectId, workDate: day, scope: 'HARIAN' },
     include: TASK_INCLUDE,
-    orderBy: [{ startAt: 'asc' }, { createdAt: 'asc' }],
-  })
-
-  const evidence = await db.evidence.findMany({
-    where: { targetType: 'TASK', targetId: { in: tasks.map((t) => t.id) } },
-    select: { id: true, targetId: true, fileName: true, url: true, mime: true, size: true, createdAt: true },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ sortOrder: 'asc' }, { startAt: 'asc' }, { createdAt: 'asc' }],
   })
 
   return NextResponse.json({
     workDate: day.toISOString(),
     locked: isDailyLocked(day),
-    tasks: tasks.map((t) => ({ ...t, evidence: evidence.filter((e) => e.targetId === t.id) })),
+    tasks: await attachEvidence(tasks),
   })
 }
 
@@ -187,15 +270,27 @@ export async function POST(req: NextRequest) {
   const guard = await guardProject(user, projectId, { write: true })
   if (!guard.ok) return guard.res
 
-  const day = startOfWibDay(new Date())
-  if (isDailyLocked(day)) {
-    return NextResponse.json(
-      { error: `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true },
-      { status: 409 }
-    )
+  const context = contextOf(body.context)
+  const today = startOfWibDay(new Date())
+  let workDate = today
+  let scope: TaskScope = 'HARIAN'
+  let period: Period | null = null
+
+  if (context === 'MINGGUAN') {
+    period = typeof body.week === 'string' && body.week ? parseWeekKey(body.week) : weekPeriodOf(new Date())
+    if (!period) return NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 })
+    scope = scopeOf(body.scope)
+    const requested = parseWibDateKey(body.workDate)
+    workDate = requested ?? (dayInPeriod(period, today) ? today : period.start)
+    if (!dayInPeriod(period, workDate)) {
+      return NextResponse.json({ error: 'Tanggal berada di luar minggu ini.' }, { status: 422 })
+    }
   }
 
-  const t = readBody(body, day)
+  const lockRes = lockCheck(context, workDate)
+  if (lockRes) return lockRes
+
+  const t = readBody(body, workDate)
   const errors = await validate(t, guard.project.entityId)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
@@ -205,7 +300,9 @@ export async function POST(req: NextRequest) {
       ...fields,
       projectId,
       entityId: guard.project.entityId,
-      workDate: day,
+      workDate,
+      scope,
+      sortOrder: await nextSortOrder(laneWhere(projectId, scope, workDate, period)),
       createdById: user.id,
       subtasks: { create: subtasks },
     },
@@ -218,12 +315,12 @@ export async function POST(req: NextRequest) {
       action: 'CREATE_TASK',
       targetType: 'TASK',
       targetId: task.id,
-      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, subtasks: subtasks.length }),
+      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 
-  await rollupDailyReport(projectId, day)
+  await rollupDailyReport(projectId, workDate)
 
   return NextResponse.json({ ok: true, task })
 }
@@ -246,25 +343,42 @@ export async function PUT(req: NextRequest) {
   const guard = await guardProject(user, existing.projectId, { write: true })
   if (!guard.ok) return guard.res
 
-  if (isDailyLocked(existing.workDate)) {
-    return NextResponse.json(
-      { error: 'Task ini sudah dikunci dan tidak dapat diubah.', locked: true },
-      { status: 409 }
-    )
+  const context = contextOf(body.context)
+  const lockRes = lockCheck(context, existing.workDate)
+  if (lockRes) return lockRes
+
+  // Di papan mingguan kartu boleh pindah hari atau berubah cakupan, selama
+  // tetap di minggu yang sama; di meja harian tanggalnya tetap.
+  let workDate = startOfWibDay(existing.workDate)
+  let scope = existing.scope as TaskScope
+  const period = weekPeriodOf(existing.workDate)
+  if (context === 'MINGGUAN') {
+    const requested = parseWibDateKey(body.workDate)
+    if (requested) {
+      if (!dayInPeriod(period, requested)) {
+        return NextResponse.json({ error: 'Tanggal berada di luar minggu ini.' }, { status: 422 })
+      }
+      workDate = requested
+    }
+    if (body.scope === 'HARIAN' || body.scope === 'MINGGUAN') scope = body.scope
   }
 
-  const t = readBody(body, startOfWibDay(existing.workDate))
+  const t = readBody(body, workDate)
   const errors = await validate(t, guard.project.entityId)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
+  const movedLane = workDate.getTime() !== existing.workDate.getTime() || scope !== existing.scope
+  const sortOrder = movedLane
+    ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period))
+    : existing.sortOrder
 
   // Subtasks are sent whole, so replace the list rather than diffing it.
   const task = await db.$transaction(async (tx) => {
     await tx.subtask.deleteMany({ where: { taskId: id } })
     return tx.task.update({
       where: { id },
-      data: { ...fields, subtasks: { create: subtasks } },
+      data: { ...fields, workDate, scope, sortOrder, subtasks: { create: subtasks } },
       include: TASK_INCLUDE,
     })
   })
@@ -275,15 +389,107 @@ export async function PUT(req: NextRequest) {
       action: 'UPDATE_TASK',
       targetType: 'TASK',
       targetId: id,
-      beforeData: JSON.stringify({ status: existing.status, progressPct: existing.progressPct }),
-      afterData: JSON.stringify({ status: task.status, progressPct: task.progressPct }),
+      beforeData: JSON.stringify({ status: existing.status, progressPct: existing.progressPct, workDate: existing.workDate, scope: existing.scope }),
+      afterData: JSON.stringify({ status: task.status, progressPct: task.progressPct, workDate, scope, context }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 
   await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate))
+  if (movedLane) await rollupDailyReport(existing.projectId, workDate)
 
   return NextResponse.json({ ok: true, task })
+}
+
+/**
+ * PATCH — seret-lepas di papan mingguan. Setiap `move` menyebut kartu, lajur
+ * tujuannya ("MINGGUAN" atau tanggal "YYYY-MM-DD" di minggu itu) dan urutan
+ * barunya. Semua kartu harus milik proyek dan minggu yang sama; minggu yang
+ * sudah terkunci tidak bisa disusun ulang.
+ */
+export async function PATCH(req: NextRequest) {
+  const user = await requireApiUser()
+  if (user instanceof NextResponse) return user
+
+  let body: Record<string, unknown>
+  try {
+    body = (await req.json()) as Record<string, unknown>
+  } catch {
+    return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
+  }
+
+  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  const guard = await guardProject(user, projectId, { write: true })
+  if (!guard.ok) return guard.res
+
+  const period = typeof body.week === 'string' && body.week ? parseWeekKey(body.week) : weekPeriodOf(new Date())
+  if (!period) return NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 })
+  if (isWeeklyLocked(period.start)) {
+    return NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  }
+
+  const moves = Array.isArray(body.moves)
+    ? (body.moves as unknown[])
+        .map((m) => (m && typeof m === 'object' ? (m as Record<string, unknown>) : null))
+        .filter((m): m is Record<string, unknown> => m !== null && typeof m.id === 'string')
+        .slice(0, 200)
+    : []
+  if (moves.length === 0) return NextResponse.json({ error: 'Tidak ada kartu yang dipindahkan' }, { status: 422 })
+
+  const ids = moves.map((m) => m.id as string)
+  const tasks = await db.task.findMany({
+    where: { id: { in: ids }, projectId, workDate: { gte: period.start, lte: period.end } },
+    select: { id: true, workDate: true, scope: true },
+  })
+  if (tasks.length !== new Set(ids).size) {
+    return NextResponse.json({ error: 'Ada kartu yang bukan milik minggu ini.' }, { status: 422 })
+  }
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+
+  const updates: { id: string; workDate: Date; scope: TaskScope; sortOrder: number }[] = []
+  for (const m of moves) {
+    const current = byId.get(m.id as string)!
+    const lane = typeof m.lane === 'string' ? m.lane : ''
+    let workDate = startOfWibDay(current.workDate)
+    let scope: TaskScope = 'HARIAN'
+    if (lane === 'MINGGUAN') {
+      scope = 'MINGGUAN'
+    } else {
+      const day = parseWibDateKey(lane)
+      if (!day || !dayInPeriod(period, day)) {
+        return NextResponse.json({ error: 'Lajur tujuan berada di luar minggu ini.' }, { status: 422 })
+      }
+      workDate = day
+    }
+    updates.push({ id: current.id, workDate, scope, sortOrder: Math.max(0, Math.floor(Number(m.sortOrder) || 0)) })
+  }
+
+  await db.$transaction(
+    updates.map((u) =>
+      db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
+    )
+  )
+
+  // Hari asal dan hari tujuan sama-sama berubah isinya, jadi keduanya dihitung ulang.
+  const touched = new Set<number>()
+  for (const u of updates) {
+    touched.add(startOfWibDay(byId.get(u.id)!.workDate).getTime())
+    touched.add(u.workDate.getTime())
+  }
+  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms))
+
+  await db.auditLog.create({
+    data: {
+      actorId: user.id,
+      action: 'REORDER_TASKS',
+      targetType: 'PROJECT',
+      targetId: projectId,
+      afterData: JSON.stringify({ week: period.key, moves: updates.length }),
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+    },
+  })
+
+  return NextResponse.json({ ok: true, moved: updates.length })
 }
 
 export async function DELETE(req: NextRequest) {
@@ -297,9 +503,8 @@ export async function DELETE(req: NextRequest) {
   const guard = await guardProject(user, existing.projectId, { write: true })
   if (!guard.ok) return guard.res
 
-  if (isDailyLocked(existing.workDate)) {
-    return NextResponse.json({ error: 'Task ini sudah dikunci.', locked: true }, { status: 409 })
-  }
+  const lockRes = lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.workDate)
+  if (lockRes) return lockRes
   if (existing.escalationId) {
     return NextResponse.json(
       { error: 'Task yang sudah dieskalasi tidak dapat dihapus.' },
@@ -316,7 +521,7 @@ export async function DELETE(req: NextRequest) {
       action: 'DELETE_TASK',
       targetType: 'TASK',
       targetId: id,
-      beforeData: JSON.stringify({ title: existing.title, status: existing.status }),
+      beforeData: JSON.stringify({ title: existing.title, status: existing.status, workDate: existing.workDate, scope: existing.scope }),
     },
   })
 
