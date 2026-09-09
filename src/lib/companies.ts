@@ -3,7 +3,6 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { hashPassword } from '@/lib/password'
 import { ALL_ROLES, ENTITY_ROLES, HOLDING_ROLES } from '@/lib/rbac'
-import { DEMO_PASSWORD } from '@/lib/demo-accounts'
 
 /**
  * Meja perusahaan & akun milik Super Admin (10 Sep 2026): aturan bersama untuk
@@ -13,6 +12,12 @@ import { DEMO_PASSWORD } from '@/lib/demo-accounts'
 
 export const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/
 export const MIN_PASSWORD = 4
+/**
+ * Kata sandi awal ketika Super Admin membuat akun tanpa mengisi sandinya.
+ * Pemegang akun diharapkan menggantinya; Super Admin bisa menyetel ulang
+ * kapan saja dari meja Perusahaan & Akun.
+ */
+export const DEFAULT_NEW_PASSWORD = process.env.SEED_PASSWORD || '1234'
 /** Logo disimpan sebagai data URL; 400 KB sudah lebih dari cukup untuk 256 px. */
 export const MAX_LOGO_CHARS = 400_000
 
@@ -221,7 +226,7 @@ export async function createAccount(tx: Tx, entity: EntityRef | null, p: Positio
       phone: p.phone,
       scopeEntityId: scoped ? (entity?.id ?? null) : entity?.id ?? null,
       avatarColor: p.avatarColor ?? pickColor(p.username),
-      passwordHash: await hashPassword(p.password || DEMO_PASSWORD),
+      passwordHash: await hashPassword(p.password || DEFAULT_NEW_PASSWORD),
     },
     select: { id: true, name: true, role: true, username: true, email: true },
   })

@@ -17,12 +17,11 @@ di `src/app/api/*` tidak perlu diubah.
 | `src/lib/auth.ts` + `src/lib/password.ts` | Sesi bertanda tangan HMAC & hashing scrypt |
 | `prisma/migrations/0004_user_password/migration.sql` | Kolom `User.passwordHash` |
 | `scripts/set-passwords.ts` | Memberi kata sandi ke akun seed |
-| `scripts/demo-accounts.ts` | Tujuh akun demo, satu per peran |
+| `scripts/demo-accounts.ts` | Menanam ulang akun contoh bila terhapus |
 | `src/lib/rbac.ts` | Tab & kewenangan per peran |
 | `src/lib/lock.ts` | Tenggat, penguncian, dan validasi |
 | `prisma/migrations/0007_task_and_subtask/` | Tabel Task & Subtask |
 | `src/components/task-dialog.tsx` | Form tambah/ubah task |
-| `src/components/demo-role-picker.tsx` | Masuk cepat sebagai peran |
 | `src/components/views/management-charts.tsx` | Enam grafik Manajemen |
 | `src/lib/daily-rollup.ts` | Task → laporan harian |
 | `prisma/migrations/0008_weekly_item_tags_and_subtasks/` | Tag & checklist item mingguan |
@@ -154,18 +153,19 @@ Riwayat notifikasi bersifat personal: peran non-global hanya melihat miliknya.
 
 ## 3c. Peran, modul, dan alur proses
 
-Tujuh akun demo, satu per peran. Kata sandi semuanya dari `SEED_PASSWORD` di `.env`.
-Sejak seed 7 Sep 2026 ketujuh akun ini **ditanam langsung oleh `prisma/seed.sql`** pada PT Sigma — `npm run db:demo` tinggal alat perbaikan bila akunnya terhapus.
+Akun contoh ditanam langsung oleh `prisma/seed.sql` (`npm run db:demo` tinggal
+alat perbaikan bila akunnya terhapus). Masuk memakai **username**; kata sandi
+awalnya dari `SEED_PASSWORD` di `.env`.
 
-| Peran | Email | Cakupan | Modul yang terbuka |
+| Peran | Username | Cakupan | Modul yang terbuka |
 |---|---|---|---|
-| PIC Proyek | `pic@karya.co.id` | PT Sigma (1 proyek) | Dashboard, Laporan Kemajuan (harian/mingguan/bulanan), Modul Proyek |
-| Kepala Divisi | `kadiv@karya.co.id` | 1 divisi PT Sigma | Dashboard, Capaian Mingguan, Modul Divisi |
-| Admin PT | `adminpt@karya.co.id` | PT Sigma | + Meja Kerja, Penerimaan, kedua modul input, Eskalasi, **Ajukan Proyek** |
-| Direktur Anak Perusahaan | `direktur@karya.co.id` | Sub-holding | Dashboard, Proyek, Divisi, Eskalasi, Entitas |
-| Direktur SDM & GA | `sdmga@karya.co.id` | Seluruh grup | + Audit Trail |
-| Pengelola Sistem IT | `it@karya.co.id` | Seluruh grup | Semua modul + Sistem & Akses |
-| Manajemen | `manajemen@karya.co.id` | Seluruh grup | Dashboard, Eskalasi, Proyek, Divisi, Entitas, Audit |
+| Manager / PIC Proyek | `manager` | PT Sigma (1 proyek) | Dashboard, Laporan Kemajuan (harian/mingguan/bulanan), Modul Proyek |
+| Kepala Divisi | `kepaladivisi` | 1 divisi PT Sigma | Dashboard, Capaian Mingguan, Modul Divisi |
+| Admin PT | `adminptcontoh` | PT Sigma | + Meja Kerja, Penerimaan, Laporan Kemajuan, Modul Divisi, Eskalasi, **Ajukan Proyek** |
+| Direktur Entitas | `direkturentitas` | PT Sigma | Dashboard, Proyek, Divisi, Eskalasi, Entitas |
+| Direksi Holding (SDM & GA) | `holding` | Seluruh grup | + Audit Trail |
+| Manajemen | `manajemen` | Seluruh grup | Dashboard, Eskalasi, Proyek, Divisi, Entitas, Audit |
+| Super Admin | `superadmin`, `owner` | Seluruh grup | Semua modul + **Perusahaan & Akun** |
 
 Daftar tab dan kewenangan tiap peran ada di `src/lib/rbac.ts`. Tabel itu dipakai dua
 kali: untuk menyembunyikan tab di UI, dan untuk menolak permintaan di API. Menyembunyikan
@@ -285,22 +285,16 @@ WEEKLY_HANDOVER_DAY="4"    # 1=Senin .. 7=Minggu — serah terima (default Kamis
 WEEKLY_LOCK_DAY="5"        # kunci mingguan (default Jumat)
 ```
 
-### Masuk cepat sebagai peran (mode demo)
+### Masuk hanya dengan kata sandi (10 Sep 2026)
 
-Halaman login menampilkan tujuh kartu peran yang dapat diklik untuk masuk
-**tanpa kata sandi**, berurut dari pelaksana lapangan sampai manajemen. Tiap
-kartu menyebut cakupan datanya dan berapa modul yang terbuka.
+Jalan pintas "masuk sebagai akun demo" **sudah dihapus seluruhnya**: endpoint
+`/api/auth/demo`, komponen pemilihnya, saklar `DEMO_LOGIN`, dan tampilan kata
+sandi bersama di halaman masuk. Satu-satunya jalur masuk kini
+`POST /api/auth/login` dengan username (atau email) dan kata sandi — tidak ada
+lagi jalur yang melewati kata sandi, di lingkungan mana pun.
 
-Ini pintu belakang yang disengaja, jadi dikunci di balik saklar:
-
-```
-DEMO_LOGIN="1"     # aktif; kosongkan atau hapus untuk mematikan
-```
-
-Tanpa saklar itu, `/api/auth/demo` menjawab 404 dan halaman login kembali ke
-formulir kata sandi biasa. **Jangan aktifkan di lingkungan berisi data
-sungguhan.** Endpoint-nya juga hanya mengenali tujuh email demo yang di-hardcode,
-bukan email sembarang.
+Kata sandi awal akun hasil seed tetap dari `SEED_PASSWORD`, dan Super Admin
+bisa menyetel ulang kata sandi siapa pun dari tab **Perusahaan & Akun**.
 
 ### Grafik dashboard Manajemen
 
@@ -364,7 +358,7 @@ bawahnya — tanpa sub-holding, sektor, atau wilayah:
 | Kode | Nama |
 |---|---|
 | `HOLDING-BIKE` | Holding PT Bike |
-| `PT-SIGMA` | PT Sigma (rumah akun demo) |
+| `PT-SIGMA` | PT Sigma (rumah akun contoh) |
 | `PT-CIPTA` | PT Cipta |
 | `PT-FAHREZA` | PT Fahreza |
 | `PT-KBI` | PT kBI |
