@@ -142,7 +142,7 @@ export function PicDashboard({ data }: { data: PicData }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
         <StatCard label="Proyek Saya" value={s.projects} sub="ditugaskan aktif" icon={FolderKanban} tone="blue" />
         <StatCard label="Sudah Dilapor" value={s.submitted} sub="terkirim ke Admin PT" icon={CheckCircle2} tone="emerald" />
         <StatCard label="Belum Dilapor" value={s.outstanding} sub="butuh tindakan" icon={Hourglass} tone={s.outstanding > 0 ? 'amber' : 'blue'} />
@@ -267,7 +267,7 @@ export function KadivDashboard({ data }: { data: KadivData }) {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
         <StatCard label="Item Minggu Ini" value={s.items} sub={`${s.divisions} divisi`} icon={CalendarCheck} tone="violet" />
         <StatCard label="Selesai" value={s.done} sub={formatPercent(completion, 0)} icon={CheckCircle2} tone="emerald" />
         <StatCard label="Terkendala" value={s.blocked} sub="perlu tindak lanjut" icon={AlertTriangle} tone={s.blocked > 0 ? 'rose' : 'emerald'} />
@@ -390,7 +390,7 @@ export function AdminDashboard({ data }: { data: AdminData }) {
         </button>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
         <StatCard label="Laporan Diterima" value={s.dailyReceived} sub={`dari ${s.projects} proyek`} icon={Inbox} tone="blue" />
         <StatCard label="Belum Masuk" value={s.dailyMissing} sub="dari PIC proyek" icon={Hourglass} tone={s.dailyMissing > 0 ? 'amber' : 'emerald'} />
         <StatCard label="Divisi Disetujui" value={s.weeklyApproved} sub={`dari ${s.divisions} divisi`} icon={CheckCircle2} tone="violet" />

@@ -23,28 +23,28 @@ export function LoginForm({
   demoOn,
   demoPassword,
   dbReachable,
-  demoEmails = [],
+  quickAccounts = [],
   children,
 }: {
-  /** Whether the one-click role picker is live on this server. */
+  /** Whether the one-click account picker is live on this server. */
   demoOn: boolean
-  /** The shared seed password, shown openly, or null when demo mode is off. */
+  /** The shared sample password, shown openly, or null when demo mode is off. */
   demoPassword: string | null
   /** False when the login page could not reach the database. */
   dbReachable: boolean
-  /** Addresses offered for quick-fill in the manual form. */
-  demoEmails?: { email: string; roleLabel: string }[]
-  /** Slot for the demo role picker. */
+  /** Usernames offered for quick-fill in the manual form. */
+  quickAccounts?: { username: string; label: string }[]
+  /** Slot for the one-click picker. */
   children?: React.ReactNode
 }) {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // With one-click entry available the password form is the rarer path, so it
-  // starts folded away rather than competing with the role buttons.
+  // starts folded away rather than competing with the account buttons.
   const [manualOpen, setManualOpen] = useState(!demoOn)
   const [copied, setCopied] = useState(false)
 
@@ -56,7 +56,7 @@ export function LoginForm({
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -85,8 +85,8 @@ export function LoginForm({
   }
 
   /** Fill both fields so the manual path is one tap away from submitting. */
-  function fillAccount(addr: string) {
-    setEmail(addr)
+  function fillAccount(username: string) {
+    setIdentifier(username)
     if (demoPassword) setPassword(demoPassword)
     setManualOpen(true)
   }
@@ -132,19 +132,15 @@ export function LoginForm({
             >
               <KeyRound className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400 shrink-0" />
               <span className="flex-1 text-base font-semibold text-slate-800 dark:text-slate-100">
-                Masuk dengan email & kata sandi
+                Masuk dengan username &amp; kata sandi
               </span>
-              <ChevronDown
-                className={`h-5 w-5 text-slate-400 transition-transform ${manualOpen ? 'rotate-180' : ''}`}
-              />
+              <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${manualOpen ? 'rotate-180' : ''}`} />
             </button>
           ) : (
             <>
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">
-                Masuk ke akun Anda
-              </h2>
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Masuk ke akun Anda</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Gunakan email kantor dan kata sandi yang diberikan administrator.
+                Gunakan username dan kata sandi yang diberikan Super Admin.
               </p>
             </>
           )}
@@ -153,9 +149,7 @@ export function LoginForm({
             <>
               {demoPassword && (
                 <div className="mt-4 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3">
-                  <div className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                    Kata sandi semua akun contoh
-                  </div>
+                  <div className="text-sm font-medium text-blue-800 dark:text-blue-200">Kata sandi semua akun contoh</div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <code className="flex-1 select-all rounded-lg bg-white/70 dark:bg-slate-900/60 px-2.5 py-2 font-mono text-base text-slate-800 dark:text-slate-100 break-all">
                       {demoPassword}
@@ -169,17 +163,18 @@ export function LoginForm({
                       {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
                     </button>
                   </div>
-                  {demoEmails.length > 0 && (
+                  {quickAccounts.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {demoEmails.map((a) => (
+                      {quickAccounts.map((a) => (
                         <button
-                          key={a.email}
+                          key={a.username}
                           type="button"
-                          onClick={() => fillAccount(a.email)}
+                          onClick={() => fillAccount(a.username)}
                           disabled={submitting}
-                          className="rounded-lg bg-white/60 dark:bg-slate-900/50 px-2.5 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-500/15 transition-colors disabled:opacity-50"
+                          title={a.label}
+                          className="rounded-lg bg-white/60 dark:bg-slate-900/50 px-2.5 py-1.5 font-mono text-sm text-slate-700 dark:text-slate-200 hover:bg-blue-500/15 transition-colors disabled:opacity-50"
                         >
-                          {a.roleLabel}
+                          {a.username}
                         </button>
                       ))}
                     </div>
@@ -189,31 +184,30 @@ export function LoginForm({
 
               <form onSubmit={onSubmit} className="mt-4 space-y-4" noValidate>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                    Email
+                  <Label htmlFor="identifier" className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Username
                   </Label>
                   <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    inputMode="email"
+                    id="identifier"
+                    name="username"
+                    type="text"
+                    inputMode="text"
                     autoComplete="username"
                     autoCapitalize="none"
                     autoCorrect="off"
+                    spellCheck={false}
                     required
-                    placeholder="nama@karya.co.id"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="mis. superadmin"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     disabled={submitting}
-                    className="bg-white/70 dark:bg-slate-900/50 h-11"
+                    className="bg-white/70 dark:bg-slate-900/50 h-11 font-mono"
                   />
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Email juga bisa dipakai.</p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label
-                    htmlFor="password"
-                    className="text-sm font-medium text-slate-600 dark:text-slate-300"
-                  >
+                  <Label htmlFor="password" className="text-sm font-medium text-slate-600 dark:text-slate-300">
                     Kata sandi
                   </Label>
                   <div className="relative">
@@ -223,7 +217,7 @@ export function LoginForm({
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       required
-                      placeholder="••••••••"
+                      placeholder="••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={submitting}
@@ -242,9 +236,7 @@ export function LoginForm({
 
                 {error && (
                   <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/30">
-                    <AlertDescription className="text-sm text-rose-700 dark:text-rose-300">
-                      {error}
-                    </AlertDescription>
+                    <AlertDescription className="text-sm text-rose-700 dark:text-rose-300">{error}</AlertDescription>
                   </Alert>
                 )}
 
@@ -271,7 +263,7 @@ export function LoginForm({
         </div>
 
         <p className="mt-6 text-center text-[13px] text-slate-400 dark:text-slate-500">
-          Lupa kata sandi? Hubungi Tim TI holding.
+          Lupa kata sandi? Hubungi Super Admin untuk menyetel ulang.
         </p>
       </div>
     </div>

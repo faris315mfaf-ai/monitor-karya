@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { getSessionUser, isGlobalRole } from '@/lib/auth'
-import { ROLE_TABS } from '@/lib/rbac'
-import { ROLE_LABELS } from '@/lib/constants'
+import { getSessionUser } from '@/lib/auth'
 import { LoginForm } from '@/components/login-form'
-import { DemoRolePicker, type DemoRole } from '@/components/demo-role-picker'
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, demoLoginEnabled } from '@/lib/demo-accounts'
+import { DemoAccountPicker, type DemoAccount } from '@/components/demo-account-picker'
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_USERNAMES, demoLoginEnabled } from '@/lib/demo-accounts'
 
 export const metadata: Metadata = {
   title: 'Masuk — MonitorKarya',
@@ -16,45 +14,34 @@ export const metadata: Metadata = {
 // The session cookie has to be read per request.
 export const dynamic = 'force-dynamic'
 
-/** Shown until the database says which entity an account is actually pinned to. */
-function fallbackScope(role: string): string {
-  return isGlobalRole(role) ? 'Seluruh grup' : 'Entitas contoh'
-}
-
 /** The static picker, built without touching the database. */
-function baseRoles(): DemoRole[] {
+function baseAccounts(): DemoAccount[] {
   return DEMO_ACCOUNTS.map((a) => ({
+    username: a.username,
+    label: a.label,
     role: a.role,
-    name: a.name,
-    email: a.email,
+    name: null,
     avatarColor: a.avatarColor,
-    scope: fallbackScope(a.role),
-    moduleCount: ROLE_TABS[a.role]?.length ?? 0,
+    scope: a.role === 'DIREKTUR_SDM_GA' ? 'Holding' : 'PT contoh',
   }))
 }
 
 /**
- * The picker with each account's real name and entity filled in.
- *
- * Only the display detail comes from the database, so a failure here degrades
- * to the static list rather than to an empty page — a blank login screen gives
- * no clue that the database is the thing that is wrong.
+ * The picker with each account's real name and entity filled in. Only the
+ * display detail comes from the database, so a failure here degrades to the
+ * static list rather than to an empty page.
  */
-async function enrichRoles(): Promise<DemoRole[]> {
+async function enrich(): Promise<DemoAccount[]> {
   const users = await db.user.findMany({
-    where: { email: { in: DEMO_ACCOUNTS.map((a) => a.email) }, isActive: true },
-    select: { name: true, email: true, role: true, avatarColor: true, scopeEntityId: true },
+    where: { username: { in: DEMO_USERNAMES }, isActive: true },
+    select: { name: true, username: true, role: true, avatarColor: true, scopeEntityId: true },
   })
-
   const scopeIds = users.map((u) => u.scopeEntityId).filter((id): id is string => Boolean(id))
-  const entities = await db.entity.findMany({
-    where: { id: { in: scopeIds } },
-    select: { id: true, name: true },
-  })
+  const entities = await db.entity.findMany({ where: { id: { in: scopeIds } }, select: { id: true, name: true } })
   const entityName = new Map(entities.map((e) => [e.id, e.name]))
 
-  return baseRoles().map((base) => {
-    const u = users.find((x) => x.email === base.email)
+  return baseAccounts().map((base) => {
+    const u = users.find((x) => x.username === base.username)
     if (!u) return base
     return {
       ...base,
@@ -70,11 +57,11 @@ export default async function LoginPage() {
 
   const demoOn = demoLoginEnabled()
 
-  let roles: DemoRole[] = demoOn ? baseRoles() : []
+  let accounts: DemoAccount[] = demoOn ? baseAccounts() : []
   let dbReachable = true
   if (demoOn) {
     try {
-      roles = await enrichRoles()
+      accounts = await enrich()
     } catch {
       // Keep the static list; the banner below explains why it may not work.
       dbReachable = false
@@ -91,17 +78,10 @@ export default async function LoginPage() {
     <LoginForm
       demoOn={demoOn}
       demoPassword={demoOn ? DEMO_PASSWORD : null}
-      demoEmails={
-        demoOn
-          ? DEMO_ACCOUNTS.map((a) => ({
-              email: a.email,
-              roleLabel: ROLE_LABELS[a.role] ?? a.role,
-            }))
-          : []
-      }
+      quickAccounts={demoOn ? DEMO_ACCOUNTS.map((a) => ({ username: a.username, label: a.label })) : []}
       dbReachable={dbReachable}
     >
-      {demoOn ? <DemoRolePicker roles={roles} /> : null}
+      {demoOn ? <DemoAccountPicker accounts={accounts} /> : null}
     </LoginForm>
   )
 }

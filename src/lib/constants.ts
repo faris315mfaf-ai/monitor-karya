@@ -3,24 +3,45 @@
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN_PT: 'Admin PT',
   KEPALA_DIVISI: 'Kepala Divisi',
-  PIC_PROYEK: 'PIC Proyek',
+  PIC_PROYEK: 'Manager / PIC Proyek',
   DIREKTUR_ENTITAS: 'Direktur Entitas',
-  DIREKTUR_SDM_GA: 'Direktur SDM & GA',
+  DIREKTUR_SDM_GA: 'Direksi Holding (SDM & GA)',
   MANAJEMEN: 'Manajemen',
   TI: 'Tim TI',
+  SUPERADMIN: 'Super Admin',
   AUDITOR: 'Auditor',
 }
 
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
   ADMIN_PT: 'Input & ubah data entitas; unggah bukti; ajukan proyek',
   KEPALA_DIVISI: 'Lihat isian divisinya; menyetujui laporan mingguan',
-  PIC_PROYEK: 'Lihat isian proyeknya; menambah komentar',
+  PIC_PROYEK: 'Melaporkan kemajuan proyek yang dipegangnya setiap hari',
   DIREKTUR_ENTITAS: 'Lihat semua data di cakupannya; buat eskalasi',
   DIREKTUR_SDM_GA: 'Semua hak Direktur + kelola daftar induk grup',
   MANAJEMEN: 'Read-only seluruh data + memutuskan eskalasi',
   TI: 'Kelola akun & assignment; eksekusi buka kunci',
+  SUPERADMIN: 'Kelola perusahaan, posisi, akun, dan kata sandi seluruh grup',
   AUDITOR: 'Read-only seluruh data + audit trail',
 }
+
+/**
+ * Posisi yang bisa ditambahkan Super Admin ke sebuah perusahaan (10 Sep 2026),
+ * dan posisi tingkat holding yang tidak terpaku pada satu perusahaan.
+ */
+export const POSITION_OPTIONS: { role: string; label: string; hint: string }[] = [
+  { role: 'ADMIN_PT', label: 'Admin PT', hint: 'Mengisi & meneruskan laporan perusahaan' },
+  { role: 'KEPALA_DIVISI', label: 'Kepala Divisi', hint: 'Capaian mingguan divisinya' },
+  { role: 'PIC_PROYEK', label: 'Manager Proyek', hint: 'Laporan harian proyek yang dipegang' },
+  { role: 'DIREKTUR_ENTITAS', label: 'Direktur Perusahaan', hint: 'Mengawasi & menyetujui di perusahaannya' },
+]
+
+export const HOLDING_POSITION_OPTIONS: { role: string; label: string; hint: string }[] = [
+  { role: 'MANAJEMEN', label: 'Manajemen Holding', hint: 'Membaca seluruh grup, memutuskan eskalasi' },
+  { role: 'DIREKTUR_SDM_GA', label: 'Direksi Holding (SDM & GA)', hint: 'Pemilik proses, menyetujui buka kunci' },
+  { role: 'SUPERADMIN', label: 'Super Admin', hint: 'Kelola perusahaan & akun seluruh grup' },
+  { role: 'TI', label: 'Tim TI', hint: 'Konsol sistem & akses' },
+  { role: 'AUDITOR', label: 'Auditor', hint: 'Baca-saja + jejak audit' },
+]
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
   HOLDING: 'Holding',
@@ -165,6 +186,7 @@ export function complianceColor(score: number): { bg: string; text: string; ring
 
 export const NAV_TABS = [
   { id: 'dashboard', label: 'Dashboard', short: 'Beranda' },
+  { id: 'companies', label: 'Perusahaan & Akun', short: 'Perusahaan' },
   { id: 'work-desk', label: 'Meja Kerja', short: 'Kerja' },
   { id: 'daily-input', label: 'Laporan Kemajuan', short: 'Laporan' },
   { id: 'weekly-input', label: 'Capaian Mingguan', short: 'Mingguan' },

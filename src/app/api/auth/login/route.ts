@@ -3,9 +3,14 @@ import { db } from '@/lib/db'
 import { SESSION_COOKIE, createSessionToken, verifyPassword } from '@/lib/auth'
 
 // Same message for "no such account" and "wrong password" so the endpoint
-// cannot be used to find out which addresses exist.
-const INVALID = 'Email atau kata sandi salah'
+// cannot be used to find out which usernames exist.
+const INVALID = 'Username atau kata sandi salah'
 
+/**
+ * POST { identifier, password } — sign in with a username (10 Sep 2026) or,
+ * for older accounts, an email address. `email`/`username` are still accepted
+ * as field names so nothing that posted the old shape breaks.
+ */
 export async function POST(req: NextRequest) {
   let body: unknown
   try {
@@ -14,16 +19,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const { email, password } = (body ?? {}) as { email?: unknown; password?: unknown }
-  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
-    return NextResponse.json({ error: 'Email dan kata sandi wajib diisi' }, { status: 400 })
+  const b = (body ?? {}) as { identifier?: unknown; username?: unknown; email?: unknown; password?: unknown }
+  const raw = [b.identifier, b.username, b.email].find((v) => typeof v === 'string' && v.trim())
+  const password = b.password
+  if (typeof raw !== 'string' || typeof password !== 'string' || !password) {
+    return NextResponse.json({ error: 'Username dan kata sandi wajib diisi' }, { status: 400 })
   }
+  const identifier = raw.trim().toLowerCase()
 
   let user
   try {
-    user = await db.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
-      select: { id: true, name: true, email: true, role: true, isActive: true, passwordHash: true },
+    user = await db.user.findFirst({
+      where: identifier.includes('@') ? { email: identifier } : { username: identifier },
+      select: { id: true, name: true, email: true, username: true, role: true, isActive: true, passwordHash: true },
     })
   } catch {
     return NextResponse.json({ error: 'Database tidak terjangkau dari server ini.' }, { status: 503 })
@@ -52,7 +60,7 @@ export async function POST(req: NextRequest) {
   })
 
   const res = NextResponse.json({
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    user: { id: user.id, name: user.name, email: user.email, username: user.username, role: user.role },
   })
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

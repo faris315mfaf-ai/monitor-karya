@@ -1,46 +1,46 @@
 /**
- * The seven demo accounts, in reporting-chain order: field executor first,
- * management last.
+ * Akun contoh yang ditawarkan halaman masuk lewat satu klik (10 Sep 2026):
+ * empat jenjang pelaporan, ditampilkan dengan username-nya saja.
  *
- * This list is static on purpose. The login page has to render its role picker
- * even when the database is unreachable, so the names and colours shown there
- * cannot come from a query. The database is still the authority on whether an
- * account exists — /api/auth/demo looks the user up before starting a session,
- * and refuses if it is missing — this list only decides which accounts may ever
- * be offered.
+ * Daftar ini statis dengan sengaja. Halaman masuk harus tetap bisa menampilkan
+ * pilihannya walau database tidak terjangkau, jadi nama dan warnanya tidak
+ * boleh berasal dari query. Database tetap menjadi penentu apakah akun itu
+ * ada — /api/auth/demo mencarinya dulu sebelum membuka sesi — daftar ini hanya
+ * menentukan akun mana yang boleh ditawarkan sama sekali.
  *
- * scripts/demo-accounts.ts seeds exactly these rows; keep the two in step.
+ * prisma/seed.sql dan scripts/demo-accounts.ts menanam persis akun-akun ini;
+ * jaga ketiganya tetap seiring.
  */
 
 export type DemoAccountSpec = {
+  username: string
+  label: string
   role: string
-  email: string
-  name: string
   avatarColor: string
 }
 
 export const DEMO_ACCOUNTS: DemoAccountSpec[] = [
-  { role: 'PIC_PROYEK', email: 'pic@karya.co.id', name: 'Bpk. Rangga Prasetya', avatarColor: '#0d9488' },
-  { role: 'KEPALA_DIVISI', email: 'kadiv@karya.co.id', name: 'Ibu Mira Anggraini', avatarColor: '#7c3aed' },
-  { role: 'ADMIN_PT', email: 'adminpt@karya.co.id', name: 'Bpk. Budi Santoso', avatarColor: '#2563eb' },
-  { role: 'DIREKTUR_ENTITAS', email: 'direktur@karya.co.id', name: 'Bpk. Andi Kurniawan', avatarColor: '#ea580c' },
-  { role: 'DIREKTUR_SDM_GA', email: 'sdmga@karya.co.id', name: 'Ibu Ratna Sari', avatarColor: '#db2777' },
-  { role: 'TI', email: 'it@karya.co.id', name: 'Bpk. Rudi Santoso', avatarColor: '#4f46e5' },
-  { role: 'MANAJEMEN', email: 'manajemen@karya.co.id', name: 'Bpk. Hartono Wijaya', avatarColor: '#16a34a' },
+  { username: 'adminptcontoh', label: 'Admin PT', role: 'ADMIN_PT', avatarColor: '#2563eb' },
+  { username: 'kepaladivisi', label: 'Kepala Divisi / Manager', role: 'KEPALA_DIVISI', avatarColor: '#7c3aed' },
+  { username: 'direkturentitas', label: 'Direktur Entitas', role: 'DIREKTUR_ENTITAS', avatarColor: '#ea580c' },
+  { username: 'holding', label: 'Holding', role: 'DIREKTUR_SDM_GA', avatarColor: '#16a34a' },
 ]
 
-/** role -> email, the allow-list /api/auth/demo checks a request against. */
-export const DEMO_EMAILS: Record<string, string> = Object.fromEntries(
-  DEMO_ACCOUNTS.map((a) => [a.role, a.email])
-)
+/** Username yang boleh dibuka lewat satu klik. */
+export const DEMO_USERNAMES: string[] = DEMO_ACCOUNTS.map((a) => a.username)
 
 /**
- * The shared password for the seeded accounts, shown on the login page so the
- * demo can be entered by hand as well as by one click. It is a demo credential
- * and is already published in .env.example and SUPABASE_SETUP.md; never point
- * this at a password that guards real data.
+ * Akun contoh lain yang ikut ditanam seed dan masuk lewat formulir biasa
+ * (username + kata sandi), termasuk akun Super Admin pemilik.
  */
-export const DEMO_PASSWORD = process.env.SEED_PASSWORD || 'MonitorKarya#2026'
+export const OTHER_DEMO_USERNAMES = ['manager', 'manajemen', 'owner', 'superadmin'] as const
+
+/**
+ * Kata sandi bersama seluruh akun contoh, ditampilkan terbuka di halaman masuk.
+ * Ini kredensial demo yang memang dipublikasikan; jangan arahkan ke kata sandi
+ * yang menjaga data sungguhan.
+ */
+export const DEMO_PASSWORD = process.env.SEED_PASSWORD || '1234'
 
 /** Whether one-click demo sign-in is switched on for this server. */
 export function demoLoginEnabled(): boolean {

@@ -1,5 +1,6 @@
 'use client'
 
+import { MotionConfig, motion } from 'framer-motion'
 import { useApp } from '@/components/app-provider'
 import { NAV_TABS, type NavTabId } from '@/lib/constants'
 import { tabsForRole } from '@/lib/rbac'
@@ -16,10 +17,12 @@ import {
   CalendarCheck,
   Inbox,
   ServerCog,
+  Landmark,
 } from 'lucide-react'
 
 const ICONS: Record<NavTabId, React.ReactNode> = {
   dashboard: <LayoutDashboard className="h-4 w-4" />,
+  companies: <Landmark className="h-4 w-4" />,
   'work-desk': <ListTodo className="h-4 w-4" />,
   'daily-input': <ClipboardCheck className="h-4 w-4" />,
   'weekly-input': <CalendarCheck className="h-4 w-4" />,
@@ -32,6 +35,9 @@ const ICONS: Record<NavTabId, React.ReactNode> = {
   system: <ServerCog className="h-4 w-4" />,
 }
 
+// Pil aktif meluncur antar tab (10 Sep 2026): pegas pendek, tidak memantul.
+const spring = { type: 'spring' as const, stiffness: 480, damping: 38, mass: 0.6 }
+
 export function TabNav() {
   const { activeTab, setActiveTab, user } = useApp()
 
@@ -40,7 +46,7 @@ export function TabNav() {
   const tabs = NAV_TABS.filter((t) => allowed.includes(t.id))
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       {/* Desktop/Tablet horizontal tabs (hidden on mobile — bottom bar used there) */}
       <nav className="glass rounded-xl p-1 hidden lg:flex items-center gap-1 overflow-x-auto scrollbar-thin">
         {tabs.map((tab) => {
@@ -50,12 +56,17 @@ export function TabNav() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'group relative flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg text-sm lg:text-base font-medium transition-all whitespace-nowrap',
-                isActive
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-glow-blue'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-blue-700 hover:bg-blue-500/10'
+                'group relative isolate flex items-center gap-2 px-3 lg:px-4 py-2 rounded-lg text-sm lg:text-base font-medium whitespace-nowrap',
+                isActive ? 'text-white' : 'text-slate-600 dark:text-slate-300 hover:text-blue-700 hover:bg-blue-500/10'
               )}
             >
+              {isActive && (
+                <motion.span
+                  layoutId="tab-pill"
+                  transition={spring}
+                  className="absolute inset-0 -z-10 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 shadow-glow-blue"
+                />
+              )}
               {ICONS[tab.id]}
               <span>{tab.label}</span>
             </button>
@@ -63,9 +74,9 @@ export function TabNav() {
         })}
       </nav>
 
-      {/* Mobile bottom tab bar. A role with many tabs (TI has eleven) does not
-          fit a 375px phone at 44px per tab, so the bar scrolls sideways instead
-          of squeezing or clipping; with few tabs the items still spread out. */}
+      {/* Mobile bottom tab bar. A role with many tabs does not fit a 375px
+          phone at 44px per tab, so the bar scrolls sideways instead of
+          squeezing or clipping; with few tabs the items still spread out. */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 glass-nav border-t border-white/40 dark:border-white/10 px-1 py-1 flex items-stretch overflow-x-auto scrollbar-none">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
@@ -74,22 +85,25 @@ export function TabNav() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'relative flex flex-1 shrink-0 flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-all min-w-[44px] min-h-[44px] justify-center',
+                'relative flex flex-1 shrink-0 flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg min-w-[44px] min-h-[44px] justify-center',
                 isActive ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'
               )}
               aria-label={tab.label}
+              aria-current={isActive ? 'page' : undefined}
             >
-              <span className={cn('transition-transform', isActive && 'scale-110')}>
-                {ICONS[tab.id]}
-              </span>
+              <span className={cn('transition-transform duration-200', isActive && 'scale-110 -translate-y-px')}>{ICONS[tab.id]}</span>
               <span className="text-[11px] font-medium">{tab.short}</span>
               {isActive && (
-                <span className="absolute -bottom-0.5 h-1 w-6 rounded-full bg-gradient-to-r from-blue-600 to-cyan-400" />
+                <motion.span
+                  layoutId="tab-dot"
+                  transition={spring}
+                  className="absolute -bottom-0.5 h-1 w-6 rounded-full bg-gradient-to-r from-blue-600 to-cyan-400"
+                />
               )}
             </button>
           )
         })}
       </nav>
-    </>
+    </MotionConfig>
   )
 }

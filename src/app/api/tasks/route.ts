@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
-import { can } from '@/lib/rbac'
+import { can, isMasterRole } from '@/lib/rbac'
 import {
   DAILY_CUTOFF_LABEL,
   TASK_STATUSES,
@@ -56,7 +56,7 @@ async function guardProject(user: SessionUser, projectId: string, opts?: { write
   const owns =
     user.role === 'PIC_PROYEK'
       ? project.picUserId === user.id
-      : user.role === 'TI'
+      : isMasterRole(user.role)
         ? true
         : project.entityId === user.scopeEntityId
 

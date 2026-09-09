@@ -11,6 +11,7 @@ const ROLE_LABELS: Record<string, string> = {
   DIREKTUR_SDM_GA: 'Direktur SDM & GA',
   MANAJEMEN: 'Manajemen',
   TI: 'TI',
+  SUPERADMIN: 'Super Admin',
   AUDITOR: 'Auditor',
 }
 
@@ -23,6 +24,7 @@ const ROLE_ORDER = [
   'DIREKTUR_SDM_GA',
   'MANAJEMEN',
   'TI',
+  'SUPERADMIN',
   'AUDITOR',
 ]
 

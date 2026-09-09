@@ -26,6 +26,13 @@ model Entity {
   name      String
   path      String   // materialized path, e.g. "/root/sh1/pt42/"
   region    String?  // e.g. "Jakarta", "Surabaya" for grouping
+  /// Identitas & logo perusahaan (10 Sep 2026), diisi Super Admin. Logo
+  /// disimpan sebagai data URL kecil (≤ 256 px) agar tidak bergantung storage.
+  logoData  String?
+  address   String?
+  phone     String?
+  email     String?
+  website   String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -215,7 +222,11 @@ model Holiday {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  /// Nama masuk pendek (10 Sep 2026): huruf kecil, unik — dipakai di halaman masuk.
+  username     String?  @unique
   name         String
+  /// Jabatan bebas (mis. "Manager Proyek", "Direktur Utama"); peran tetap di `role`.
+  title        String?
   phone        String?
   passwordHash String?  // scrypt: scrypt$N$r$p$salt$hash — null means the account cannot sign in yet
   role         String   // ADMIN_PT | KEPALA_DIVISI | PIC_PROYEK | DIREKTUR_ENTITAS | DIREKTUR_SDM_GA | MANAJEMEN | TI | AUDITOR

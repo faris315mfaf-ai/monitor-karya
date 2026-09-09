@@ -83,7 +83,7 @@ export function NotificationBell() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon-sm" className="glass relative hover:bg-blue-500/10" aria-label={unread > 0 ? `Notifikasi, ${unread} belum dibaca` : 'Notifikasi'}>
-          {unread > 0 ? <BellRing className="h-5 w-5 text-amber-600" /> : <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />}
+          {unread > 0 ? <BellRing className="h-5 w-5 text-amber-600 animate-bell" /> : <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />}
           {unread > 0 && (
             <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
               {unread > 9 ? '9+' : unread}

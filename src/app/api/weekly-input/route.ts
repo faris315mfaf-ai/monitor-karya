@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
-import { can } from '@/lib/rbac'
+import { can, isMasterRole } from '@/lib/rbac'
 import {
   WEEKLY_LOCK_LABEL,
   dayInPeriod,
@@ -43,7 +43,7 @@ const WEEKS_SHOWN = 8
 /** The PT entities this account may file a division report for. */
 async function reportableEntities(user: SessionUser) {
   const select = { id: true, code: true, name: true }
-  if (user.role === 'TI') {
+  if (isMasterRole(user.role)) {
     return db.entity.findMany({ where: { type: 'PT', isActive: true }, select, orderBy: { name: 'asc' } })
   }
   if (user.role === 'KEPALA_DIVISI') {
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   const requested = sp.get('entityId')
   // Peran berlingkup terpaku pada entitasnya; TI memilih dari daftar.
   const entity =
-    user.role === 'TI' ? (entities.find((e) => e.id === requested) ?? entities[0] ?? null) : (entities[0] ?? null)
+    isMasterRole(user.role) ? (entities.find((e) => e.id === requested) ?? entities[0] ?? null) : (entities[0] ?? null)
   const divisions = await visibleDivisions(user, entity?.id ?? null)
 
   const reports = await db.weeklyDivisionReport.findMany({
@@ -182,7 +182,7 @@ export async function GET(req: NextRequest) {
     weeks,
     entities,
     entityId: entity?.id ?? null,
-    entityPinned: user.role !== 'TI',
+    entityPinned: !isMasterRole(user.role),
     aspects,
     priorities,
     canApprove: can(user.role, 'weekly:approve'),
@@ -230,7 +230,7 @@ async function assertOwnsDivision(user: SessionUser, divisionId: string) {
   const owns =
     user.role === 'KEPALA_DIVISI'
       ? division.headUserId === user.id
-      : user.role === 'TI'
+      : isMasterRole(user.role)
         ? true
         : division.entityId === user.scopeEntityId
   if (!owns) {

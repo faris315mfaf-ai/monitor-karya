@@ -367,3 +367,70 @@
   .animate-fade-in { animation: none; }
   .card-hover:hover { transform: none; }
 }
+
+/* ============================================================
+   SENTUHAN HALUS (10 Sep 2026)
+   Umpan balik kecil pada setiap sentuhan dan ikon: tombol sedikit
+   mengecil saat ditekan, ikon terangkat tipis saat dihover, chevron dan
+   roda gigi berputar pelan, daftar muncul bergantian. Hanya transform &
+   opacity (150-250 ms), dan dimatikan bila pengguna meminta gerakan minimal.
+   ============================================================ */
+@layer base {
+  @media (prefers-reduced-motion: no-preference) {
+    button, [role="button"], a, select, summary {
+      transition:
+        scale 150ms cubic-bezier(.23, 1, .32, 1),
+        background-color 150ms ease,
+        color 150ms ease,
+        border-color 150ms ease,
+        box-shadow 200ms ease,
+        opacity 150ms ease;
+    }
+    button:active:not(:disabled), [role="button"]:active, a:active { scale: 0.97; }
+    button svg, a svg {
+      transition:
+        translate 200ms cubic-bezier(.23, 1, .32, 1),
+        scale 200ms cubic-bezier(.23, 1, .32, 1),
+        rotate 250ms cubic-bezier(.23, 1, .32, 1);
+    }
+    button:hover:not(:disabled) > svg:first-child, a:hover > svg:first-child { translate: 0 -1px; scale: 1.06; }
+    input, textarea {
+      transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Tombol "tambah": ikon plus berputar seperempat saat dihover. */
+    .icon-rotate-hover:hover:not(:disabled) > svg:first-child { rotate: 90deg; }
+    /* Roda gigi pengaturan berputar sedikit. */
+    .icon-gear:hover:not(:disabled) > svg:first-child { rotate: 30deg; }
+    /* Lonceng bergetar singkat setiap beberapa detik selama ada yang belum dibaca. */
+    .animate-bell { animation: bellRing 7s ease-in-out infinite; transform-origin: 50% 0; }
+    @keyframes bellRing {
+      0%, 88%, 100% { rotate: 0deg; }
+      90% { rotate: 12deg; }
+      92% { rotate: -10deg; }
+      94% { rotate: 6deg; }
+      96% { rotate: -3deg; }
+    }
+    /* Anak-anak muncul bergantian (kartu statistik, daftar perusahaan). */
+    .stagger > * { animation: fadeIn 0.35s cubic-bezier(.23, 1, .32, 1) both; }
+    .stagger > *:nth-child(2) { animation-delay: 40ms; }
+    .stagger > *:nth-child(3) { animation-delay: 80ms; }
+    .stagger > *:nth-child(4) { animation-delay: 120ms; }
+    .stagger > *:nth-child(5) { animation-delay: 160ms; }
+    .stagger > *:nth-child(6) { animation-delay: 200ms; }
+    .stagger > *:nth-child(7) { animation-delay: 240ms; }
+    .stagger > *:nth-child(8) { animation-delay: 280ms; }
+    .stagger > *:nth-child(n+9) { animation-delay: 320ms; }
+  }
+}

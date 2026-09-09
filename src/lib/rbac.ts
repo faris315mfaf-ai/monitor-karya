@@ -21,6 +21,7 @@ export type Capability =
   | 'unlock:approve'
   | 'unlock:execute'
   | 'users:manage'
+  | 'companies:manage' // Super Admin: tambah/ubah perusahaan, posisi, akun (10 Sep 2026)
   | 'audit:read'
   | 'group:read' // may read beyond their own entity
 
@@ -40,6 +41,7 @@ const ALL_CAPABILITIES: Capability[] = [
   'unlock:approve',
   'unlock:execute',
   'users:manage',
+  'companies:manage',
   'audit:read',
   'group:read',
 ]
@@ -68,8 +70,8 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Answers for reporting compliance in their entity and chases blocked items.
   DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'project:approve', 'notify:remind', 'audit:read'],
 
-  // Process owner: reviews the dashboard, keeps notes and the escalation list,
-  // and reports to Management.
+  // Process owner at the holding: reviews the dashboard, keeps notes and the
+  // escalation list, and reports to Management.
   DIREKTUR_SDM_GA: [
     'escalation:raise',
     'escalation:followup',
@@ -81,8 +83,13 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   ],
 
   // Keeps the system available, manages access, and owns the locking and
-  // notification machinery. Master account — everything is open.
-  TI: ALL_CAPABILITIES,
+  // notification machinery. Everything except the company/account desk,
+  // which belongs to the Super Admin.
+  TI: ALL_CAPABILITIES.filter((c) => c !== 'companies:manage'),
+
+  // Super Admin (10 Sep 2026): the owner's account. Adds companies, positions
+  // and accounts, resets passwords — and may open every other module.
+  SUPERADMIN: ALL_CAPABILITIES,
 
   // Receives reports, decides escalated issues, watches compliance.
   MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:approve', 'audit:read', 'group:read'],
@@ -114,6 +121,20 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
     'audit',
     'system',
   ],
+  SUPERADMIN: [
+    'dashboard',
+    'companies',
+    'projects',
+    'divisions',
+    'escalations',
+    'entities',
+    'work-desk',
+    'inbox',
+    'daily-input',
+    'weekly-input',
+    'audit',
+    'system',
+  ],
   MANAJEMEN: ['dashboard', 'escalations', 'projects', 'divisions', 'entities', 'audit'],
   AUDITOR: ['dashboard', 'projects', 'divisions', 'entities', 'audit'],
 }
@@ -122,6 +143,25 @@ const FALLBACK_TABS: NavTabId[] = ['dashboard']
 
 /** The three signatures a proposed project needs before it becomes active. */
 export const PROJECT_APPROVER_ROLES = ['DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'MANAJEMEN'] as const
+
+/**
+ * Akun induk yang tidak terpaku pada satu entitas dan boleh menulis di mana
+ * pun: Tim TI dan Super Admin. Endpoint tulis memakai ini, bukan
+ * membandingkan peran satu per satu.
+ */
+export const MASTER_ROLES = ['TI', 'SUPERADMIN'] as const
+
+export function isMasterRole(role: string): boolean {
+  return (MASTER_ROLES as readonly string[]).includes(role)
+}
+
+/** Peran yang cakupannya satu entitas (dibuat Super Admin lewat "posisi"). */
+export const ENTITY_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK', 'DIREKTUR_ENTITAS'] as const
+
+/** Peran tingkat holding, tanpa entitas tertentu. */
+export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR'] as const
+
+export const ALL_ROLES = [...ENTITY_ROLES, ...HOLDING_ROLES] as const
 
 export function can(role: string, capability: Capability): boolean {
   return (ROLE_CAPABILITIES[role] ?? []).includes(capability)
@@ -150,8 +190,10 @@ export const ROLE_DUTIES: Record<string, string> = {
   DIREKTUR_ENTITAS:
     'Pastikan kepatuhan pelaporan di entitas Anda dan tindak lanjuti item berstatus Terkendala.',
   DIREKTUR_SDM_GA:
-    'Pemilik proses: tinjau dashboard, susun catatan dan daftar eskalasi, lalu sampaikan laporan kepada Manajemen.',
+    'Pemilik proses di holding: tinjau dashboard, susun catatan dan daftar eskalasi, lalu sampaikan laporan kepada Manajemen.',
   TI: 'Jaga ketersediaan sistem, kelola hak akses, pencadangan data, serta mekanisme penguncian dan notifikasi.',
+  SUPERADMIN:
+    'Kelola perusahaan, posisi, dan akun seluruh grup: tambah perusahaan, atur jabatan, setel ulang kata sandi.',
   MANAJEMEN:
     'Terima laporan, putuskan isu yang dieskalasi, dan pantau indikator kepatuhan seluruh grup.',
   AUDITOR: 'Telaah data dan jejak audit seluruh grup secara baca-saja.',

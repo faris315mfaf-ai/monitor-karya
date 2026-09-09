@@ -124,7 +124,7 @@ export async function requireApiUser(): Promise<SessionUser | NextResponse> {
 // ------------------------------------------------------------------
 
 /** Roles that may read the whole group, regardless of their own entity. */
-const GLOBAL_ROLES = new Set(['MANAJEMEN', 'AUDITOR', 'TI', 'DIREKTUR_SDM_GA'])
+const GLOBAL_ROLES = new Set(['MANAJEMEN', 'AUDITOR', 'TI', 'SUPERADMIN', 'DIREKTUR_SDM_GA'])
 
 export function isGlobalRole(role: string): boolean {
   return GLOBAL_ROLES.has(role)

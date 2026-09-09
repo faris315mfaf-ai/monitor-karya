@@ -465,6 +465,47 @@ pengaturan **tanggal**, **jenis laporan** (harian/mingguan/bulanan), dan
 penyerahan mingguan, 10 PT terendah) **disembunyikan**; komponennya masih ada
 di `src/components/dashboard/` dan `management-charts.tsx` bila diperlukan lagi.
 
+### Super Admin, username, dan seed bersih (10 Sep 2026)
+
+- **Masuk dengan username.** `User.username` (unik) menjadi nama masuk; email
+  masih diterima. Halaman masuk menawarkan empat akun contoh satu-klik — hanya
+  username-nya yang ditampilkan: `adminptcontoh` (Admin PT), `kepaladivisi`
+  (Kepala Divisi / Manager), `direkturentitas` (Direktur Entitas), `holding`
+  (Direksi Holding). Kata sandi **semua** akun contoh: `1234`
+  (`SEED_PASSWORD`, tampil di halaman masuk).
+- **Akun lain hasil seed**: `superadmin` (Super Admin, email deckemr@gmail.com),
+  `owner` (Super Admin), `manajemen`, `manager` (Manager Proyek PT Sigma),
+  `adminbike` (Admin Holding), lalu per PT: `admin<slug>` (adminsigma, admincipta,
+  adminfahreza, adminkbi, adminsmi, adminprambanan, adminratukarya, adminspkd),
+  `direktur.<slug>`, `kadiv.<divisi>.<slug>`, `manager1/2.<slug>`.
+- **Seed hanya struktur.** `prisma/seed.sql` kini menanam holding, 8 PT
+  (dengan alamat/telepon/email), divisi, proyek, dan akun — **tanpa** laporan,
+  task, eskalasi, KPI, atau notifikasi. Dashboard sengaja kosong agar diisi
+  sendiri. Jalankan `npm run db:seed:sql` lalu `npm run db:passwords -- --all`.
+- **Peran SUPERADMIN** (`companies:manage` + semua kewenangan lain). Tab
+  *Perusahaan & Akun*: kartu per perusahaan (logo, identitas, orang-orangnya),
+  pop-up **Tambah Perusahaan** (nama, centang holding/anak perusahaan, induk,
+  kode otomatis, alamat/telepon/email/situs, logo ≤ 256 px sebagai data URL,
+  posisi pertama: Admin PT / Kepala Divisi / Manager Proyek / Direktur —
+  Kepala Divisi & Manager bisa langsung membuat divisi/proyek barunya), pop-up
+  **Kelola** (ubah identitas, nonaktifkan/hapus perusahaan, daftar akun dengan
+  ubah nama/username/email/jabatan/peran, setel ulang kata sandi,
+  nonaktifkan, hapus, tambah posisi). Akun tingkat grup (Manajemen, Direksi
+  Holding, Super Admin, TI, Auditor) dikelola di bagian atas halaman yang sama.
+  Pagar: akun sendiri dan Super Admin aktif terakhir tidak bisa dinonaktifkan
+  atau dihapus; perusahaan yang sudah punya laporan hanya bisa dinonaktifkan.
+- API: `GET/POST/PATCH/DELETE /api/companies`, `POST/PATCH/DELETE
+  /api/companies/users` (PATCH dengan `password` = setel ulang). Kolom baru
+  (migrasi 0011): `User.username`, `User.title`, `Entity.logoData/address/
+  phone/email/website`. `isMasterRole()` di `rbac.ts` menggantikan cek `'TI'`
+  di endpoint tulis sehingga Super Admin dilayani sama.
+- **Sentuhan halus** (`globals.css`, lapisan "SENTUHAN HALUS"): tombol
+  mengecil 3% saat ditekan, ikon terangkat tipis saat dihover, chevron/roda
+  gigi berputar pelan, tombol tambah memutar ikon plus, lonceng bergetar
+  singkat saat ada yang belum dibaca, kartu statistik muncul bergantian, pil
+  tab aktif meluncur (framer-motion `layoutId`). Semua hanya transform/opacity
+  150–250 ms dan dimatikan pada `prefers-reduced-motion`.
+
 ## 4. Jalankan aplikasi
 
 ```bash

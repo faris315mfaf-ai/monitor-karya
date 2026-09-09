@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { can } from '@/lib/rbac'
+import { can, isMasterRole } from '@/lib/rbac'
 import {
   dailyCountdown,
   dailyLockAt,
@@ -27,7 +27,7 @@ export async function GET() {
   }
   // Admin PT is pinned to one PT. TI, the master account, has no entity and
   // sees every PT's queue at once.
-  if (!user.scopeEntityId && user.role !== 'TI') {
+  if (!user.scopeEntityId && !isMasterRole(user.role)) {
     return NextResponse.json({ error: 'Peran ini tidak terikat pada satu entitas' }, { status: 400 })
   }
 

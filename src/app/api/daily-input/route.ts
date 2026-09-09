@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
-import { can } from '@/lib/rbac'
+import { can, isMasterRole } from '@/lib/rbac'
 import {
   DAILY_CUTOFF_LABEL,
   dailyCountdown,
@@ -31,7 +31,7 @@ async function visibleProjects(user: SessionUser) {
     })
   }
   // TI is the master account and is not pinned to an entity.
-  if (user.role === 'TI') {
+  if (isMasterRole(user.role)) {
     return db.project.findMany({ where: { lifecycle: 'AKTIF' }, orderBy: { code: 'asc' } })
   }
   if (!user.scopeEntityId) return []
@@ -125,7 +125,7 @@ export async function DELETE(req: NextRequest) {
   const owns =
     user.role === 'PIC_PROYEK'
       ? project.picUserId === user.id
-      : user.role === 'TI'
+      : isMasterRole(user.role)
         ? true
         : project.entityId === user.scopeEntityId
   if (!owns) {
@@ -203,7 +203,7 @@ export async function PUT(req: NextRequest) {
   const owns =
     user.role === 'PIC_PROYEK'
       ? project.picUserId === user.id
-      : user.role === 'TI'
+      : isMasterRole(user.role)
         ? true
         : project.entityId === user.scopeEntityId
   if (!owns) {

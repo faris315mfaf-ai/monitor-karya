@@ -667,7 +667,7 @@ function ItemDialog({
         className={cn(
           'glass-modal p-0 gap-0 flex flex-col overflow-hidden',
           'w-screen h-dvh max-w-none rounded-none top-0 left-0 translate-x-0 translate-y-0',
-          'sm:w-[min(96vw,56rem)] sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2'
+          'sm:w-[min(96vw,56rem)] sm:max-w-none sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2'
         )}
       >
         <DialogHeader className="px-5 sm:px-7 pt-5 pb-4 border-b border-white/40 dark:border-white/10 text-left">

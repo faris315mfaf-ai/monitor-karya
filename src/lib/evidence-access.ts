@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
+import { isMasterRole } from '@/lib/rbac'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence } from '@/lib/lock'
 
@@ -149,7 +150,7 @@ export async function canWriteEvidence(
       ? target.picUserId === user.id
       : user.role === 'KEPALA_DIVISI'
         ? target.headUserId === user.id
-        : user.role === 'TI'
+        : isMasterRole(user.role)
           ? true
           : target.entityId === user.scopeEntityId
 

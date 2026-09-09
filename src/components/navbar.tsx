@@ -63,7 +63,7 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="icon-sm"
-            className="glass hover:bg-blue-500/10"
+            className="glass hover:bg-blue-500/10 icon-gear"
             aria-label="Pengaturan"
             title="Pengaturan"
             onClick={() => setSettingsOpen(true)}

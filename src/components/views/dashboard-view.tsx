@@ -6,6 +6,7 @@ import {
   type AdminData, type KadivData, type OversightPanel, type PicData,
 } from '@/components/views/role-dashboards'
 import { EntityActivityBoard } from '@/components/views/entity-activity-board'
+import { SuperadminStrip } from '@/components/views/companies-view'
 import { useApp } from '@/components/app-provider'
 import { StatCard, ComplianceBadge, EscalationStatusBadge } from '@/components'
 import { LoadingCard, LoadingSpinner, EmptyState } from '@/components/loading-states'
@@ -128,13 +129,16 @@ function AggregateDashboard() {
         </div>
       )}
 
+      {/* Super Admin (10 Sep 2026): pintu masuk kelola perusahaan & akun. */}
+      {user.role === 'SUPERADMIN' && <SuperadminStrip />}
+
       {/* Bagian teratas (8 Sep 2026): apa yang dikerjakan tiap perusahaan.
           Tren KPI, peta kepatuhan, indikator KPI, dan paket grafik manajemen
           disembunyikan atas permintaan; komponennya tetap ada di repo. */}
       <EntityActivityBoard />
 
       {/* KPI cards grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 stagger">
         <StatCard
           label="Entitas Wajib Lapor"
           value={formatNumber(s.totalEntities)}

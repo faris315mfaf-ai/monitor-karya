@@ -15,6 +15,7 @@ import { DailyInputView } from '@/components/views/daily-input-view'
 import { WeeklyInputView } from '@/components/views/weekly-input-view'
 import { InboxView } from '@/components/views/inbox-view'
 import { SystemView } from '@/components/views/system-view'
+import { CompaniesView } from '@/components/views/companies-view'
 import { canSeeTab } from '@/lib/rbac'
 
 function MainContent() {
@@ -35,6 +36,7 @@ function MainContent() {
   return (
     <main className="flex-1 px-3 sm:px-4 lg:px-6 py-4 lg:pb-6 max-w-[1600px] mx-auto w-full">
       {activeTab === 'dashboard' && <DashboardView />}
+      {activeTab === 'companies' && <CompaniesView />}
       {activeTab === 'work-desk' && <WorkDeskView />}
       {activeTab === 'daily-input' && <DailyInputView />}
       {activeTab === 'weekly-input' && <WeeklyInputView />}

@@ -76,7 +76,7 @@ export function WorkDeskView() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
           {Array.from({ length: 4 }).map((_, i) => <LoadingCard key={i} />)}
         </div>
         <LoadingSpinner />
@@ -106,7 +106,7 @@ export function WorkDeskView() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger">
         <StatCard label="Proyek Diperbarui" value={updatedCount} sub={`dari ${data.projectsToday.length} proyek`} icon={CheckCircle2} tone="emerald" />
         <StatCard label="Belum Diperbarui" value={notUpdatedCount} sub="butuh tindakan" icon={Hourglass} tone={notUpdatedCount > 0 ? 'amber' : 'blue'} />
         <StatCard label="Perlu Eskalasi" value={pendingCount} sub="proyek terkendala" icon={AlertTriangle} tone={pendingCount > 0 ? 'rose' : 'blue'} />
