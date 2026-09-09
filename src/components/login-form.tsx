@@ -94,7 +94,7 @@ export function LoginForm({ dbReachable }: { dbReachable: boolean }) {
                 spellCheck={false}
                 autoFocus
                 required
-                placeholder="mis. adminptcontoh"
+                placeholder="username Anda"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 disabled={submitting}
