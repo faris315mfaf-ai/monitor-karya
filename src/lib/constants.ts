@@ -109,11 +109,12 @@ export const NOTIFICATION_TEMPLATE_LABELS: Record<string, string> = {
   PENGINGAT_MINGGUAN_DIVISI: 'Pengingat laporan mingguan divisi',
 }
 
+/** Nama slot di rantai persetujuan proyek; slot Manajemen = satu tingkat di atas Direktur. */
 export const PROJECT_APPROVER_LABELS: Record<string, string> = {
   ADMIN_PT: 'Admin PT',
   DIREKTUR_ENTITAS: 'Direktur Entitas',
   DIREKTUR_SDM_GA: 'Direksi Holding',
-  MANAJEMEN: 'Manajemen',
+  MANAJEMEN: 'Manajemen Holding',
 }
 
 // Daily report status colors and labels
