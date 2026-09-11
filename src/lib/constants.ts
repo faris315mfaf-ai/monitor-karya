@@ -15,7 +15,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
   ADMIN_PT: 'Input & ubah data entitas; unggah bukti; ajukan proyek',
   KEPALA_DIVISI: 'Lihat isian divisinya; menyetujui laporan mingguan',
-  PIC_PROYEK: 'Melaporkan kemajuan proyek yang dipegangnya setiap hari',
+  PIC_PROYEK: 'Melaporkan kemajuan proyek yang dipegangnya; mengajukan proyek baru',
   DIREKTUR_ENTITAS: 'Lihat semua data di cakupannya; buat eskalasi',
   DIREKTUR_SDM_GA: 'Semua hak Direktur + kelola daftar induk grup',
   MANAJEMEN: 'Read-only seluruh data + memutuskan eskalasi',
@@ -110,8 +110,9 @@ export const NOTIFICATION_TEMPLATE_LABELS: Record<string, string> = {
 }
 
 export const PROJECT_APPROVER_LABELS: Record<string, string> = {
+  ADMIN_PT: 'Admin PT',
   DIREKTUR_ENTITAS: 'Direktur Entitas',
-  DIREKTUR_SDM_GA: 'Direktur SDM & GA',
+  DIREKTUR_SDM_GA: 'Direksi Holding',
   MANAJEMEN: 'Manajemen',
 }
 

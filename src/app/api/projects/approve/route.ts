@@ -1,30 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { PROJECT_APPROVER_ROLES, can } from '@/lib/rbac'
+import { PROJECT_ENTITY_SLOTS, can, canSignSlot, pendingSlot } from '@/lib/rbac'
+import { PROJECT_APPROVER_LABELS } from '@/lib/constants'
 
 /**
- * Persetujuan pengajuan proyek (7 Sep 2026).
- *
- * Admin PT mengajukan; proyek menjadi AKTIF setelah tiga pihak menyetujui —
- * Direktur Entitas (PT yang sama), Direktur SDM & GA, dan Manajemen. Satu
- * penolakan membuat proyek DITOLAK. Tiap pihak punya satu slot keputusan yang
- * bisa diperbarui selama proyek masih DIUSULKAN.
+ * Persetujuan pengajuan proyek (11 Sep 2026): slot demi slot mengikuti
+ * `Project.approvalChain`, urut. Hanya slot yang sedang menunggu yang bisa
+ * ditandatangani — oleh pemegang peran slot itu (Admin PT dan Direktur harus
+ * dari PT yang sama; slot Manajemen boleh oleh Manajemen atau Direksi
+ * Holding), atau oleh akun induk (TI, Super Admin) atas nama slot itu.
+ * Seluruh slot DISETUJUI → proyek AKTIF; satu DITOLAK → DITOLAK.
  *
  *   POST { projectId, decision: 'DISETUJUI' | 'DITOLAK', note? }
  */
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-
-  // Kapabilitasnya harus ada DAN perannya harus salah satu dari tiga pihak,
-  // karena tiap keputusan mengisi slot atas nama peran itu.
-  const role = user.role as (typeof PROJECT_APPROVER_ROLES)[number]
-  if (!can(user.role, 'project:approve') || !PROJECT_APPROVER_ROLES.includes(role)) {
-    return NextResponse.json(
-      { error: 'Hanya Direktur Entitas, Direktur SDM & GA, dan Manajemen yang menyetujui proyek' },
-      { status: 403 }
-    )
+  if (!can(user.role, 'project:approve')) {
+    return NextResponse.json({ error: 'Peran Anda tidak menyetujui proyek' }, { status: 403 })
   }
 
   let body: Record<string, unknown>
@@ -41,43 +35,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Proyek dan keputusan wajib diisi' }, { status: 400 })
   }
   if (decision === 'DITOLAK' && note.length < 5) {
-    return NextResponse.json({ error: 'Alasan penolakan wajib diisi agar pengaju tahu apa yang perlu diperbaiki' }, { status: 422 })
+    return NextResponse.json(
+      { error: 'Alasan penolakan wajib diisi agar pengaju tahu apa yang perlu diperbaiki' },
+      { status: 422 }
+    )
   }
 
   const project = await db.project.findUnique({
     where: { id: projectId },
-    select: { id: true, name: true, entityId: true, lifecycle: true },
+    select: { id: true, name: true, entityId: true, lifecycle: true, approvalChain: true, approvals: { select: { role: true, decision: true } } },
   })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (project.lifecycle !== 'DIUSULKAN') {
     return NextResponse.json({ error: 'Proyek ini sudah tidak dalam tahap pengajuan' }, { status: 409 })
   }
-  // Direktur Entitas hanya menyetujui proyek di PT-nya sendiri.
-  if (role === 'DIREKTUR_ENTITAS' && project.entityId !== user.scopeEntityId) {
-    return NextResponse.json({ error: 'Proyek ini berada di luar entitas Anda' }, { status: 403 })
+
+  const approvedRoles = project.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
+  const slot = pendingSlot(project.approvalChain, approvedRoles)
+  if (!slot) {
+    // Rantai kosong tetapi masih DIUSULKAN — data lama. Aktifkan saja.
+    await db.project.update({ where: { id: projectId }, data: { lifecycle: 'AKTIF', approvedAt: new Date(), approvedByName: user.name } })
+    return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [] })
+  }
+  if (!canSignSlot(user, slot, project.entityId)) {
+    const label = PROJECT_APPROVER_LABELS[slot] ?? slot
+    const sameEntity = (PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot) ? ' di PT pemilik proyek' : ''
+    return NextResponse.json({ error: `Sekarang giliran ${label}${sameEntity}. Anda tidak bisa menandatangani slot ini.` }, { status: 403 })
   }
 
   await db.projectApproval.upsert({
-    where: { projectId_role: { projectId, role } },
+    where: { projectId_role: { projectId, role: slot } },
     update: { decision, note: note || null, decidedById: user.id, decidedAt: new Date() },
-    create: { projectId, role, decision, note: note || null, decidedById: user.id },
+    create: { projectId, role: slot, decision, note: note || null, decidedById: user.id },
   })
 
-  const approvals = await db.projectApproval.findMany({ where: { projectId } })
-  const rejected = approvals.some((a) => a.decision === 'DITOLAK')
-  const approvedRoles = new Set(approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role))
-  const complete = PROJECT_APPROVER_ROLES.every((r) => approvedRoles.has(r))
-
+  const nextPending = decision === 'DISETUJUI' ? pendingSlot(project.approvalChain, [...approvedRoles, slot]) : slot
   let lifecycle = project.lifecycle
-  if (rejected) {
+  if (decision === 'DITOLAK') {
     lifecycle = 'DITOLAK'
     await db.project.update({ where: { id: projectId }, data: { lifecycle } })
-  } else if (complete) {
+  } else if (nextPending === null) {
     lifecycle = 'AKTIF'
-    await db.project.update({
-      where: { id: projectId },
-      data: { lifecycle, approvedAt: new Date(), approvedByName: user.name },
-    })
+    await db.project.update({ where: { id: projectId }, data: { lifecycle, approvedAt: new Date(), approvedByName: user.name } })
   }
 
   await db.auditLog.create({
@@ -86,15 +85,12 @@ export async function POST(req: NextRequest) {
       action: decision === 'DISETUJUI' ? 'APPROVE_PROJECT' : 'REJECT_PROJECT',
       targetType: 'PROJECT',
       targetId: projectId,
-      afterData: JSON.stringify({ role, decision, note, lifecycle }),
+      afterData: JSON.stringify({ slot, signerRole: user.role, decision, note, lifecycle }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       userAgent: req.headers.get('user-agent') || null,
     },
   })
 
-  return NextResponse.json({
-    ok: true,
-    lifecycle,
-    approvals: approvals.map((a) => ({ role: a.role, decision: a.decision, note: a.note, decidedAt: a.decidedAt })),
-  })
+  const approvals = await db.projectApproval.findMany({ where: { projectId }, select: { role: true, decision: true, note: true, decidedAt: true } })
+  return NextResponse.json({ ok: true, lifecycle, pending: lifecycle === 'DIUSULKAN' ? nextPending : null, approvals })
 }

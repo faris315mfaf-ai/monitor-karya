@@ -14,8 +14,9 @@ export type Capability =
   | 'escalation:raise'
   | 'escalation:followup'
   | 'escalation:decide'
-  | 'project:propose' // Admin PT mengajukan proyek baru
-  | 'project:approve' // Direktur Entitas, Direktur SDM&GA, Manajemen menyetujui
+  | 'project:propose' // mengajukan proyek baru (rantai penyetuju mengikuti peran pengaju)
+  | 'project:approve' // menandatangani slot persetujuan proyek
+  | 'project:manage' // ubah/hapus/arsipkan proyek (Super Admin, TI, Admin PT di PT-nya)
   | 'notify:remind' // kirim pengingat ke divisi yang belum melapor (8 Sep 2026)
   | 'unlock:request'
   | 'unlock:approve'
@@ -36,6 +37,7 @@ const ALL_CAPABILITIES: Capability[] = [
   'escalation:decide',
   'project:propose',
   'project:approve',
+  'project:manage',
   'notify:remind',
   'unlock:request',
   'unlock:approve',
@@ -47,8 +49,9 @@ const ALL_CAPABILITIES: Capability[] = [
 ]
 
 export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
-  // Reports project progress every working day, with obstacles and evidence.
-  PIC_PROYEK: ['daily:input', 'escalation:raise'],
+  // Reports project progress every working day, with obstacles and evidence;
+  // may propose a project of their own (approved by Admin PT, then Direktur).
+  PIC_PROYEK: ['daily:input', 'escalation:raise', 'project:propose'],
 
   // Hands the division's weekly achievement to Admin PT by Thursday and signs
   // it off before it locks.
@@ -63,18 +66,28 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
     'weekly:forward',
     'escalation:raise',
     'project:propose',
+    'project:approve', // slot pertama untuk pengajuan PIC
+    'project:manage', // ubah/hapus proyek di PT-nya
     'notify:remind',
     'unlock:request',
   ],
 
   // Answers for reporting compliance in their entity and chases blocked items.
-  DIREKTUR_ENTITAS: ['escalation:raise', 'escalation:followup', 'project:approve', 'notify:remind', 'audit:read'],
+  DIREKTUR_ENTITAS: [
+    'escalation:raise',
+    'escalation:followup',
+    'project:propose',
+    'project:approve',
+    'notify:remind',
+    'audit:read',
+  ],
 
   // Process owner at the holding: reviews the dashboard, keeps notes and the
   // escalation list, and reports to Management.
   DIREKTUR_SDM_GA: [
     'escalation:raise',
     'escalation:followup',
+    'project:propose',
     'project:approve',
     'notify:remind',
     'unlock:approve',
@@ -92,7 +105,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   SUPERADMIN: ALL_CAPABILITIES,
 
   // Receives reports, decides escalated issues, watches compliance.
-  MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:approve', 'audit:read', 'group:read'],
+  MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:propose', 'project:approve', 'audit:read', 'group:read'],
 
   AUDITOR: ['audit:read', 'group:read'],
 }
@@ -141,8 +154,54 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']
 
-/** The three signatures a proposed project needs before it becomes active. */
-export const PROJECT_APPROVER_ROLES = ['DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'MANAJEMEN'] as const
+/**
+ * Rantai persetujuan proyek menurut peran pengaju (11 Sep 2026): tiap pengaju
+ * butuh tanda tangan jenjang di atasnya, berurutan. Pengaju di puncak
+ * (Manajemen, Direksi Holding, TI, Super Admin) langsung aktif tanpa rantai.
+ */
+export const PROJECT_APPROVAL_CHAIN: Record<string, string[]> = {
+  PIC_PROYEK: ['ADMIN_PT', 'DIREKTUR_ENTITAS'],
+  ADMIN_PT: ['DIREKTUR_ENTITAS'],
+  DIREKTUR_ENTITAS: ['MANAJEMEN'],
+  DIREKTUR_SDM_GA: [],
+  MANAJEMEN: [],
+  TI: [],
+  SUPERADMIN: [],
+}
+
+/** Siapa yang boleh menandatangani sebuah slot. Akun induk (TI, Super Admin)
+ *  boleh menandatangani slot mana pun atas nama slot itu. */
+export const PROJECT_SLOT_SIGNERS: Record<string, string[]> = {
+  ADMIN_PT: ['ADMIN_PT'],
+  DIREKTUR_ENTITAS: ['DIREKTUR_ENTITAS'],
+  MANAJEMEN: ['MANAJEMEN', 'DIREKTUR_SDM_GA'],
+}
+
+/** Slot yang terpaku pada PT proyek: penandatangannya harus dari PT yang sama. */
+export const PROJECT_ENTITY_SLOTS = ['ADMIN_PT', 'DIREKTUR_ENTITAS'] as const
+
+export function approvalChainFor(role: string): string[] {
+  return PROJECT_APPROVAL_CHAIN[role] ?? []
+}
+
+/** Slot berikutnya yang belum DISETUJUI, atau null bila rantai tuntas. */
+export function pendingSlot(chain: string[], approvedRoles: Iterable<string>): string | null {
+  const done = new Set(approvedRoles)
+  return chain.find((r) => !done.has(r)) ?? null
+}
+
+/** Apakah akun ini boleh menandatangani `slot` untuk proyek milik `entityId`. */
+export function canSignSlot(
+  user: { role: string; scopeEntityId: string | null },
+  slot: string,
+  entityId: string
+): boolean {
+  if (!can(user.role, 'project:approve')) return false
+  if (isMasterRole(user.role)) return true
+  if (!(PROJECT_SLOT_SIGNERS[slot] ?? []).includes(user.role)) return false
+  if ((PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot)) return user.scopeEntityId === entityId
+  return true
+}
 
 /**
  * Akun induk yang tidak terpaku pada satu entitas dan boleh menulis di mana

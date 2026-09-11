@@ -387,14 +387,35 @@ Modul "Laporan Kemajuan" (tab `daily-input`) bertab **Harian / Mingguan / Bulana
 - Semua laporan menerima lampiran dokumen/foto; **foto tampil sebagai galeri**
   (signed URL 5 menit) saat laporan dibuka.
 
-### Pengajuan proyek (7 Sep 2026)
+### Pengajuan proyek berantai per pengaju (11 Sep 2026)
 
-Admin PT mengajukan lewat pop-up **Ajukan Proyek** (`POST /api/projects`). Proyek
-lahir sebagai `DIUSULKAN` dan menjadi `AKTIF` setelah tiga persetujuan lewat
-`POST /api/projects/approve`: **Direktur Entitas** (PT yang sama), **Direktur
-SDM & GA**, dan **Manajemen**. Satu penolakan → `DITOLAK`. Kartu proyek
-menampilkan tiga slot tanda tangan itu. Seed menyertakan satu pengajuan yang
-masih menunggu di PT Sigma.
+Siapa pun di rantai boleh mengajukan lewat pop-up **Ajukan Proyek**
+(`POST /api/projects`): nama, penjelasan, tujuan, tahap awal (opsional —
+kosong dianggap Inisiasi), PIC/Manager (PIC yang mengajukan otomatis menjadi
+PIC-nya), rencana mulai, target selesai, dan **PT-PT yang berkaitan** (boleh
+lebih dari satu; proyek ikut tampil di daftar proyek PT terkait — tabel
+`ProjectEntity`, migrasi 0012).
+
+Rantai penyetuju ditentukan peran pengaju dan disimpan di
+`Project.approvalChain` (`PROJECT_APPROVAL_CHAIN` di `rbac.ts`), lalu
+ditandatangani **berurutan** lewat `POST /api/projects/approve`:
+
+| Pengaju | Rantai persetujuan |
+|---|---|
+| Manager / PIC Proyek | Admin PT → Direktur Entitas |
+| Admin PT | Direktur Entitas |
+| Direktur Entitas | Manajemen (boleh Direksi Holding) |
+| Manajemen, Direksi Holding, TI, Super Admin | — langsung `AKTIF` |
+
+Admin PT dan Direktur hanya menandatangani proyek PT-nya; TI dan Super Admin
+boleh menandatangani slot mana pun atas nama slot itu. Seluruh slot disetujui →
+`AKTIF`; satu penolakan → `DITOLAK` (bisa **diajukan ulang**: slot dikosongkan).
+
+**Ubah / hapus / arsipkan** (`PATCH` & `DELETE /api/projects`, kapabilitas
+`project:manage`): Super Admin & TI untuk semua proyek, Admin PT untuk PT-nya,
+dan pengaju untuk pengajuannya sendiri selama belum aktif. Proyek yang sudah
+punya laporan/task tidak dihapus (409) melainkan ditawarkan untuk
+**diarsipkan** agar riwayatnya utuh.
 
 ### Pengaturan
 

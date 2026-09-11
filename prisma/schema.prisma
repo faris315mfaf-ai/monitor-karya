@@ -46,6 +46,7 @@ model Entity {
   adminAppointments AdminAppointment[]
   tasks          Task[]
   progressReports ProjectProgressReport[]
+  relatedProjects ProjectEntity[]
 }
 
 model DivisionType {
@@ -92,8 +93,12 @@ model Project {
   targetEndDate  DateTime?
   approvedByName String?
   approvedAt     DateTime?
-  /// Pengajuan proyek (7 Sep 2026): Admin PT mengajukan, tiga pihak menyetujui.
+  /// Pengajuan proyek: siapa pun di rantai (PIC, Admin PT, Direktur, ...) boleh
+  /// mengajukan; rantai penyetujunya ditentukan oleh peran pengaju dan
+  /// disimpan di `approvalChain` (11 Sep 2026), urut dari yang pertama.
   description    String?
+  purpose        String?  // tujuan / manfaat, dipisah dari penjelasan
+  approvalChain  String[] @default([]) // mis. ["ADMIN_PT","DIREKTUR_ENTITAS"]
   proposedById   String?
   proposedBy     User?    @relation("ProjectProposer", fields: [proposedById], references: [id])
   proposedAt     DateTime?
@@ -104,16 +109,30 @@ model Project {
   tasks           Task[]
   approvals       ProjectApproval[]
   progressReports ProjectProgressReport[]
+  relatedEntities ProjectEntity[]
 }
 
-/// Satu keputusan per pihak penyetuju atas satu pengajuan proyek. Proyek
-/// menjadi AKTIF ketika ketiga peran (DIREKTUR_ENTITAS, DIREKTUR_SDM_GA,
-/// MANAJEMEN) sudah DISETUJUI; satu DITOLAK membuat lifecycle DITOLAK.
+/// PT-PT lain yang berkaitan dengan sebuah proyek (11 Sep 2026) — selain PT
+/// pemiliknya. Proyek ikut tampil di daftar proyek PT terkait.
+model ProjectEntity {
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entityId  String
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([projectId, entityId])
+  @@index([entityId])
+}
+
+/// Satu keputusan per slot penyetuju atas satu pengajuan proyek. Slotnya
+/// mengikuti `Project.approvalChain`, berurutan; proyek menjadi AKTIF ketika
+/// seluruh slot DISETUJUI, dan satu DITOLAK membuat lifecycle DITOLAK.
 model ProjectApproval {
   id          String   @id @default(cuid())
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  role        String   // DIREKTUR_ENTITAS | DIREKTUR_SDM_GA | MANAJEMEN
+  role        String   // slot: ADMIN_PT | DIREKTUR_ENTITAS | MANAJEMEN
   decision    String   // DISETUJUI | DITOLAK
   note        String?
   decidedById String?
