@@ -1,7 +1,8 @@
 'use client'
 
-import { AppProvider, useApp, type SessionUser } from '@/components/app-provider'
+import { AppProvider, useApp, type Branding, type SessionUser } from '@/components/app-provider'
 import { Navbar } from '@/components/navbar'
+import { SplashScreen } from '@/components/splash-screen'
 import { TabNav } from '@/components/tab-nav'
 import { Footer } from '@/components/footer'
 import { DashboardView } from '@/components/views/dashboard-view'
@@ -51,9 +52,11 @@ function MainContent() {
   )
 }
 
-export function AppShell({ user }: { user: SessionUser }) {
+export function AppShell({ user, branding }: { user: SessionUser; branding?: Branding }) {
   return (
-    <AppProvider user={user}>
+    <AppProvider user={user} branding={branding}>
+      {/* Layar pembuka sekali per masuk: inisiator (holding) & perusahaan si pengguna. */}
+      <SplashScreen />
       {/* Below lg the tab bar is fixed to the bottom of the viewport, so the
           page reserves its height — otherwise the footer sits underneath it. */}
       <div className="min-h-screen flex flex-col pb-14 lg:pb-0">

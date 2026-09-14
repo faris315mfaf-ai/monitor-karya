@@ -19,9 +19,14 @@ type UiState = {
   selectedEntityId: string | null
 }
 
+/** Logo & nama holding (inisiator) dan perusahaan tempat akun ditempatkan. */
+export type Brand = { id: string; name: string; code: string; type: string; logoData: string | null }
+export type Branding = { holding: Brand | null; entity: Brand | null; lastLoginAt: string | null }
+
 type AppState = UiState & {
   /** The signed-in user. Comes from the session cookie, never from the browser. */
   user: SessionUser
+  branding: Branding
   setActiveTab: (t: NavTabId) => void
   setSelectedEntityId: (id: string | null) => void
 }
@@ -65,7 +70,15 @@ function useIsHydrated() {
   )
 }
 
-export function AppProvider({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+export function AppProvider({
+  user,
+  branding = { holding: null, entity: null, lastLoginAt: null },
+  children,
+}: {
+  user: SessionUser
+  branding?: Branding
+  children: React.ReactNode
+}) {
   const hydrated = useIsHydrated()
 
   // Only consulted once the browser has taken over.
@@ -95,11 +108,12 @@ export function AppProvider({ user, children }: { user: SessionUser; children: R
     () => ({
       ...ui,
       user,
+      branding,
       setActiveTab: (t: NavTabId) => setOverrides((o) => ({ ...o, activeTab: t })),
       setSelectedEntityId: (id: string | null) =>
         setOverrides((o) => ({ ...o, selectedEntityId: id })),
     }),
-    [ui, user]
+    [ui, user, branding]
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

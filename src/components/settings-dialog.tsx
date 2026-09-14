@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { BrandLogo } from '@/components/brand-logo'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PROJECT_PHASE_LABELS } from '@/lib/constants'
 import { ROLE_DUTIES } from '@/lib/rbac'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Building2, Check, FolderKanban, Loader2, Monitor, Moon, Sun, Users } from 'lucide-react'
+import { AlertTriangle, Building2, Check, FolderKanban, Landmark, Loader2, Monitor, Moon, Sun, Users } from 'lucide-react'
 
 type Profile = {
   id: string
@@ -22,8 +23,9 @@ type Profile = {
   role: string
   roleLabel: string
   avatarColor: string | null
-  entity: { id: string; name: string; code: string; type: string } | null
+  entity: { id: string; name: string; code: string; type: string; logoData: string | null } | null
   holding: string | null
+  holdingBrand: { id: string; name: string; logoData: string | null } | null
   projects: { id: string; code: string; name: string; phase: string }[]
   divisions: { id: string; name: string }[]
   lastLoginAt: string | null
@@ -138,11 +140,23 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     {initials(profile.name)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{profile.name}</div>
                   <div className="text-sm text-slate-500 dark:text-slate-400 truncate">{profile.email}</div>
                   <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-0.5">{profile.roleLabel}</div>
                 </div>
+                {/* Logo perusahaan si pemilik akun; akun tingkat grup memakai logo holding. */}
+                {(profile.entity ?? profile.holdingBrand) && (
+                  <div className="hidden sm:flex flex-col items-center gap-1 shrink-0">
+                    <BrandLogo
+                      name={(profile.entity ?? profile.holdingBrand)!.name}
+                      logoData={(profile.entity ?? profile.holdingBrand)!.logoData}
+                      size={56}
+                      tone={profile.entity ? 'blue' : 'slate'}
+                    />
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[7rem] text-center truncate">{(profile.entity ?? profile.holdingBrand)!.name}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-56" /></div></div>
@@ -179,7 +193,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 value={
                   profile
                     ? profile.entity
-                      ? <>{profile.entity.name}{profile.holding && <span className="text-slate-500 dark:text-slate-400 font-normal"> · {profile.holding}</span>}</>
+                      ? <>{profile.entity.name}{profile.holding && profile.holding !== profile.entity.name && <span className="text-slate-500 dark:text-slate-400 font-normal"> · {profile.holding}</span>}</>
                       : profile.holding
                         ? <>Seluruh grup <span className="text-slate-500 dark:text-slate-400 font-normal">· {profile.holding}</span></>
                         : 'Seluruh grup'
@@ -203,6 +217,18 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               )}
               {profile?.role === 'KEPALA_DIVISI' && (
                 <Row icon={Users} label="Divisi" value={profile.divisions.length ? profile.divisions.map((d) => d.name).join(', ') : <span className="text-amber-700 dark:text-amber-300">Belum memimpin divisi</span>} />
+              )}
+              {profile?.holdingBrand && (
+                <Row
+                  icon={Landmark}
+                  label="Inisiator sistem"
+                  value={
+                    <span className="inline-flex items-center gap-2">
+                      <BrandLogo name={profile.holdingBrand.name} logoData={profile.holdingBrand.logoData} size={24} tone="slate" className="shadow-none" />
+                      {profile.holdingBrand.name}
+                    </span>
+                  }
+                />
               )}
               {profile?.lastLoginAt && <Row icon={Check} label="Masuk terakhir" value={formatDateTime(profile.lastLoginAt)} />}
             </div>

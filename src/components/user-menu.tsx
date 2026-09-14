@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useApp } from '@/components/app-provider'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/lib/constants'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { BrandLogo } from '@/components/brand-logo'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChevronDown, LogOut, Mail, ShieldCheck } from 'lucide-react'
+import { Building2, ChevronDown, Landmark, LogOut, Mail, ShieldCheck } from 'lucide-react'
 
 function initials(name: string) {
   return name
@@ -27,7 +28,9 @@ function initials(name: string) {
 }
 
 export function UserMenu() {
-  const { user } = useApp()
+  const { user, branding } = useApp()
+  // Logo perusahaan tempat akun ditempatkan; akun tingkat grup memakai logo holding.
+  const company = branding.entity ?? branding.holding
   const router = useRouter()
   const [signingOut, setSigningOut] = useState(false)
 
@@ -50,17 +53,27 @@ export function UserMenu() {
           variant="ghost"
           className="glass h-auto py-1.5 px-2 gap-2 hover:bg-blue-500/10 data-[state=open]:bg-blue-500/15"
         >
-          <Avatar className="h-8 w-8 ring-2 ring-white/80 shadow-sm">
-            <AvatarFallback
-              className="text-white text-sm font-semibold"
-              style={{ background: user.avatarColor || '#2563eb' }}
-            >
-              {initials(user.name)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative shrink-0">
+            <Avatar className="h-8 w-8 ring-2 ring-white/80 shadow-sm">
+              <AvatarFallback
+                className="text-white text-sm font-semibold"
+                style={{ background: user.avatarColor || '#2563eb' }}
+              >
+                {initials(user.name)}
+              </AvatarFallback>
+            </Avatar>
+            {company && (
+              <span className="absolute -bottom-1 -right-1 rounded-md ring-2 ring-white dark:ring-slate-900" title={company.name}>
+                <BrandLogo name={company.name} logoData={company.logoData} size={16} className="rounded-md shadow-none" />
+              </span>
+            )}
+          </div>
           <div className="hidden sm:flex flex-col items-start leading-tight">
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.name}</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{ROLE_LABELS[user.role] ?? user.role}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[12rem]">
+              {ROLE_LABELS[user.role] ?? user.role}
+              {company ? ` · ${company.name}` : ''}
+            </span>
           </div>
           <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
         </Button>
@@ -104,6 +117,35 @@ export function UserMenu() {
             </span>
           </p>
         </div>
+
+        {(branding.entity || branding.holding) && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5 space-y-2">
+              {branding.entity && (
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BrandLogo name={branding.entity.name} logoData={branding.entity.logoData} size={32} />
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1"><Building2 className="h-3 w-3" /> Perusahaan</div>
+                    <div className="text-[13px] font-medium text-slate-700 dark:text-slate-200 truncate">{branding.entity.name}</div>
+                  </div>
+                </div>
+              )}
+              {branding.holding && branding.holding.id !== branding.entity?.id && (
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <BrandLogo name={branding.holding.name} logoData={branding.holding.logoData} size={32} tone="slate" />
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1"><Landmark className="h-3 w-3" /> Inisiator · Holding</div>
+                    <div className="text-[13px] font-medium text-slate-700 dark:text-slate-200 truncate">{branding.holding.name}</div>
+                  </div>
+                </div>
+              )}
+              {branding.holding && branding.holding.id === branding.entity?.id && (
+                <p className="text-[12px] text-slate-500 dark:text-slate-400 flex items-center gap-1"><Landmark className="h-3 w-3" /> Akun tingkat holding — inisiator sistem.</p>
+              )}
+            </div>
+          </>
+        )}
 
         <DropdownMenuSeparator />
 

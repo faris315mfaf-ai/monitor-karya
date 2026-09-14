@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Activity, AlertTriangle, Eye, EyeOff, Loader2, LogIn } from 'lucide-react'
+import { BrandLogo } from '@/components/brand-logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,7 +13,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
  * Masuk dengan username (atau email) dan kata sandi — satu-satunya jalur sejak
  * jalan pintas demo dihapus (10 Sep 2026).
  */
-export function LoginForm({ dbReachable }: { dbReachable: boolean }) {
+/**
+ * `holding` = pemrakarsa sistem (holding / super-holding). Logonya tampil di
+ * atas formulir supaya sejak layar masuk sudah jelas siapa inisiatornya.
+ */
+export function LoginForm({
+  dbReachable,
+  holding = null,
+}: {
+  dbReachable: boolean
+  holding?: { name: string; logoData: string | null } | null
+}) {
   const router = useRouter()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -50,14 +61,35 @@ export function LoginForm({ dbReachable }: { dbReachable: boolean }) {
       <div className="w-full max-w-sm sm:max-w-md animate-fade-in">
         {/* Brand */}
         <div className="flex flex-col items-center text-center mb-6">
-          <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center shadow-glow-blue">
-            <Activity className="h-7 w-7 text-white" strokeWidth={2.5} />
-            <div className="absolute -inset-1.5 -z-10 rounded-2xl bg-blue-400/30 blur-lg" />
-          </div>
-          <h1 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
-            MonitorKarya
-          </h1>
-          <p className="mt-1 text-base text-slate-500 dark:text-slate-400">Pemantauan Bisnis Holding</p>
+          {holding ? (
+            <>
+              <div className="relative">
+                <BrandLogo name={holding.name} logoData={holding.logoData} size={88} tone="slate" className="shadow-xl" />
+                <div className="absolute -inset-2 -z-10 rounded-3xl bg-blue-400/25 blur-xl" />
+              </div>
+              <div className="mt-4 text-[11px] uppercase tracking-[0.22em] text-blue-600/80 dark:text-cyan-300/80">Inisiator · Holding</div>
+              <h1 className="mt-0.5 text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+                {holding.name}
+              </h1>
+              <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-cyan-400">
+                  <Activity className="h-3 w-3 text-white" strokeWidth={2.5} />
+                </span>
+                MonitorKarya · Pemantauan Bisnis Holding
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center shadow-glow-blue">
+                <Activity className="h-7 w-7 text-white" strokeWidth={2.5} />
+                <div className="absolute -inset-1.5 -z-10 rounded-2xl bg-blue-400/30 blur-lg" />
+              </div>
+              <h1 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+                MonitorKarya
+              </h1>
+              <p className="mt-1 text-base text-slate-500 dark:text-slate-400">Pemantauan Bisnis Holding</p>
+            </>
+          )}
         </div>
 
         {!dbReachable && (

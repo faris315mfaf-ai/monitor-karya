@@ -23,7 +23,7 @@ export async function GET() {
     user.scopeEntityId
       ? db.entity.findUnique({
           where: { id: user.scopeEntityId },
-          select: { id: true, name: true, code: true, type: true },
+          select: { id: true, name: true, code: true, type: true, logoData: true },
         })
       : Promise.resolve(null),
     user.role === 'PIC_PROYEK'
@@ -42,10 +42,17 @@ export async function GET() {
       : Promise.resolve([]),
   ])
 
-  // Holding di atas PT, supaya panel bisa menunjukkan "PT Sigma · Holding PT Bike".
-  const holding = entity
-    ? await db.entity.findFirst({ where: { type: 'HOLDING', isActive: true }, select: { name: true } })
-    : null
+  // Holding di atas PT (inisiator sistem), supaya panel bisa menunjukkan
+  // "PT Sigma · Holding PT Bike" lengkap dengan logonya. Akun yang ditempatkan
+  // langsung di holding memakai entitasnya sendiri.
+  const holding =
+    entity?.type === 'HOLDING'
+      ? entity
+      : await db.entity.findFirst({
+          where: { type: 'HOLDING', isActive: true },
+          select: { id: true, name: true, code: true, type: true, logoData: true },
+          orderBy: { createdAt: 'asc' },
+        })
 
   return NextResponse.json({
     id: user.id,
@@ -57,6 +64,7 @@ export async function GET() {
     avatarColor: user.avatarColor,
     entity,
     holding: holding?.name ?? null,
+    holdingBrand: holding ? { id: holding.id, name: holding.name, logoData: holding.logoData } : null,
     projects,
     divisions,
     lastLoginAt: row?.lastLoginAt ?? null,

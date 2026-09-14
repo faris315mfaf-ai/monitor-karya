@@ -521,6 +521,31 @@ di `src/components/dashboard/` dan `management-charts.tsx` bila diperlukan lagi.
   tab aktif meluncur (framer-motion `layoutId`). Semua hanya transform/opacity
   150–250 ms dan dimatikan pada `prefers-reduced-motion`.
 
+### Layar pembuka & logo inisiator (14 Sep 2026)
+
+Setiap kali masuk, aplikasi menampilkan layar pembuka sekali: logo holding
+(pemrakarsa sistem — "Holding PT Bike") di tengah, lalu kartu "Masuk sebagai"
+berisi nama, peran, dan logo perusahaan tempat akun ditempatkan. Layar ini
+hilang sendiri setelah ±3 detik atau saat diketuk, dan **tidak** muncul lagi
+saat halaman dimuat ulang — kuncinya waktu masuk terakhir (`lastLoginAt`),
+disimpan di `localStorage` (`mk-splash:<userId>:<lastLoginAt>`).
+
+Logo yang sama dipakai di:
+
+- halaman masuk (logo + nama holding di atas formulir),
+- navbar (logo holding menggantikan ikon MonitorKarya; sub-judulnya nama holding),
+- menu akun (lencana logo perusahaan di pojok avatar; baris "Perusahaan" dan
+  "Inisiator · Holding" di dropdown),
+- Pengaturan → Profil (logo perusahaan di kanan) dan Penempatan (baris
+  "Inisiator sistem").
+
+Sumbernya `Entity.logoData` yang diunggah Super Admin lewat **Perusahaan &
+Akun → Ubah**. Perusahaan tanpa logo memakai monogram dari namanya
+("PT Sigma" → SI, "PT Ratu Karya" → RK). Akun tingkat grup (Manajemen, Super
+Admin, TI) tidak punya perusahaan, jadi memakai logo holding. Kode: `src/lib/branding.ts`
+(muat data), `src/components/brand-logo.tsx` (tampilan logo/monogram),
+`src/components/splash-screen.tsx`.
+
 ## 4. Jalankan aplikasi
 
 ```bash
