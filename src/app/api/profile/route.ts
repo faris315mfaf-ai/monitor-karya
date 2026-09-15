@@ -43,7 +43,7 @@ export async function GET() {
   ])
 
   // Holding di atas PT (inisiator sistem), supaya panel bisa menunjukkan
-  // "PT Sigma · Holding PT Bike" lengkap dengan logonya. Akun yang ditempatkan
+  // "PT Sigma · PT. BIKE Tbk" lengkap dengan logonya. Akun yang ditempatkan
   // langsung di holding memakai entitasnya sendiri.
   const holding =
     entity?.type === 'HOLDING'

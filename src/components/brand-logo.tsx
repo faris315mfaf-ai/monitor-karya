@@ -8,8 +8,8 @@ import { cn } from '@/lib/utils'
  * halaman masuk, dan Pengaturan supaya rupanya sama di mana pun.
  */
 export function initialsOf(name: string): string {
-  // "Holding PT Bike" -> PB, "PT Ratu Karya" -> RK, "PT Sigma" -> SI.
-  const words = name.replace(/^(PT|Holding|Bpk\.|Ibu)\s+/i, '').split(' ').filter(Boolean)
+  // "PT. BIKE Tbk" -> BT, "PT Ratu Karya" -> RK, "PT Sigma" -> SI.
+  const words = name.replace(/^(PT\.?|Holding|Bpk\.|Ibu)\s+/i, '').split(' ').filter(Boolean)
   const mono = words.length === 1 ? words[0].slice(0, 2) : words.slice(0, 2).map((w) => w[0]).join('')
   return mono.toUpperCase() || '?'
 }

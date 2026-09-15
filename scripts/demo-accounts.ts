@@ -4,7 +4,7 @@
  *
  *   superadmin, owner      -> SUPERADMIN (seluruh grup)
  *   manajemen              -> MANAJEMEN
- *   holding                -> DIREKTUR_SDM_GA di Holding PT Bike
+ *   holding                -> DIREKTUR_SDM_GA di PT. BIKE Tbk
  *   adminptcontoh          -> ADMIN_PT PT Sigma
  *   kepaladivisi           -> KEPALA_DIVISI divisi pertama PT Sigma
  *   manager                -> PIC_PROYEK proyek pertama PT Sigma
@@ -23,9 +23,9 @@ type Spec = { username: string; email: string; name: string; role: string; title
 
 const SPECS: Spec[] = [
   { username: 'superadmin', email: 'deckemr@gmail.com', name: 'Super Admin', role: 'SUPERADMIN', title: 'Super Admin', avatarColor: '#0f172a', scope: 'GROUP' },
-  { username: 'owner', email: 'owner@bike.co.id', name: 'Owner Holding PT Bike', role: 'SUPERADMIN', title: 'Pemilik', avatarColor: '#1d4ed8', scope: 'GROUP' },
+  { username: 'owner', email: 'owner@bike.co.id', name: 'Owner PT. BIKE Tbk', role: 'SUPERADMIN', title: 'Pemilik', avatarColor: '#1d4ed8', scope: 'GROUP' },
   { username: 'manajemen', email: 'manajemen@bike.co.id', name: 'Manajemen Holding', role: 'MANAJEMEN', title: 'Manajemen Holding', avatarColor: '#16a34a', scope: 'GROUP' },
-  { username: 'holding', email: 'holding@bike.co.id', name: 'Direksi Holding PT Bike', role: 'DIREKTUR_SDM_GA', title: 'Direktur SDM & GA Holding', avatarColor: '#0d9488', scope: 'HOLDING' },
+  { username: 'holding', email: 'holding@bike.co.id', name: 'Direksi PT. BIKE Tbk', role: 'DIREKTUR_SDM_GA', title: 'Direktur SDM & GA Holding', avatarColor: '#0d9488', scope: 'HOLDING' },
   { username: 'adminptcontoh', email: 'adminptcontoh@karya.co.id', name: 'Admin PT Sigma (contoh)', role: 'ADMIN_PT', title: 'Admin PT', avatarColor: '#2563eb', scope: 'PT' },
   { username: 'kepaladivisi', email: 'kepaladivisi@karya.co.id', name: 'Kepala Divisi (contoh)', role: 'KEPALA_DIVISI', title: 'Kepala Divisi', avatarColor: '#7c3aed', scope: 'PT' },
   { username: 'manager', email: 'manager@karya.co.id', name: 'Manager Proyek (contoh)', role: 'PIC_PROYEK', title: 'Manager Proyek', avatarColor: '#0d9488', scope: 'PT' },

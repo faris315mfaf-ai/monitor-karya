@@ -352,12 +352,12 @@ Cara kerjanya:
 
 ### Struktur perusahaan (seed 7 Sep 2026)
 
-Seed sekarang membuat **Holding PT Bike** dengan delapan anak perusahaan langsung di
+Seed sekarang membuat **PT. BIKE Tbk** sebagai holding dengan delapan anak perusahaan langsung di
 bawahnya — tanpa sub-holding, sektor, atau wilayah:
 
 | Kode | Nama |
 |---|---|
-| `HOLDING-BIKE` | Holding PT Bike |
+| `HOLDING-BIKE` | PT. BIKE Tbk |
 | `PT-SIGMA` | PT Sigma (rumah akun contoh) |
 | `PT-CIPTA` | PT Cipta |
 | `PT-FAHREZA` | PT Fahreza |
@@ -524,7 +524,7 @@ di `src/components/dashboard/` dan `management-charts.tsx` bila diperlukan lagi.
 ### Layar pembuka & logo inisiator (14 Sep 2026)
 
 Setiap kali masuk, aplikasi menampilkan layar pembuka sekali: logo holding
-(pemrakarsa sistem — "Holding PT Bike") di tengah, lalu kartu "Masuk sebagai"
+(pemrakarsa sistem — "PT. BIKE Tbk") di tengah, lalu kartu "Masuk sebagai"
 berisi nama, peran, dan logo perusahaan tempat akun ditempatkan. Layar ini
 hilang sendiri setelah ±3 detik atau saat diketuk, dan **tidak** muncul lagi
 saat halaman dimuat ulang — kuncinya waktu masuk terakhir (`lastLoginAt`),

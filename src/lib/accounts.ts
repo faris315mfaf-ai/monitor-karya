@@ -77,7 +77,7 @@ export function slugify(s: string): string {
 export function initialsOf(name: string): string {
   return (
     name
-      .replace(/^(PT|Holding)\s+/i, '')
+      .replace(/^(PT\.?|Holding)\s+/i, '')
       .replace(/^(Bpk\.|Ibu)\s*/i, '')
       .split(' ')
       .slice(0, 2)

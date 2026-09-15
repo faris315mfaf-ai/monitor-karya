@@ -1,7 +1,7 @@
 -- ============================================================
 -- MonitorKarya — seed STRUKTUR (10 Sep 2026)
 --
--- Holding PT Bike + 8 anak perusahaan, divisi, proyek, dan akun ber-username.
+-- PT. BIKE Tbk (holding) + 8 anak perusahaan, divisi, proyek, dan akun ber-username.
 -- SENGAJA TANPA data laporan/task/eskalasi/KPI: dashboard mulai kosong supaya
 -- diisi sendiri dan perubahannya terlihat.
 --
@@ -87,7 +87,7 @@ BEGIN
 
   -- ---------- hierarki: holding -> 8 PT, dengan identitas ----------
   INSERT INTO "Entity"(id,type,code,name,path,address,phone,email,website,"updatedAt")
-  VALUES (holding_id,'HOLDING','HOLDING-BIKE','Holding PT Bike','/holding/',
+  VALUES (holding_id,'HOLDING','HOLDING-BIKE','PT. BIKE Tbk','/holding/',
           'Jl. Jenderal Sudirman Kav. 52-53, Jakarta Selatan','+62 21 5150 000','corporate@bike.co.id','https://bike.co.id',now_utc);
   FOR i IN 1..8 LOOP
     pt_id := gen_random_uuid()::text;
@@ -100,10 +100,10 @@ BEGIN
   -- ---------- akun tingkat holding ----------
   INSERT INTO "User"(id,username,email,name,role,title,"scopeEntityId","avatarColor","updatedAt") VALUES
     (gen_random_uuid()::text,'superadmin','deckemr@gmail.com','Super Admin','SUPERADMIN','Super Admin',NULL,'#0f172a',now_utc),
-    (gen_random_uuid()::text,'owner','owner@bike.co.id','Owner Holding PT Bike','SUPERADMIN','Pemilik',NULL,'#1d4ed8',now_utc),
+    (gen_random_uuid()::text,'owner','owner@bike.co.id','Owner PT. BIKE Tbk','SUPERADMIN','Pemilik',NULL,'#1d4ed8',now_utc),
     (gen_random_uuid()::text,'manajemen','manajemen@bike.co.id','Manajemen Holding','MANAJEMEN','Manajemen Holding',NULL,'#16a34a',now_utc),
-    (gen_random_uuid()::text,'holding','holding@bike.co.id','Direksi Holding PT Bike','DIREKTUR_SDM_GA','Direktur SDM & GA Holding',holding_id,'#0d9488',now_utc),
-    (gen_random_uuid()::text,'adminbike','adminbike@bike.co.id','Admin Holding PT Bike','ADMIN_PT','Admin Holding',holding_id,'#2563eb',now_utc);
+    (gen_random_uuid()::text,'holding','holding@bike.co.id','Direksi PT. BIKE Tbk','DIREKTUR_SDM_GA','Direktur SDM & GA Holding',holding_id,'#0d9488',now_utc),
+    (gen_random_uuid()::text,'adminbike','adminbike@bike.co.id','Admin PT. BIKE Tbk','ADMIN_PT','Admin Holding',holding_id,'#2563eb',now_utc);
 
   -- ---------- per PT: admin, direktur, 3 divisi + kadiv, 2 proyek + manager ----------
   FOR r IN SELECT * FROM tmp_pt ORDER BY tmp_pt.i LOOP
