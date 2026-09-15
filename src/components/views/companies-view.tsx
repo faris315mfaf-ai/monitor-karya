@@ -10,94 +10,21 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { HOLDING_POSITION_OPTIONS, POSITION_OPTIONS, ROLE_LABELS } from '@/lib/constants'
+import { AccountDialog, ResetPasswordDialog } from '@/components/account-dialog'
+import { AccountManager } from '@/components/account-manager'
+import { HOLDING_POSITION_OPTIONS, POSITION_OPTIONS } from '@/lib/constants'
 import { formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
+  DEFAULT_PASSWORD, call, field, initialsOf, roleLabel, selectClass, sheetClass, slugify,
+  type CompaniesData, type Company, type UserRow,
+} from '@/lib/accounts'
+import {
   AlertTriangle, Building2, Check, CheckCircle2, ChevronDown, FolderKanban, Globe, ImagePlus, KeyRound, Loader2, Mail,
-  MapPin, Pencil, Phone, Plus, Power, Shield, Trash2, UserPlus, Users, X,
+  MapPin, Pencil, Phone, Plus, Power, Shield, Trash2, UserCog, UserPlus, Users, X,
 } from 'lucide-react'
 
-// ------------------------------------------------------------------
-// Bentuk data dari /api/companies
-// ------------------------------------------------------------------
-
-type UserRow = {
-  id: string
-  name: string
-  username: string | null
-  email: string
-  role: string
-  title: string | null
-  phone: string | null
-  isActive: boolean
-  lastLoginAt: string | null
-  avatarColor: string | null
-  hasPassword: boolean
-  scopeEntityId: string | null
-  divisionId: string | null
-  divisionName: string | null
-  projectId: string | null
-  projectName: string | null
-}
-
-type Company = {
-  id: string
-  code: string
-  name: string
-  type: 'HOLDING' | 'PT'
-  parentId: string | null
-  parentName: string | null
-  logoData: string | null
-  address: string | null
-  phone: string | null
-  email: string | null
-  website: string | null
-  isActive: boolean
-  users: UserRow[]
-  divisions: { id: string; name: string; headUserId: string | null; headName: string | null }[]
-  projects: { id: string; code: string; name: string; lifecycle: string; picUserId: string | null; picName: string | null }[]
-  counts: { users: number; divisions: number; projects: number; dailyReports: number; weeklyReports: number }
-}
-
-type Data = {
-  companies: Company[]
-  holdingUsers: UserRow[]
-  totals: { companies: number; users: number; divisions: number; projects: number }
-  me: string
-}
-
-const DEFAULT_PASSWORD = '1234'
-
-const field = 'bg-white/80 dark:bg-slate-900/60 h-11 text-base'
-const selectClass =
-  'h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-3 text-base text-slate-800 dark:text-slate-100 disabled:opacity-70'
-
-function slugify(s: string): string {
-  return s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '').slice(0, 24)
-}
-
-function initialsOf(name: string): string {
-  return name.replace(/^(PT|Holding)\s+/i, '').replace(/^(Bpk\.|Ibu)\s*/i, '').split(' ').slice(0, 2).map((w) => w[0] ?? '').join('').toUpperCase() || '?'
-}
-
-function roleLabel(role: string): string {
-  return POSITION_OPTIONS.find((o) => o.role === role)?.label ?? HOLDING_POSITION_OPTIONS.find((o) => o.role === role)?.label ?? ROLE_LABELS[role] ?? role
-}
-
-async function call(url: string, method: string, body?: unknown): Promise<{ ok: boolean; error?: string; json: Record<string, unknown> }> {
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    })
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
-    return { ok: res.ok, error: res.ok ? undefined : ((json.error as string) || 'Gagal'), json }
-  } catch {
-    return { ok: false, error: 'Tidak dapat menghubungi server.', json: {} }
-  }
-}
+type Data = CompaniesData
 
 // ------------------------------------------------------------------
 // Halaman
@@ -180,6 +107,22 @@ export function CompaniesView() {
       </div>
       {data.companies.length === 0 && <EmptyState title="Belum ada perusahaan" description="Mulai dengan menambahkan holding." />}
 
+      {/* Semua akun grup — pencarian lintas perusahaan */}
+      <section className="glass rounded-2xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
+            <UserCog className="h-4.5 w-4.5 text-violet-600 dark:text-violet-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-base font-semibold text-slate-800 dark:text-slate-100">Semua akun</div>
+            <div className="text-[13px] text-slate-500 dark:text-slate-400">
+              Cari akun mana pun lintas perusahaan, lalu buat, ubah, setel ulang kata sandi, nonaktifkan, atau hapus.
+            </div>
+          </div>
+        </div>
+        <AccountManager />
+      </section>
+
       {creating && <CompanyDialog mode="create" holdings={holdings} onClose={() => setCreating(false)} onSaved={reload} />}
       {editing && (
         <CompanyDialog
@@ -192,9 +135,11 @@ export function CompaniesView() {
         />
       )}
       {holdingUser && (
-        <UserDialog
+        <AccountDialog
+          companies={data.companies}
           company={null}
           user={holdingUser.user}
+          me={data.me}
           onClose={() => setHoldingUser(null)}
           onSaved={reload}
         />
@@ -488,14 +433,6 @@ function Section({ icon: Icon, title, hint, children, tone = 'blue' }: { icon: t
   )
 }
 
-// `sm:max-w-none` mengalahkan `sm:max-w-lg` bawaan DialogContent — tanpa itu
-// lembar ini tertahan 512 px di desktop.
-const sheetClass = cn(
-  'glass-modal p-0 gap-0 flex flex-col overflow-hidden',
-  'w-screen h-dvh max-w-none rounded-none top-0 left-0 translate-x-0 translate-y-0',
-  'sm:w-[min(96vw,60rem)] sm:max-w-none sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2'
-)
-
 function CompanyDialog({
   mode,
   company,
@@ -735,7 +672,14 @@ function CompanyDialog({
         </div>
 
         {userDialog && company && (
-          <UserDialog company={company} user={userDialog.user} onClose={() => setUserDialog(null)} onSaved={onSaved} />
+          <AccountDialog
+            company={company}
+            user={userDialog.user}
+            me={me}
+            lockCompany
+            onClose={() => setUserDialog(null)}
+            onSaved={onSaved}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -808,177 +752,6 @@ function PositionRow({ draft: d, index, options, onChange, onRemove }: { draft: 
 // ------------------------------------------------------------------
 // Pop-up akun (tambah / ubah)
 // ------------------------------------------------------------------
-
-function UserDialog({ company, user, onClose, onSaved }: { company: Company | null; user: UserRow | null; onClose: () => void; onSaved: () => void }) {
-  const editing = Boolean(user)
-  const options = company ? (company.type === 'HOLDING' ? [...POSITION_OPTIONS, ...HOLDING_POSITION_OPTIONS] : POSITION_OPTIONS) : HOLDING_POSITION_OPTIONS
-  const [name, setName] = useState(user?.name ?? '')
-  const [username, setUsername] = useState(user?.username ?? '')
-  const [usernameTouched, setUsernameTouched] = useState(Boolean(user))
-  const [email, setEmail] = useState(user?.email ?? '')
-  const [role, setRole] = useState(user?.role ?? options[0]?.role ?? 'ADMIN_PT')
-  const [title, setTitle] = useState(user?.title ?? '')
-  const [phone, setPhone] = useState(user?.phone ?? '')
-  const [password, setPassword] = useState(editing ? '' : DEFAULT_PASSWORD)
-  const [divisionId, setDivisionId] = useState(user?.divisionId ?? '')
-  const [divisionName, setDivisionName] = useState('')
-  const [projectId, setProjectId] = useState(user?.projectId ?? '')
-  const [projectName, setProjectName] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-
-  async function save() {
-    setBusy(true)
-    setErr(null)
-    const link = {
-      divisionId: role === 'KEPALA_DIVISI' && divisionId && divisionId !== '__new__' ? divisionId : undefined,
-      divisionName: role === 'KEPALA_DIVISI' && (divisionId === '__new__' || !divisionId) ? divisionName || undefined : undefined,
-      projectId: role === 'PIC_PROYEK' && projectId && projectId !== '__new__' ? projectId : undefined,
-      projectName: role === 'PIC_PROYEK' && (projectId === '__new__' || !projectId) ? projectName || undefined : undefined,
-    }
-    const r = editing
-      ? await call('/api/companies/users', 'PATCH', { id: user!.id, name, username, email, role, title, phone, ...(company ? link : {}) })
-      : await call('/api/companies/users', 'POST', { entityId: company?.id ?? null, name, username, email: email || undefined, password: password || undefined, role, title: title || undefined, phone: phone || undefined, ...link })
-    setBusy(false)
-    if (!r.ok) {
-      setErr(r.error ?? 'Gagal menyimpan')
-      return
-    }
-    onSaved()
-    onClose()
-  }
-
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent showCloseButton={false} className={cn(sheetClass, 'sm:w-[min(96vw,44rem)]')}>
-        <DialogHeader className="px-5 sm:px-7 pt-5 pb-4 border-b border-white/40 dark:border-white/10 text-left">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <DialogTitle className="text-2xl font-bold tracking-tight">{editing ? 'Ubah Akun' : 'Tambah Posisi & Akun'}</DialogTitle>
-              <DialogDescription className="text-sm mt-0.5">{company ? company.name : 'Akun tingkat grup'}{editing && user?.username ? ` · ${user.username}` : ''}</DialogDescription>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Tutup" className="shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-500/10 dark:hover:bg-white/10">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-5 sm:px-7 py-5 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="u-role" className="text-sm">Posisi / peran</Label>
-              <select id="u-role" value={role} onChange={(e) => setRole(e.target.value)} className={selectClass}>
-                {options.map((o) => (
-                  <option key={o.role} value={o.role}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">{options.find((o) => o.role === role)?.hint}</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-name" className="text-sm">Nama <span className="text-rose-500">*</span></Label>
-              <Input id="u-name" value={name} onChange={(e) => { setName(e.target.value); if (!usernameTouched) setUsername(slugify(e.target.value)) }} className={field} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-username" className="text-sm">Username <span className="text-rose-500">*</span></Label>
-              <Input id="u-username" value={username} onChange={(e) => { setUsername(e.target.value.toLowerCase()); setUsernameTouched(true) }} className={cn(field, 'font-mono')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-email" className="text-sm">Email</Label>
-              <Input id="u-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={username ? `${username}@karya.co.id` : ''} className={field} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-title" className="text-sm">Jabatan</Label>
-              <Input id="u-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={options.find((o) => o.role === role)?.label} className={field} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-phone" className="text-sm">Telepon</Label>
-              <Input id="u-phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={field} />
-            </div>
-            {!editing && (
-              <div className="space-y-1.5">
-                <Label htmlFor="u-password" className="text-sm">Kata sandi awal</Label>
-                <Input id="u-password" value={password} onChange={(e) => setPassword(e.target.value)} className={cn(field, 'font-mono')} />
-              </div>
-            )}
-            {company && role === 'KEPALA_DIVISI' && (
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-sm">Divisi yang dipimpin</Label>
-                <select value={divisionId} onChange={(e) => setDivisionId(e.target.value)} className={selectClass}>
-                  <option value="">— tidak diubah —</option>
-                  {company.divisions.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}{d.headName ? ` (kini: ${d.headName})` : ''}</option>
-                  ))}
-                  <option value="__new__">+ Divisi baru…</option>
-                </select>
-                {divisionId === '__new__' && <Input value={divisionName} onChange={(e) => setDivisionName(e.target.value)} placeholder="Nama divisi baru" className={field} />}
-              </div>
-            )}
-            {company && role === 'PIC_PROYEK' && (
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-sm">Proyek yang dipegang</Label>
-                <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={selectClass}>
-                  <option value="">— tidak diubah —</option>
-                  {company.projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}{p.picName ? ` (kini: ${p.picName})` : ''}</option>
-                  ))}
-                  <option value="__new__">+ Proyek baru…</option>
-                </select>
-                {projectId === '__new__' && <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Nama proyek baru" className={field} />}
-              </div>
-            )}
-          </div>
-          {err && (
-            <p className="text-sm text-rose-700 dark:text-rose-300 flex items-start gap-2"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> {err}</p>
-          )}
-        </div>
-        <div className="px-5 sm:px-7 py-4 border-t border-white/40 dark:border-white/10 flex gap-2 justify-end bg-white/40 dark:bg-slate-900/40">
-          <Button variant="ghost" onClick={onClose} disabled={busy} className="h-12 px-5 text-base">Batal</Button>
-          <Button onClick={save} disabled={busy || !name.trim() || !username.trim()} className="h-12 px-6 text-base bg-gradient-to-r from-violet-600 to-violet-500 text-white">
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />} {editing ? 'Simpan perubahan' : 'Buat akun'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
-  const [password, setPassword] = useState(DEFAULT_PASSWORD)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  async function save() {
-    setBusy(true)
-    setErr(null)
-    const r = await call('/api/companies/users', 'PATCH', { id: user.id, password })
-    setBusy(false)
-    if (!r.ok) {
-      setErr(r.error ?? 'Gagal')
-      return
-    }
-    onSaved()
-    onClose()
-  }
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="glass-modal max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-xl flex items-center gap-2"><KeyRound className="h-5 w-5 text-amber-600" /> Setel ulang kata sandi</DialogTitle>
-          <DialogDescription className="text-sm">{user.name} · <span className="font-mono">{user.username ?? user.email}</span></DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="rp-pass" className="text-sm">Kata sandi baru (minimal 4 karakter)</Label>
-          <Input id="rp-pass" value={password} onChange={(e) => setPassword(e.target.value)} className={cn(field, 'font-mono')} />
-          {err && <p className="text-sm text-rose-700 dark:text-rose-300">{err}</p>}
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
-          <Button onClick={save} disabled={busy || password.length < 4} className="bg-gradient-to-r from-amber-600 to-amber-500 text-white">
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />} Simpan
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 /** Pita kecil di dashboard Super Admin: hitungan + tombol tambah perusahaan. */
 export function SuperadminStrip() {

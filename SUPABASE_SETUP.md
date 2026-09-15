@@ -546,6 +546,45 @@ Admin, TI) tidak punya perusahaan, jadi memakai logo holding. Kode: `src/lib/bra
 (muat data), `src/components/brand-logo.tsx` (tampilan logo/monogram),
 `src/components/splash-screen.tsx`.
 
+### Meja akun di Pengaturan & ganti kata sandi sendiri (15 Sep 2026)
+
+**Semua orang** kini bisa mengganti kata sandinya sendiri lewat **Pengaturan →
+Kata sandi**: isi kata sandi saat ini, kata sandi baru, lalu ulangi. Kata sandi
+lama wajib benar (`POST /api/profile/password`), jadi layar yang ditinggal
+terbuka tidak bisa dipakai orang lain untuk mengunci pemiliknya. Minimal 4
+karakter, dan kata sandi baru tidak boleh sama dengan yang lama.
+
+**Super Admin** mendapat panel **Pengaturan → Akun & pengguna** — meja akun yang
+sama juga muncul sebagai bagian "Semua akun" di tab *Perusahaan & Akun*. Panel
+ini menampilkan seluruh akun grup dalam satu daftar yang bisa:
+
+- dicari (nama, username, email, jabatan, nama perusahaan) dan disaring per
+  penempatan atau per posisi,
+- **Tambah akun** — satu pop-up berisi perusahaan/penempatan, posisi, nama,
+  username, kata sandi awal, email, jabatan, telepon, serta divisi atau proyek
+  yang dipegang,
+- **Ubah** akun mana pun — seluruh kolom di atas, termasuk memindahkan akun ke
+  perusahaan lain, mengganti kata sandi langsung dari pop-up yang sama
+  (dikosongkan bila tidak diubah), menonaktifkan, dan menghapus,
+- **Setel ulang kata sandi**, **nonaktifkan/aktifkan**, dan **hapus** langsung
+  dari barisnya.
+
+Username otomatis dibuat dari nama saat mengetik dan masih bisa ditimpa;
+aturannya 3–32 huruf kecil/angka dengan titik, garis bawah, atau strip. Email
+kosong akan terisi `<username>@karya.co.id`, kata sandi kosong memakai kata
+sandi contoh (`SEED_PASSWORD`, bawaan `1234`).
+
+Pagar yang tetap berlaku: akun sendiri tidak bisa dinonaktifkan atau dihapus,
+Super Admin aktif terakhir tidak bisa diturunkan/dinonaktifkan/dihapus, posisi
+perusahaan (Admin PT, Kepala Divisi, Manager Proyek, Direktur) wajib punya
+perusahaan, dan hanya peran dengan kemampuan `companies:manage` yang boleh
+memakai endpoint akun. Setiap pembuatan, perubahan, penyetelan ulang kata sandi,
+dan penghapusan tercatat di Audit Trail.
+
+Kode: `src/lib/accounts.ts` (tipe & pembantu bersama), `src/components/account-dialog.tsx`
+(pop-up akun), `src/components/account-manager.tsx` (daftar & pencarian),
+`src/app/api/profile/password/route.ts` (ganti kata sandi sendiri).
+
 ## 4. Jalankan aplikasi
 
 ```bash
