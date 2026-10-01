@@ -20,7 +20,7 @@ import { formatDate, formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
   AlertTriangle, ArrowRight, Building2, Calendar, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, FolderKanban,
-  Filter, Link2, Loader2, Pencil, Plus, RotateCcw, Search, Target, ThumbsDown, ThumbsUp, Trash2, User, X, XCircle,
+  Filter, Link2, Loader2, Pencil, Plus, RotateCcw, Search, ShieldOff, Target, ThumbsDown, ThumbsUp, Trash2, User, X, XCircle,
 } from 'lucide-react'
 
 type Approval = { role: string; decision: 'DISETUJUI' | 'DITOLAK' | null; note: string | null; decidedAt: string | null; decidedByName: string | null }
@@ -44,6 +44,7 @@ type ProjectItem = {
   startDate: string | null
   targetEndDate: string | null
   approvedByName: string | null
+  noApproval: boolean
   entity: { id: string; name: string; code: string; region: string | null }
   latestReport: { status: string; progressPct: number; reportDate: string; isLate: boolean } | null
   permissions: { manage: boolean; setLifecycle: boolean; approve: boolean; resubmit: boolean }
@@ -202,7 +203,27 @@ export function ProjectsView() {
 }
 
 /** Slot tanda tangan sepanjang rantai: siapa sudah, siapa giliran, siapa menolak. */
-function ApprovalTrail({ approvals, pendingRole, chainless, proposerName }: { approvals: Approval[]; pendingRole: string | null; chainless: boolean; proposerName: string | null }) {
+function ApprovalTrail({
+  approvals,
+  pendingRole,
+  chainless,
+  noApproval,
+  proposerName,
+}: {
+  approvals: Approval[]
+  pendingRole: string | null
+  chainless: boolean
+  noApproval: boolean
+  proposerName: string | null
+}) {
+  if (noApproval) {
+    return (
+      <p className="text-[12px] text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
+        <ShieldOff className="h-3.5 w-3.5 shrink-0 mt-px text-amber-600" />
+        Tahap awal tanpa persetujuan — didaftarkan {proposerName ?? 'pengaju'} dan langsung aktif. Persetujuan menyusul saat proyek naik tahap.
+      </p>
+    )
+  }
   if (chainless) {
     return (
       <p className="text-[12px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
@@ -340,6 +361,15 @@ function ProjectCard({ project, onChanged, onEdit }: { project: ProjectItem; onC
         <div className="flex items-center gap-1.5 flex-wrap">
           <Badge variant="outline" className="text-[11px] h-4 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">{PROJECT_PHASE_LABELS[project.phase] ?? project.phase}</Badge>
           <Badge variant="outline" className="text-[11px] h-4 px-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/5">{PROJECT_LIFECYCLE_LABELS[project.lifecycle] ?? project.lifecycle}</Badge>
+          {project.noApproval && (
+            <Badge
+              variant="outline"
+              title="Didaftarkan di tahap awal tanpa melewati rantai persetujuan"
+              className="text-[11px] h-4 px-1 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5"
+            >
+              <ShieldOff className="h-3 w-3" /> Tanpa persetujuan
+            </Badge>
+          )}
         </div>
 
         {(proposed || rejected) && (
@@ -349,7 +379,13 @@ function ProjectCard({ project, onChanged, onEdit }: { project: ProjectItem; onC
             <div className="text-xs text-slate-500 dark:text-slate-400">
               Diajukan {project.proposedBy?.name ?? '—'}{project.proposedAt ? ` · ${formatDateTime(project.proposedAt)}` : ''}
             </div>
-            <ApprovalTrail approvals={project.approvals} pendingRole={project.pendingRole} chainless={project.approvalChain.length === 0} proposerName={project.proposedBy?.name ?? null} />
+            <ApprovalTrail
+              approvals={project.approvals}
+              pendingRole={project.pendingRole}
+              chainless={project.approvalChain.length === 0}
+              noApproval={project.noApproval}
+              proposerName={project.proposedBy?.name ?? null}
+            />
             {rejected && project.approvals.find((a) => a.decision === 'DITOLAK')?.note && (
               <p className="text-[13px] rounded-lg bg-rose-500/10 border border-rose-500/25 px-2.5 py-1.5 text-rose-700 dark:text-rose-300">
                 <strong>Alasan:</strong> {project.approvals.find((a) => a.decision === 'DITOLAK')?.note}
@@ -437,6 +473,7 @@ function ProjectFormDialog({
   onClose: () => void
   onDone: (created: { lifecycle: string } | null) => void
 }) {
+  const { user: me } = useApp()
   const editing = mode === 'edit' && project
   const [entityId, setEntityId] = useState(project?.entity.id ?? '')
   const optionsUrl = `/api/projects?options=1${entityId ? `&entityId=${entityId}` : ''}`
@@ -451,6 +488,8 @@ function ProjectFormDialog({
   const [targetEndDate, setTargetEndDate] = useState(toDateInput(project?.targetEndDate ?? null))
   const [related, setRelated] = useState<string[]>(project?.relatedEntities.map((e) => e.id) ?? [])
   const [lifecycle, setLifecycle] = useState(project?.lifecycle ?? '')
+  // Proyek tahap awal boleh didaftarkan tanpa menunggu rantai persetujuan.
+  const [skipApproval, setSkipApproval] = useState(false)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -458,6 +497,9 @@ function ProjectFormDialog({
   const ownerId = opt?.entity?.id ?? entityId
   const relatedChoices = useMemo(() => (opt?.entities ?? []).filter((e) => e.id !== ownerId), [opt, ownerId])
   const chain = opt?.chain ?? []
+  const earlyPhase = phase === '' || phase === 'INISIASI'
+  const canSkip = !editing && chain.length > 0 && earlyPhase
+  const skipping = canSkip && skipApproval
 
   async function submit() {
     setBusy(true)
@@ -467,14 +509,14 @@ function ProjectFormDialog({
       description,
       purpose,
       phase,
-      picUserId: opt?.picIsSelf && !editing ? undefined : picUserId,
+      picUserId,
       startDate,
       targetEndDate,
       relatedEntityIds: related,
     }
     const res = editing
       ? await call('/api/projects', 'PATCH', { id: project!.id, ...payload, ...(lifecycle && lifecycle !== project!.lifecycle ? { lifecycle } : {}) })
-      : await call('/api/projects', 'POST', { ...payload, entityId: ownerId || undefined })
+      : await call('/api/projects', 'POST', { ...payload, entityId: ownerId || undefined, skipApproval: skipping })
     setBusy(false)
     if (!res.ok) {
       const list = res.json.errors
@@ -505,9 +547,11 @@ function ProjectFormDialog({
               <DialogDescription className="text-sm mt-0.5">
                 {editing
                   ? `${project!.code} · ${project!.entity.name}`
-                  : chain.length > 0
-                    ? `Perlu persetujuan berurutan: ${chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')}.`
-                    : 'Peran Anda tidak memerlukan persetujuan — proyek langsung aktif.'}
+                  : skipping
+                    ? 'Tahap awal tanpa persetujuan — proyek langsung aktif.'
+                    : chain.length > 0
+                      ? `Perlu persetujuan berurutan: ${chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')}.`
+                      : 'Peran Anda tidak memerlukan persetujuan — proyek langsung aktif.'}
               </DialogDescription>
             </div>
             <button type="button" onClick={onClose} aria-label="Tutup" className="shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-500/10 dark:hover:bg-white/10">
@@ -544,27 +588,34 @@ function ProjectFormDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="pp-phase" className="text-sm">Tahap awal <span className="text-slate-400 font-normal">(opsional)</span></Label>
-              <select id="pp-phase" value={phase} onChange={(e) => setPhase(e.target.value)} className={selectClass}>
+              <select
+                id="pp-phase"
+                value={phase}
+                onChange={(e) => {
+                  setPhase(e.target.value)
+                  // Jalur tanpa persetujuan hanya untuk tahap awal.
+                  if (e.target.value !== '' && e.target.value !== 'INISIASI') setSkipApproval(false)
+                }}
+                className={selectClass}
+              >
                 <option value="">Belum ditentukan (dianggap Inisiasi)</option>
                 {Object.entries(PROJECT_PHASE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-pic" className="text-sm">PIC / Manager proyek</Label>
-              {opt?.picIsSelf && !editing ? (
-                <div className="h-11 flex items-center rounded-md border border-slate-200/70 dark:border-slate-700 bg-slate-500/5 px-3 text-base text-slate-700 dark:text-slate-200">Anda sendiri</div>
-              ) : (
-                <select id="pp-pic" value={picUserId} onChange={(e) => setPicUserId(e.target.value)} disabled={optLoading} className={selectClass}>
-                  <option value="">Tentukan nanti</option>
-                  {(opt?.candidates ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.activeProjects > 0 ? ` · memegang ${c.activeProjects} proyek` : ' · belum memegang proyek'}</option>
-                  ))}
-                  {editing && project!.picUserId && !(opt?.candidates ?? []).some((c) => c.id === project!.picUserId) && (
-                    <option value={project!.picUserId}>{project!.picName}</option>
-                  )}
-                </select>
-              )}
-              {opt && !opt.picIsSelf && ownerId && opt.candidates.length === 0 && (
+              <Label htmlFor="pp-pic" className="text-sm">PIC / Manager proyek <span className="text-slate-400 font-normal">(opsional)</span></Label>
+              <select id="pp-pic" value={picUserId} onChange={(e) => setPicUserId(e.target.value)} disabled={optLoading} className={selectClass}>
+                <option value="">Kosongkan — tentukan nanti</option>
+                {(opt?.candidates ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.id === me.id ? ' (Anda)' : ''}{c.activeProjects > 0 ? ` · memegang ${c.activeProjects} proyek` : ' · belum memegang proyek'}
+                  </option>
+                ))}
+                {editing && project!.picUserId && !(opt?.candidates ?? []).some((c) => c.id === project!.picUserId) && (
+                  <option value={project!.picUserId}>{project!.picName}</option>
+                )}
+              </select>
+              {opt && ownerId && opt.candidates.length === 0 && (
                 <p className="text-xs text-amber-700 dark:text-amber-300">Belum ada akun Manager Proyek di PT ini.</p>
               )}
             </div>
@@ -619,6 +670,34 @@ function ProjectFormDialog({
             </div>
           )}
 
+          {!editing && chain.length > 0 && (
+            <label
+              htmlFor="pp-skip"
+              className={cn(
+                'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer transition-colors',
+                skipping ? 'border-amber-500/50 bg-amber-500/10' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-500/5',
+                !earlyPhase && 'opacity-60 cursor-not-allowed'
+              )}
+            >
+              <input
+                id="pp-skip"
+                type="checkbox"
+                checked={skipping}
+                disabled={!canSkip}
+                onChange={(e) => setSkipApproval(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-amber-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">Daftarkan tanpa persetujuan (tahap awal)</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {earlyPhase
+                    ? `Proyek langsung aktif tanpa menunggu ${chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')}. Tercatat di kartu proyek dan jejak audit.`
+                    : 'Hanya untuk tahap awal (Inisiasi). Ubah tahapnya bila ingin memakai jalur ini.'}
+                </span>
+              </span>
+            </label>
+          )}
+
           {errors.length > 0 && (
             <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 space-y-1">
               {errors.map((e, i) => (
@@ -632,7 +711,7 @@ function ProjectFormDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy} className="h-12 px-5 text-base">Batal</Button>
           <Button onClick={submit} disabled={busy || !valid} className="h-12 px-6 text-base bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-glow-blue">
             {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : editing ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-            {editing ? 'Simpan perubahan' : chain.length > 0 ? 'Ajukan' : 'Buat proyek'}
+            {editing ? 'Simpan perubahan' : chain.length > 0 && !skipping ? 'Ajukan' : 'Buat proyek'}
           </Button>
         </div>
       </DialogContent>

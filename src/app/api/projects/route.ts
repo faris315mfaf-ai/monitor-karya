@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { approvalChainFor, can, canSignSlot, isMasterRole, pendingSlot } from '@/lib/rbac'
+import { NO_APPROVAL_LABEL } from '@/lib/constants'
 import { Prisma } from '@prisma/client'
 
 /**
@@ -92,6 +93,8 @@ function format(p: ProjectRow, user: SessionUser) {
     targetEndDate: p.targetEndDate,
     approvedByName: p.approvedByName,
     approvedAt: p.approvedAt,
+    // Didaftarkan di tahap awal tanpa melewati rantai persetujuan.
+    noApproval: p.approvalChain.length === 0 && p.approvedByName === NO_APPROVAL_LABEL,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     entity: p.entity,
@@ -255,9 +258,11 @@ async function readFields(body: Record<string, unknown>, entityId: string, opts:
 }
 
 /**
- * POST — ajukan proyek. PIC Proyek otomatis menjadi PIC-nya; peran lain
- * memilih PIC (atau menentukan nanti). Pengaju di puncak rantai membuat proyek
- * langsung AKTIF.
+ * POST — ajukan proyek. PIC boleh dikosongkan oleh siapa pun yang mengajukan
+ * dan ditentukan belakangan. Pengaju di puncak rantai membuat proyek langsung
+ * AKTIF; pengaju lain bisa memilih `skipApproval` untuk mendaftarkan proyek
+ * tahap awal (Inisiasi) tanpa menunggu persetujuan — proyek langsung aktif dan
+ * ditandai supaya jelas bahwa rantai persetujuannya dilewati (1 Okt 2026).
  */
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
@@ -278,8 +283,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Proyek harus diajukan untuk sebuah PT yang aktif' }, { status: 400 })
   }
 
-  // PIC selalu memegang proyek yang diajukannya sendiri.
-  if (user.role === 'PIC_PROYEK') body.picUserId = user.id
   const { errors, data, related } = await readFields(body, entity.id, { partial: false })
   const start = data.startDate instanceof Date ? data.startDate : null
   const end = data.targetEndDate instanceof Date ? data.targetEndDate : null
@@ -293,7 +296,14 @@ export async function POST(req: NextRequest) {
     code = `${entity.code}-PRJ-${String(n).padStart(2, '0')}`
   }
 
-  const chain = approvalChainFor(user.role)
+  // Proyek tahap awal boleh didaftarkan tanpa persetujuan; tahap berikutnya
+  // tetap lewat rantai seperti biasa.
+  const roleChain = approvalChainFor(user.role)
+  const skipApproval = body.skipApproval === true && roleChain.length > 0
+  if (skipApproval && ((data.phase as string) ?? 'INISIASI') !== 'INISIASI') {
+    return NextResponse.json({ error: 'Pengajuan tanpa persetujuan hanya untuk tahap awal (Inisiasi).' }, { status: 422 })
+  }
+  const chain = skipApproval ? [] : roleChain
   const active = chain.length === 0
   const project = await db.project.create({
     data: {
@@ -306,7 +316,7 @@ export async function POST(req: NextRequest) {
       approvalChain: chain,
       proposedById: user.id,
       proposedAt: new Date(),
-      ...(active ? { approvedAt: new Date(), approvedByName: user.name } : {}),
+      ...(active ? { approvedAt: new Date(), approvedByName: skipApproval ? NO_APPROVAL_LABEL : user.name } : {}),
       relatedEntities: { create: (related ?? []).map((entityId) => ({ entityId })) },
     },
     include: PROJECT_INCLUDE,
@@ -315,10 +325,10 @@ export async function POST(req: NextRequest) {
   await db.auditLog.create({
     data: {
       actorId: user.id,
-      action: active ? 'CREATE_PROJECT' : 'PROPOSE_PROJECT',
+      action: skipApproval ? 'CREATE_PROJECT_NO_APPROVAL' : active ? 'CREATE_PROJECT' : 'PROPOSE_PROJECT',
       targetType: 'PROJECT',
       targetId: project.id,
-      afterData: JSON.stringify({ code, name: project.name, phase: project.phase, chain, related: related ?? [] }),
+      afterData: JSON.stringify({ code, name: project.name, phase: project.phase, chain, skipApproval, related: related ?? [] }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       userAgent: req.headers.get('user-agent') || null,
     },

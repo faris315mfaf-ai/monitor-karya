@@ -391,8 +391,8 @@ Modul "Laporan Kemajuan" (tab `daily-input`) bertab **Harian / Mingguan / Bulana
 
 Siapa pun di rantai boleh mengajukan lewat pop-up **Ajukan Proyek**
 (`POST /api/projects`): nama, penjelasan, tujuan, tahap awal (opsional —
-kosong dianggap Inisiasi), PIC/Manager (PIC yang mengajukan otomatis menjadi
-PIC-nya), rencana mulai, target selesai, dan **PT-PT yang berkaitan** (boleh
+kosong dianggap Inisiasi), PIC/Manager (opsional — boleh dikosongkan dan
+ditentukan belakangan), rencana mulai, target selesai, dan **PT-PT yang berkaitan** (boleh
 lebih dari satu; proyek ikut tampil di daftar proyek PT terkait — tabel
 `ProjectEntity`, migrasi 0012).
 
@@ -410,6 +410,17 @@ ditandatangani **berurutan** lewat `POST /api/projects/approve`:
 Admin PT dan Direktur hanya menandatangani proyek PT-nya; TI dan Super Admin
 boleh menandatangani slot mana pun atas nama slot itu. Seluruh slot disetujui →
 `AKTIF`; satu penolakan → `DITOLAK` (bisa **diajukan ulang**: slot dikosongkan).
+
+**Tahap awal tanpa persetujuan (1 Okt 2026).** Di pop-up pengajuan ada pilihan
+**"Daftarkan tanpa persetujuan (tahap awal)"** (`skipApproval: true`). Proyek
+langsung `AKTIF` tanpa menunggu rantai, jadi gagasan yang masih tahap awal bisa
+dicatat dulu. Pilihan ini hanya hidup selama tahapnya **Inisiasi** — memilih
+tahap lain mematikannya, dan API menolak dengan 422 bila tetap dipaksakan.
+Proyek yang lewat jalur ini ditandai: `approvedByName` berisi
+`NO_APPROVAL_LABEL` ("Tanpa persetujuan (tahap awal)"), kartunya memakai lencana
+**Tanpa persetujuan**, dan jejak auditnya bernama `CREATE_PROJECT_NO_APPROVAL`.
+Pengaju yang rantainya memang kosong (Manajemen, Direksi Holding, TI, Super
+Admin) tidak melihat pilihan ini — proyeknya sudah langsung aktif.
 
 **Ubah / hapus / arsipkan** (`PATCH` & `DELETE /api/projects`, kapabilitas
 `project:manage`): Super Admin & TI untuk semua proyek, Admin PT untuk PT-nya,

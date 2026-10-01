@@ -28,6 +28,13 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
  * Posisi yang bisa ditambahkan Super Admin ke sebuah perusahaan (10 Sep 2026),
  * dan posisi tingkat holding yang tidak terpaku pada satu perusahaan.
  */
+/**
+ * Penanda di `Project.approvedByName` untuk proyek tahap awal yang didaftarkan
+ * tanpa melewati rantai persetujuan (1 Okt 2026). Disimpan sebagai teks supaya
+ * tetap terbaca di mana pun nama penyetuju ditampilkan.
+ */
+export const NO_APPROVAL_LABEL = 'Tanpa persetujuan (tahap awal)'
+
 export const POSITION_OPTIONS: { role: string; label: string; hint: string }[] = [
   { role: 'ADMIN_PT', label: 'Admin PT', hint: 'Mengisi & meneruskan laporan perusahaan' },
   { role: 'KEPALA_DIVISI', label: 'Kepala Divisi', hint: 'Capaian mingguan divisinya' },
