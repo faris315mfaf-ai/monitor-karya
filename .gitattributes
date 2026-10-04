@@ -1,0 +1,17 @@
+# Satu bentuk akhir baris untuk semua mesin (Windows & macOS/Linux):
+# repositori menyimpan LF, checkout menyesuaikan sistem masing-masing.
+* text=auto eol=lf
+
+# Berkas biner — jangan diutak-atik git.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.db binary
+*.sqlite binary
+
+# Lockfile: tampilkan utuh, jangan diringkas saat diff.
+package-lock.json -diff
+bun.lock -diff
