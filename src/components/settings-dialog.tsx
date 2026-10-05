@@ -12,7 +12,7 @@ import { useApp } from '@/components/app-provider'
 import { BrandLogo } from '@/components/brand-logo'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PROJECT_PHASE_LABELS } from '@/lib/constants'
-import { ROLE_DUTIES, can } from '@/lib/rbac'
+import { ROLE_DUTIES, canManageAccounts, canManageAllAccounts } from '@/lib/rbac'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { AlertTriangle, Building2, Check, Eye, EyeOff, FolderKanban, KeyRound, Landmark, Loader2, Monitor, Moon, Sun, UserCog, Users } from 'lucide-react'
@@ -136,7 +136,8 @@ function PasswordSection() {
  */
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { user } = useApp()
-  const manageAccounts = can(user.role, 'companies:manage')
+  const manageAccounts = canManageAccounts(user.role)
+  const manageAll = canManageAllAccounts(user.role)
   const { theme, setTheme } = useTheme()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -323,7 +324,9 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Akun &amp; pengguna</h3>
                   <p className="text-[13px] text-slate-500 dark:text-slate-400">
-                    Buat akun baru lengkap dengan username, kata sandi, nama, jabatan, dan penempatannya. Ubah, setel ulang kata sandi, nonaktifkan, atau hapus akun mana pun.
+                    {manageAll
+                      ? 'Buat akun baru lengkap dengan username, kata sandi, nama, jabatan, dan penempatannya. Ubah, setel ulang kata sandi, nonaktifkan, atau hapus akun mana pun.'
+                      : 'Buat akun untuk perusahaan Anda lengkap dengan username, kata sandi, nama, dan jabatan. Ubah, setel ulang kata sandi, nonaktifkan, atau hapus akun Admin PT, Kepala Divisi, dan Manager Proyek di PT Anda. Direktur Perusahaan dan akun tingkat grup diatur Super Admin.'}
                   </p>
                 </div>
               </div>

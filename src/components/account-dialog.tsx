@@ -27,6 +27,7 @@ export function AccountDialog({
   user,
   me,
   lockCompany,
+  allowedRoles,
   onClose,
   onSaved,
 }: {
@@ -39,6 +40,8 @@ export function AccountDialog({
   /** Id akun yang sedang dipakai, supaya tidak menonaktifkan diri sendiri. */
   me?: string
   lockCompany?: boolean
+  /** Posisi yang boleh dipilih; kosong berarti semua yang berlaku di sana. */
+  allowedRoles?: readonly string[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -46,7 +49,7 @@ export function AccountDialog({
   const all = companies ?? (company ? [company] : [])
   const [entityId, setEntityId] = useState(company?.id ?? '')
   const target = useMemo(() => all.find((c) => c.id === entityId) ?? null, [all, entityId])
-  const options = positionsFor(target)
+  const options = positionsFor(target, allowedRoles)
 
   const [name, setName] = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
@@ -71,7 +74,7 @@ export function AccountDialog({
   function changeEntity(id: string) {
     setEntityId(id)
     const next = all.find((c) => c.id === id) ?? null
-    const allowed = positionsFor(next)
+    const allowed = positionsFor(next, allowedRoles)
     if (!allowed.some((o) => o.role === role)) setRole(allowed[0]?.role ?? 'ADMIN_PT')
     setDivisionId('')
     setProjectId('')

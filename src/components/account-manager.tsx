@@ -19,9 +19,13 @@ import { KeyRound, Loader2, Pencil, Power, Search, Trash2, UserPlus, Users } fro
 type Row = { user: UserRow; company: Company | null }
 
 /**
- * Meja akun Super Admin (15 Sep 2026): satu daftar berisi seluruh akun grup,
- * bisa dicari dan disaring, dengan tombol buat, ubah, setel ulang kata sandi,
- * nonaktifkan, dan hapus. Dipakai di Pengaturan dan di tab Perusahaan & Akun.
+ * Meja akun (15 Sep 2026): satu daftar akun, bisa dicari dan disaring, dengan
+ * tombol buat, ubah, setel ulang kata sandi, nonaktifkan, dan hapus. Dipakai di
+ * Pengaturan dan di tab Perusahaan & Akun.
+ *
+ * Isinya mengikuti wewenang pemakainya (5 Okt 2026): Super Admin melihat
+ * seluruh grup, Admin PT hanya akun di PT-nya dan hanya posisi yang boleh ia
+ * kelola. API menjaga batas yang sama, jadi tampilan ini hanya cerminannya.
  */
 export function AccountManager({ className }: { className?: string }) {
   const { data, loading, error, reload } = useResource<CompaniesData>('/api/companies')
@@ -50,6 +54,13 @@ export function AccountManager({ className }: { className?: string }) {
       })
       .sort((a, b) => (a.company?.name ?? '').localeCompare(b.company?.name ?? '') || a.user.name.localeCompare(b.user.name))
   }, [data, q, scope, role])
+
+  const scoped = data?.scope === 'ENTITY'
+  const allowedRoles = data?.manageableRoles
+  // Meja terbatas: satu perusahaan saja, jadi tidak perlu saringan penempatan.
+  const onlyCompany = scoped ? (data?.companies[0] ?? null) : null
+  // Baris di luar wewenang tetap terlihat (supaya daftar PT utuh), tapi tidak bisa disentuh.
+  const canTouch = (u: UserRow) => !allowedRoles || allowedRoles.includes(u.role)
 
   const rolesPresent = useMemo(() => {
     const present = new Set(rows.map((r) => r.user.role))
@@ -95,19 +106,21 @@ export function AccountManager({ className }: { className?: string }) {
             className="bg-white/80 dark:bg-slate-900/60 h-11 text-base pl-9"
           />
         </div>
-        <Button onClick={() => setDialog({ user: null, company: null })} className="h-11 px-4 bg-gradient-to-r from-violet-600 to-violet-500 text-white shrink-0">
+        <Button onClick={() => setDialog({ user: null, company: onlyCompany })} className="h-11 px-4 bg-gradient-to-r from-violet-600 to-violet-500 text-white shrink-0">
           <UserPlus className="h-4 w-4" /> Tambah akun
         </Button>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Saring perusahaan" className={selectClass}>
-          <option value="all">Semua penempatan</option>
-          <option value="group">Tingkat grup (tanpa perusahaan)</option>
-          {(data?.companies ?? []).map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+      <div className={cn('grid gap-2', !scoped && 'sm:grid-cols-2')}>
+        {!scoped && (
+          <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Saring perusahaan" className={selectClass}>
+            <option value="all">Semua penempatan</option>
+            <option value="group">Tingkat grup (tanpa perusahaan)</option>
+            {(data?.companies ?? []).map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
         <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Saring peran" className={selectClass}>
           <option value="all">Semua posisi</option>
           {rolesPresent.map((r) => (
@@ -119,6 +132,7 @@ export function AccountManager({ className }: { className?: string }) {
       <div className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-slate-400">
         <Users className="h-3.5 w-3.5" />
         {loading && !data ? 'Memuat akun…' : `${rows.length} dari ${total} akun`}
+        {onlyCompany && <span className="truncate">· {onlyCompany.name}</span>}
       </div>
 
       {msg && <p className="text-sm text-rose-700 dark:text-rose-300">{msg}</p>}
@@ -150,6 +164,11 @@ export function AccountManager({ className }: { className?: string }) {
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{u.name}</span>
                 {data?.me === u.id && <Badge variant="outline" className="text-[10px] h-4 px-1 border-blue-500/40 text-blue-700 dark:text-blue-300">Anda</Badge>}
                 {!u.isActive && <Badge variant="outline" className="text-[10px] h-4 px-1 text-rose-600 border-rose-500/40">Nonaktif</Badge>}
+                {!canTouch(u) && (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 text-slate-500 border-slate-400/40" title="Posisi ini dikelola Super Admin">
+                    Diatur Super Admin
+                  </Badge>
+                )}
               </div>
               <div className="text-[12px] text-slate-500 dark:text-slate-400 truncate">
                 <span className="font-mono text-slate-700 dark:text-slate-200">{u.username ?? '—'}</span>
@@ -162,16 +181,16 @@ export function AccountManager({ className }: { className?: string }) {
               </div>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
-              <IconBtn label="Ubah akun" onClick={() => setDialog({ user: u, company: c })} disabled={busy === u.id}>
+              <IconBtn label="Ubah akun" onClick={() => setDialog({ user: u, company: c })} disabled={busy === u.id || !canTouch(u)}>
                 <Pencil className="h-4 w-4" />
               </IconBtn>
-              <IconBtn label="Setel ulang kata sandi" onClick={() => setResetting(u)} disabled={busy === u.id}>
+              <IconBtn label="Setel ulang kata sandi" onClick={() => setResetting(u)} disabled={busy === u.id || !canTouch(u)}>
                 <KeyRound className="h-4 w-4 text-amber-600" />
               </IconBtn>
-              <IconBtn label={u.isActive ? 'Nonaktifkan' : 'Aktifkan'} onClick={() => toggleActive(u)} disabled={busy === u.id || data?.me === u.id}>
+              <IconBtn label={u.isActive ? 'Nonaktifkan' : 'Aktifkan'} onClick={() => toggleActive(u)} disabled={busy === u.id || data?.me === u.id || !canTouch(u)}>
                 {busy === u.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className={cn('h-4 w-4', u.isActive ? 'text-emerald-600' : 'text-slate-400')} />}
               </IconBtn>
-              <IconBtn label="Hapus akun" danger onClick={() => remove(u)} disabled={busy === u.id || data?.me === u.id}>
+              <IconBtn label="Hapus akun" danger onClick={() => remove(u)} disabled={busy === u.id || data?.me === u.id || !canTouch(u)}>
                 <Trash2 className="h-4 w-4" />
               </IconBtn>
             </div>
@@ -182,9 +201,11 @@ export function AccountManager({ className }: { className?: string }) {
       {dialog && (
         <AccountDialog
           companies={data?.companies ?? []}
-          company={dialog.company}
+          company={dialog.company ?? onlyCompany}
           user={dialog.user}
           me={data?.me}
+          lockCompany={scoped}
+          allowedRoles={allowedRoles}
           onClose={() => setDialog(null)}
           onSaved={reload}
         />

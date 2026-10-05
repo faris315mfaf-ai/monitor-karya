@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { can } from '@/lib/rbac'
+import { can, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
 import { createAccount, isValidEmail, parseLogo, readPosition, slugify, uniqueEntityCode, type PositionInput } from '@/lib/companies'
 
 /**
- * Perusahaan & akun — meja Super Admin (10 Sep 2026).
+ * Perusahaan & akun — meja Super Admin (10 Sep 2026); sejak 5 Okt 2026 Admin PT
+ * membuka versi terbatasnya: hanya PT-nya sendiri dan akun di dalamnya.
+ * Menambah/mengubah perusahaan tetap milik Super Admin.
  *
  *   GET            — holding & anak perusahaan beserta akun, divisi, proyek, dan jumlah datanya
  *   POST           — tambah perusahaan (identitas, logo) sekaligus posisi/akun pertamanya
@@ -13,8 +15,8 @@ import { createAccount, isValidEmail, parseLogo, readPosition, slugify, uniqueEn
  *   DELETE ?id=    — hapus perusahaan yang belum punya data laporan
  */
 
-function forbid() {
-  return NextResponse.json({ error: 'Hanya Super Admin yang mengelola perusahaan & akun' }, { status: 403 })
+function forbid(message = 'Hanya Super Admin yang mengelola perusahaan & akun') {
+  return NextResponse.json({ error: message }, { status: 403 })
 }
 
 const USER_SELECT = {
@@ -35,25 +37,34 @@ const USER_SELECT = {
 export async function GET() {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  if (!can(user.role, 'companies:manage')) return forbid()
+  if (!canManageAccounts(user.role)) return forbid('Peran Anda tidak mengelola akun')
+
+  // Admin PT hanya melihat PT-nya sendiri; Super Admin melihat seluruh grup.
+  const full = canManageAllAccounts(user.role)
+  if (!full && !user.scopeEntityId) return forbid('Akun Anda belum ditempatkan di sebuah perusahaan')
+  const entityScope = full ? {} : { entityId: user.scopeEntityId! }
 
   const [entities, users, divisions, projects, daily, weekly] = await Promise.all([
     db.entity.findMany({
-      where: { type: { in: ['HOLDING', 'PT'] } },
+      where: full ? { type: { in: ['HOLDING', 'PT'] } } : { id: user.scopeEntityId! },
       select: {
         id: true, code: true, name: true, type: true, parentId: true, logoData: true, address: true, phone: true,
         email: true, website: true, isActive: true, createdAt: true,
       },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     }),
-    db.user.findMany({ select: USER_SELECT, orderBy: [{ role: 'asc' }, { name: 'asc' }] }),
+    db.user.findMany({
+      where: full ? {} : { scopeEntityId: user.scopeEntityId! },
+      select: USER_SELECT,
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+    }),
     db.division.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...entityScope },
       select: { id: true, entityId: true, name: true, headUserId: true, headUser: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
     db.project.findMany({
-      where: { lifecycle: { in: ['DIUSULKAN', 'AKTIF'] } },
+      where: { lifecycle: { in: ['DIUSULKAN', 'AKTIF'] }, ...entityScope },
       select: { id: true, entityId: true, code: true, name: true, lifecycle: true, picUserId: true, picUser: { select: { name: true } } },
       orderBy: { code: 'asc' },
     }),
@@ -97,9 +108,13 @@ export async function GET() {
         weeklyReports: weeklyBy.get(e.id) ?? 0,
       },
     })),
-    holdingUsers: users.filter((u) => !u.scopeEntityId).map(shape),
+    holdingUsers: full ? users.filter((u) => !u.scopeEntityId).map(shape) : [],
     totals: { companies: entities.length, users: users.length, divisions: divisions.length, projects: projects.length },
     me: user.id,
+    // Seberapa jauh meja ini boleh dipakai pemiliknya.
+    scope: full ? 'ALL' : 'ENTITY',
+    canManageCompanies: full,
+    manageableRoles: [...manageableRoles(user.role)],
   })
 }
 

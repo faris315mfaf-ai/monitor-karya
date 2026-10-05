@@ -2,23 +2,46 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
-import { ENTITY_ROLES, can } from '@/lib/rbac'
+import { ENTITY_ROLES, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
 import { MIN_PASSWORD, USERNAME_RE, assignPosition, createAccount, isKnownRole, isValidEmail, readPosition } from '@/lib/companies'
 
 /**
- * Akun & posisi — meja Super Admin (10 Sep 2026).
+ * Akun & posisi — meja Super Admin (10 Sep 2026), dan sejak 5 Okt 2026 juga
+ * Admin PT untuk PT-nya sendiri.
  *
  *   POST   — tambah akun untuk sebuah perusahaan (entityId) atau tingkat holding (null)
  *   PATCH  — ubah nama, username, email, jabatan, peran, perusahaan, status aktif,
  *            tautan divisi/proyek; `password` menyetel ulang kata sandi
  *   DELETE ?id= — hapus akun
  *
- * Dua pagar: akun sendiri tidak bisa dinonaktifkan/dihapus, dan Super Admin
- * aktif terakhir tidak bisa diturunkan, dinonaktifkan, atau dihapus.
+ * Pagarnya: akun sendiri tidak bisa dinonaktifkan/dihapus, Super Admin aktif
+ * terakhir tidak bisa diturunkan/dinonaktifkan/dihapus, dan pemegang meja
+ * terbatas (Admin PT) hanya menyentuh akun di PT-nya dengan posisi
+ * ADMIN_PT / KEPALA_DIVISI / PIC_PROYEK — Direktur Entitas dan akun tingkat
+ * grup tetap milik Super Admin, supaya tak seorang pun bisa membuat
+ * penyetujunya sendiri.
  */
 
-function forbid() {
-  return NextResponse.json({ error: 'Hanya Super Admin yang mengelola akun' }, { status: 403 })
+function forbid(message = 'Peran Anda tidak mengelola akun') {
+  return NextResponse.json({ error: message }, { status: 403 })
+}
+
+type Desk = { full: boolean; roles: readonly string[]; entityId: string | null }
+
+/** Sejauh mana akun yang sedang masuk boleh memakai meja akun. */
+function desk(user: { role: string; scopeEntityId: string | null }): Desk | null {
+  if (!canManageAccounts(user.role)) return null
+  if (canManageAllAccounts(user.role)) return { full: true, roles: manageableRoles(user.role), entityId: null }
+  if (!user.scopeEntityId) return null
+  return { full: false, roles: manageableRoles(user.role), entityId: user.scopeEntityId }
+}
+
+/** Pesan tunggal untuk posisi di luar wewenang meja terbatas. */
+function roleOutOfReach(role: string) {
+  return NextResponse.json(
+    { error: `Posisi ${role === 'DIREKTUR_ENTITAS' ? 'Direktur Perusahaan' : role} hanya dapat dikelola Super Admin.` },
+    { status: 403 }
+  )
 }
 
 async function entityRef(id: string | null) {
@@ -36,7 +59,8 @@ async function lastSuperadmin(excludeId: string): Promise<boolean> {
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  if (!can(user.role, 'companies:manage')) return forbid()
+  const access = desk(user)
+  if (!access) return forbid()
 
   let body: Record<string, unknown>
   try {
@@ -45,7 +69,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const entityId = typeof body.entityId === 'string' && body.entityId ? body.entityId : null
+  // Meja terbatas selalu menempatkan akun baru di PT pemiliknya.
+  const entityId = access.full ? (typeof body.entityId === 'string' && body.entityId ? body.entityId : null) : access.entityId
+  if (!access.full && typeof body.entityId === 'string' && body.entityId && body.entityId !== access.entityId) {
+    return forbid('Anda hanya dapat menambah akun di perusahaan Anda sendiri.')
+  }
   try {
     const entity = await entityRef(entityId)
     const p = readPosition(body, { holding: entity === null || (await db.entity.count({ where: { id: entityId!, type: 'HOLDING' } })) > 0 })
@@ -53,6 +81,7 @@ export async function POST(req: NextRequest) {
     if (!entity && (ENTITY_ROLES as readonly string[]).includes(p.role)) {
       return NextResponse.json({ error: 'Posisi ini harus ditempatkan di sebuah perusahaan.' }, { status: 422 })
     }
+    if (!access.roles.includes(p.role)) return roleOutOfReach(p.role)
 
     const account = await db.$transaction(async (tx) => {
       const created = await createAccount(tx, entity, p)
@@ -77,7 +106,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  if (!can(user.role, 'companies:manage')) return forbid()
+  const access = desk(user)
+  if (!access) return forbid()
 
   let body: Record<string, unknown>
   try {
@@ -89,6 +119,18 @@ export async function PATCH(req: NextRequest) {
   const id = typeof body.id === 'string' ? body.id : ''
   const existing = await db.user.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Akun tidak ditemukan' }, { status: 404 })
+
+  if (!access.full) {
+    if (existing.scopeEntityId !== access.entityId) return forbid('Akun ini bukan di perusahaan Anda.')
+    if (!access.roles.includes(existing.role)) return roleOutOfReach(existing.role)
+    if (typeof body.entityId === 'string' && body.entityId !== access.entityId) {
+      return forbid('Anda tidak dapat memindahkan akun ke perusahaan lain.')
+    }
+    if (typeof body.role === 'string' && !access.roles.includes(body.role)) return roleOutOfReach(body.role)
+    if (id === user.id && typeof body.role === 'string' && body.role !== existing.role) {
+      return forbid('Anda tidak dapat mengubah posisi akun sendiri.')
+    }
+  }
 
   const s = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : undefined)
   const data: Record<string, unknown> = {}
@@ -206,11 +248,19 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  if (!can(user.role, 'companies:manage')) return forbid()
+  const access = desk(user)
+  if (!access) return forbid()
 
   const id = req.nextUrl.searchParams.get('id') || ''
-  const existing = await db.user.findUnique({ where: { id }, select: { id: true, username: true, name: true, role: true } })
+  const existing = await db.user.findUnique({
+    where: { id },
+    select: { id: true, username: true, name: true, role: true, scopeEntityId: true },
+  })
   if (!existing) return NextResponse.json({ error: 'Akun tidak ditemukan' }, { status: 404 })
+  if (!access.full) {
+    if (existing.scopeEntityId !== access.entityId) return forbid('Akun ini bukan di perusahaan Anda.')
+    if (!access.roles.includes(existing.role)) return roleOutOfReach(existing.role)
+  }
   if (id === user.id) return NextResponse.json({ error: 'Anda tidak bisa menghapus akun sendiri.' }, { status: 409 })
   if (existing.role === 'SUPERADMIN' && (await lastSuperadmin(id))) {
     return NextResponse.json({ error: 'Ini Super Admin aktif terakhir; angkat Super Admin lain dulu.' }, { status: 409 })

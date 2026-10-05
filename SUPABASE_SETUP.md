@@ -532,6 +532,32 @@ di `src/components/dashboard/` dan `management-charts.tsx` bila diperlukan lagi.
   tab aktif meluncur (framer-motion `layoutId`). Semua hanya transform/opacity
   150–250 ms dan dimatikan pada `prefers-reduced-motion`.
 
+### Admin PT ikut mengelola akun PT-nya (5 Okt 2026)
+
+Meja akun tidak lagi khusus Super Admin. **Admin PT** kini melihat bagian
+**Pengaturan → Akun & pengguna** juga, tetapi versinya terbatas:
+
+| | Super Admin | Admin PT |
+|---|---|---|
+| Perusahaan yang terlihat | seluruh grup | hanya PT-nya |
+| Akun tingkat grup | ya | tidak |
+| Posisi yang boleh dibuat/diubah | semua | Admin PT, Kepala Divisi, Manager Proyek |
+| Direktur Perusahaan | ya | tidak — ditandai "Diatur Super Admin" |
+| Memindahkan akun antar PT | ya | tidak |
+| Menambah/mengubah perusahaan | ya | tidak |
+
+Direktur Entitas sengaja tidak diserahkan: rantai persetujuan proyek Admin PT
+berujung di Direktur, jadi bila Admin PT boleh membuat akun Direktur ia bisa
+menyetujui pengajuannya sendiri.
+
+Kapabilitasnya `accounts:manage` (`rbac.ts`), terpisah dari `companies:manage`
+milik Super Admin. Pembantu `canManageAccounts`, `canManageAllAccounts`, dan
+`manageableRoles` dipakai bersama oleh API dan tampilan. `GET /api/companies`
+menyaring entitas, akun, divisi, dan proyek sesuai `scopeEntityId` pemakainya
+lalu mengembalikan `scope`, `canManageCompanies`, dan `manageableRoles`;
+`/api/companies/users` menjaga batas yang sama pada POST, PATCH, dan DELETE —
+termasuk menolak pemindahan antar PT dan perubahan posisi akun sendiri.
+
 ### Layar pembuka & logo inisiator (14 Sep 2026)
 
 Setiap kali masuk, aplikasi menampilkan layar pembuka sekali: logo holding

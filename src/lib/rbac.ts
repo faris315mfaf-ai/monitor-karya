@@ -23,6 +23,7 @@ export type Capability =
   | 'unlock:execute'
   | 'users:manage'
   | 'companies:manage' // Super Admin: tambah/ubah perusahaan, posisi, akun (10 Sep 2026)
+  | 'accounts:manage' // Admin PT: meja akun terbatas PT-nya sendiri (5 Okt 2026)
   | 'audit:read'
   | 'group:read' // may read beyond their own entity
 
@@ -44,6 +45,7 @@ const ALL_CAPABILITIES: Capability[] = [
   'unlock:execute',
   'users:manage',
   'companies:manage',
+  'accounts:manage',
   'audit:read',
   'group:read',
 ]
@@ -60,6 +62,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Enters everything on schedule, checks each item passes validation, and
   // forwards both streams upward.
   ADMIN_PT: [
+    'accounts:manage',
     'daily:input',
     'daily:forward',
     'weekly:input',
@@ -98,7 +101,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Keeps the system available, manages access, and owns the locking and
   // notification machinery. Everything except the company/account desk,
   // which belongs to the Super Admin.
-  TI: ALL_CAPABILITIES.filter((c) => c !== 'companies:manage'),
+  TI: ALL_CAPABILITIES.filter((c) => c !== 'companies:manage' && c !== 'accounts:manage'),
 
   // Super Admin (10 Sep 2026): the owner's account. Adds companies, positions
   // and accounts, resets passwords — and may open every other module.
@@ -221,6 +224,30 @@ export const ENTITY_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK', 'DIREKTU
 export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR'] as const
 
 export const ALL_ROLES = [...ENTITY_ROLES, ...HOLDING_ROLES] as const
+
+/**
+ * Meja akun (5 Okt 2026). Super Admin memegangnya penuh untuk seluruh grup.
+ * Admin PT memegang versi terbatas: hanya akun di PT-nya sendiri, dan hanya
+ * posisi di bawah/sejajar dirinya — Direktur Entitas tetap milik Super Admin
+ * supaya tidak ada yang bisa membuat penyetujunya sendiri.
+ */
+export const ADMIN_PT_MANAGED_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK'] as const
+
+/** Boleh membuka meja akun sama sekali — penuh atau terbatas satu PT. */
+export function canManageAccounts(role: string): boolean {
+  return can(role, 'companies:manage') || can(role, 'accounts:manage')
+}
+
+/** Meja akun penuh: seluruh grup, termasuk menambah/mengubah perusahaan. */
+export function canManageAllAccounts(role: string): boolean {
+  return can(role, 'companies:manage')
+}
+
+/** Posisi yang boleh dibuat atau diubah oleh pemegang meja akun. */
+export function manageableRoles(role: string): readonly string[] {
+  if (canManageAllAccounts(role)) return ALL_ROLES
+  return can(role, 'accounts:manage') ? ADMIN_PT_MANAGED_ROLES : []
+}
 
 export function can(role: string, capability: Capability): boolean {
   return (ROLE_CAPABILITIES[role] ?? []).includes(capability)

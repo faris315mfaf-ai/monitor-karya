@@ -53,6 +53,11 @@ export type CompaniesData = {
   holdingUsers: UserRow[]
   totals: { companies: number; users: number; divisions: number; projects: number }
   me: string
+  /** ALL = seluruh grup (Super Admin); ENTITY = satu PT saja (Admin PT). */
+  scope?: 'ALL' | 'ENTITY'
+  canManageCompanies?: boolean
+  /** Posisi yang boleh dibuat/diubah pemegang meja ini. */
+  manageableRoles?: string[]
 }
 
 /** Kata sandi awal yang diusulkan saat Super Admin membuat akun baru. */
@@ -109,9 +114,16 @@ export function roleHint(role: string): string {
  * boleh peran holding; PT hanya peran perusahaan; holding boleh keduanya —
  * persis aturan yang dijaga API.
  */
-export function positionsFor(company: Pick<Company, 'type'> | null): { role: string; label: string; hint: string }[] {
-  if (!company) return HOLDING_POSITION_OPTIONS
-  return company.type === 'HOLDING' ? [...POSITION_OPTIONS, ...HOLDING_POSITION_OPTIONS] : POSITION_OPTIONS
+export function positionsFor(
+  company: Pick<Company, 'type'> | null,
+  allowed?: readonly string[]
+): { role: string; label: string; hint: string }[] {
+  const base = !company
+    ? HOLDING_POSITION_OPTIONS
+    : company.type === 'HOLDING'
+      ? [...POSITION_OPTIONS, ...HOLDING_POSITION_OPTIONS]
+      : POSITION_OPTIONS
+  return allowed && allowed.length ? base.filter((o) => allowed.includes(o.role)) : base
 }
 
 /** Peran yang wajib menempel pada sebuah perusahaan. */
