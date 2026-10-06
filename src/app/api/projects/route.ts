@@ -5,6 +5,7 @@ import { approvalChainFor, can, canSignSlot, isMasterRole, pendingSlot } from '@
 import { NO_APPROVAL_LABEL } from '@/lib/constants'
 import { Prisma } from '@prisma/client'
 import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
  * Modul proyek (11 Sep 2026).
@@ -204,8 +205,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items: items.map((p) => format(p, user)), total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Proyek belum termuat. Coba lagi.', 'projects GET')
   }
 }
 

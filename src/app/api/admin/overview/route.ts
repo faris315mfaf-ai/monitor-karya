@@ -5,6 +5,7 @@ import { ROLE_LABELS } from '@/lib/constants'
 import { startOfWibDay } from '@/lib/lock'
 import { reminderDesk } from '@/lib/reminder-rules'
 import type { AdminOverview } from '@/lib/admin-meta'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
  * Ringkasan Admin PT (6 Okt 2026, 04-admin-pt.md): hitungan data induk,
@@ -135,6 +136,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json(body)
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Data induk belum termuat' }, { status: 500 })
+    // [F3-D] Jangan kembalikan err.message mentah (nama tabel/kolom Prisma bisa bocor).
+    return serverError(err, 'Data induk belum termuat. Coba lagi.', 'admin/overview GET')
   }
 }

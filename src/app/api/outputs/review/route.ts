@@ -179,12 +179,17 @@ export async function POST(req: NextRequest) {
       for (const o of rows) {
         // "Terima" diurungkan: catatan revisi putaran sebelumnya tetap. "Minta revisi"
         // diurungkan: catatan putaran sebelumnya dipulihkan dari riwayat, bukan dikosongkan.
-        const revisionNote = o.status === 'PERLU_REVISI' ? await undoLatestRevision(o.id, user.id) : o.revisionNote
+        // [F3-C] Klaim dulu (bersyarat status), baru sentuh riwayat: permintaan
+        // kedua yang kalah balapan tidak boleh ikut menandai putaran sebelumnya.
         const res = await db.output.updateMany({
           where: { id: o.id, status: o.status, reviewerId: user.id },
-          data: { status: 'MENUNGGU_REVIEW', reviewerId: null, reviewedAt: null, revisionNote },
+          data: { status: 'MENUNGGU_REVIEW', reviewerId: null, reviewedAt: null },
         })
         if (res.count === 0) continue
+        const revisionNote = o.status === 'PERLU_REVISI' ? await undoLatestRevision(o.id, user.id) : o.revisionNote
+        if (revisionNote !== o.revisionNote) {
+          await db.output.updateMany({ where: { id: o.id, status: 'MENUNGGU_REVIEW' }, data: { revisionNote } })
+        }
         undone.push(o.id)
         await auditPic(req, user, 'OUTPUT_REVIEW_UNDO', 'OUTPUT', o.id, { title: o.title, status: 'MENUNGGU_REVIEW', revisionNote }, { status: o.status, revisionNote: o.revisionNote })
       }

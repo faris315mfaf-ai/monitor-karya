@@ -193,10 +193,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
   }
 
-  const forwarded = await db.weeklyDivisionReport.update({
-    where: { id },
-    data: { forwardedById: user.id, forwardedAt: new Date() },
-  })
+  // [F3-D] Bersyarat seperti jalur harian: dua klik bersamaan tidak meneruskan
+  // (dan mencatat/menerbitkan tiket urungkan) dua kali. P2025 = sudah diteruskan.
+  const forwarded = await db.weeklyDivisionReport
+    .update({
+      where: { id, forwardedAt: null, statusHeader: 'DISETUJUI' },
+      data: { forwardedById: user.id, forwardedAt: new Date() },
+    })
+    .catch((err: unknown) => {
+      if ((err as { code?: unknown } | null)?.code === 'P2025') return null
+      throw err
+    })
+  if (!forwarded) return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
   await db.auditLog.create({
     data: {
       actorId: user.id,

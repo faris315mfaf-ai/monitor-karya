@@ -7,9 +7,10 @@ import * as mockKadiv from '@/components/preview/mock-kadiv'
 import * as mockAdmin from '@/components/preview/mock-admin'
 import * as mockOversight from '@/components/preview/mock-oversight'
 import * as mockGroup from '@/components/preview/mock-group' // [F2-GRUP]
+import * as mockSistem from '@/components/preview/mock-sistem' // [F3-B]
 
 // [F2-GRUP] mockGroup di depan: antrean buka kunci/cuti peran grup menimpa data Admin hanya untuk peran grup.
-const AREA_MOCKS = [mockGroup, mockPic, mockKadiv, mockAdmin, mockOversight]
+const AREA_MOCKS = [mockGroup, mockPic, mockKadiv, mockAdmin, mockOversight, mockSistem]
 
 const ROLES: Record<string, { name: string; dash: unknown }> = {
   MANAJEMEN: { name: 'Ris Hartanto', dash: { kind: 'OVERSIGHT' } },
@@ -64,7 +65,11 @@ function installMock(role: string) {
       return json(init?.method && init.method !== 'GET' ? { ok: true } : mock.weeklyInput)
     }
     if (path.startsWith('/api/')) {
-      console.warn(`[pratinjau] belum ada data contoh: ${init?.method ?? 'GET'} ${path}`) // [F3-B] mudah dilacak
+      // [F3-B] endpoint tanpa data contoh dicatat agar mudah dilacak (window.__pratinjauMiss).
+      const miss = `${init?.method ?? 'GET'} ${path}`
+      const w = window as unknown as { __pratinjauMiss?: string[] }
+      ;(w.__pratinjauMiss ??= []).push(miss)
+      console.warn(`[pratinjau] belum ada data contoh: ${miss}`)
       return json({ error: 'Pratinjau tanpa basis data' }, 503)
     }
     return real(input, init)

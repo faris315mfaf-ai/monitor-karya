@@ -5,6 +5,7 @@ import { dailyCountdown, dailyLockAt, isoWeekOf, isoWeekStart as isoWeekStartOf,
 import { monthKeyNow } from '@/lib/wib'
 import { deriveProjectStatus } from '@/lib/project-status'
 import { countDailyIntake } from '@/lib/daily-intake'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
  * The dashboard each role actually needs.
@@ -308,7 +309,7 @@ export async function GET() {
     // Peran pemantau memakai /api/ringkasan.
     return NextResponse.json({ kind: 'OVERSIGHT' as const })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Gagal menyusun dashboard'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Gagal menyusun dashboard. Coba lagi.', 'my-dashboard GET')
   }
 }
