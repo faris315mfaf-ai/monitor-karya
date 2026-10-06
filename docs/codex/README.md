@@ -29,6 +29,7 @@ Permintaan pengguna untuk menyelesaikan sisa tugas telah ditindaklanjuti. Potret
 - Hari beku tetap dalam urutan kronologis di WeeklyBoard. Prop disabledLanes/renderLaneNote opsional; sortable/droppable dan handler drag memblokir asal/tujuan terkunci. Ketergantungan CSS nth-child dihapus.
 - CSP mengizinkan origin tepat dari driver S3 yang valid, tanpa wildcard. Tes diferensial memastikan origin CSP sama dengan signer. Pesan konfigurasi unggah mengikuti driver, setelah pemeriksaan akses.
 - Pemeriksaan final: **46 berkas, 862 tes**, TypeScript dan ESLint lulus; Next production build lulus dengan URL DB tiruan. CI GitHub menjalankan rangkaian pemeriksaan serta Docker build pada cabang yang di-push; hasil dapat dilihat pada tab Actions repository.
+- Runner Docker final juga healthy, read-only/non-root: login dan sesi 200, pratinjau produksi 404; CSP produksi mengizinkan origin S3 tepat tanpa wildcard. Login dan endpoint baca empat peran (Super Admin, Admin PT, Kepala divisi, PIC) berhasil dengan DB lokal.
 - Browser nyata: login admin ke database lokal berhasil; pratinjau hari beku terisi, tanpa handle/tombol tambah/edit, diuji keyboard serta seret pointer ke hari beku (jumlah kartu tetap 2/4). Lebar 1440/834/390 tidak meluapkan halaman; tema terang/gelap serta aksen merah/biru/grafit diperiksa. Pembaca layar nyata dan zoom OS 200% belum diuji.
 
 ## Localhost yang dapat dipakai
@@ -42,3 +43,7 @@ Server Claude di port 3100 tetap berjalan terpisah. Folder utama masih mempunyai
 ![Papan hari beku — ponsel](gambar/hari-beku-390.png)
 
 Script deploy, backup/restore, SSH/UFW/WireGuard, dan Caddy pada VPS masih membutuhkan operator serta akses host tujuan. Peralihan penyimpanan tidak memindahkan objek lama; Supabase tetap driver default.
+
+## Publikasi CI
+
+Push codex/kerja ditolak oleh auto-review karena laporan mencantumkan kata sandi admin lokal. Disiapkan snapshot codex/integrasi-cx di atas origin/main, menghapus kata sandi dari README dan tidak membawa riwayat commit lokal. Push snapshot juga ditolak karena persetujuan eksplisit untuk repository publik belum ada. Persetujuan pengguna sudah diminta; tidak ada branch yang dipublikasikan dan CI GitHub belum berjalan. Seluruh tahap pemeriksaan dan Docker telah lulus secara lokal.
