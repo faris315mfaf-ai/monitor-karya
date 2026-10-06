@@ -9,6 +9,7 @@
 import { ROLE_LABELS } from '@/lib/constants'
 import { MAX_PASSWORD_LENGTH, passwordProblem } from '@/lib/password-policy'
 import * as mock from '@/components/preview/mock-data'
+import { actor, people, groupRoles as GROUP_ROLES } from './mock-catalog'
 
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -22,21 +23,6 @@ const body = (init?: RequestInit) => {
   }
 }
 
-/** Sama dengan ROLES di preview-app.tsx; disalin agar berkas ini berdiri sendiri. */
-const PEOPLE: Record<string, { name: string; email: string; phone: string | null }> = {
-  MANAJEMEN: { name: 'Ris Hartanto', email: 'ris@bike.co.id', phone: '+62 811 2000 101' },
-  DIREKTUR_ENTITAS: { name: 'Hadi Santoso', email: 'hadi@ratukarya.co.id', phone: '+62 812 3100 220' },
-  KEPALA_DIVISI: { name: 'Andi Wijaya', email: 'andi@ratukarya.co.id', phone: '+62 813 4400 318' },
-  ADMIN_PT: { name: 'Maya Lestari', email: 'maya@ratukarya.co.id', phone: null },
-  PIC_PROYEK: { name: 'Rina Kartika', email: 'rina@ratukarya.co.id', phone: '+62 815 7720 114' },
-  SUPERADMIN: { name: 'Super Admin', email: 'superadmin@bike.co.id', phone: null },
-  DIREKTUR_SDM_GA: { name: 'Dewi Kartika', email: 'dewi@bike.co.id', phone: '+62 811 9030 512' },
-  TI: { name: 'Tim TI', email: 'ti@bike.co.id', phone: null },
-  AUDITOR: { name: 'Yusuf Pratama', email: 'yusuf@bike.co.id', phone: null },
-}
-
-/** Peran tanpa lingkup PT (selaras GROUP_ROLES di preview-app.tsx). */
-const GROUP_ROLES = ['MANAJEMEN', 'SUPERADMIN', 'DIREKTUR_SDM_GA', 'TI', 'AUDITOR']
 const HOLDING = { id: 'h', name: 'PT. BIKE Tbk', code: 'BIKE', type: 'HOLDING', logoData: null }
 const ENTITY = { id: 'e1', name: 'PT Ratu Karya', code: 'RTK', type: 'PT', logoData: null }
 
@@ -44,7 +30,7 @@ const ENTITY = { id: 'e1', name: 'PT Ratu Karya', code: 'RTK', type: 'PT', logoD
 const edits: Record<string, { name?: string; phone?: string | null }> = {}
 
 function profile(role: string) {
-  const p = { ...(PEOPLE[role] ?? PEOPLE.MANAJEMEN), ...edits[role] }
+  const p = { ...people.find((p) => p.id === actor(role).id)!, ...edits[role] }
   return {
     id: `pratinjau-${role}`,
     name: p.name,
@@ -60,7 +46,7 @@ function profile(role: string) {
       role === 'PIC_PROYEK'
         ? mock.deskPic.projects.map((x) => ({ id: x.id, code: x.code, name: x.name, phase: x.phase })).sort((a, b) => a.code.localeCompare(b.code))
         : [],
-    divisions: role === 'KEPALA_DIVISI' ? [{ id: 'dv1', name: 'Teknologi' }] : [],
+    divisions: role === 'KEPALA_DIVISI' ? [{ id: 'dv-tek', name: 'Teknologi' }] : [],
     lastLoginAt: ago(2),
     memberSince: '2026-07-01T02:00:00.000Z',
   }
@@ -83,6 +69,8 @@ function patchProfile(role: string, init?: RequestInit) {
   }
   if (Object.keys(data).length === 0) return json({ error: 'Tidak ada yang diubah' }, 400)
   edits[role] = { ...edits[role], ...data }
+  const user = people.find((p) => p.id === actor(role).id)
+  if (user) Object.assign(user, data)
   const p = profile(role)
   return json({ ok: true, name: p.name, phone: p.phone })
 }

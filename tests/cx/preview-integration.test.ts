@@ -50,16 +50,17 @@ describe('PIC weekly preview integration', () => {
   })
 
   it('rejects a move into a frozen lane even when that lane has no cards', async () => {
-    // Wednesday: Tuesday is the fixture's empty frozen lane in the open week.
-    vi.setSystemTime(new Date('2026-10-07T07:00:00Z'))
+    // Thursday: preserve Tuesday's canonical tasks; Wednesday is the empty frozen lane.
+    vi.setSystemTime(new Date('2026-10-08T07:00:00Z'))
     const data = await board('2026-W41')
-    const tuesday = '2026-10-05T17:00:00.000Z'
+    const wednesday = '2026-10-06T17:00:00.000Z'
+    expect(data.tasks.filter((t) => t.scope === 'HARIAN' && t.workDate === '2026-10-05T17:00:00.000Z')).toHaveLength(4)
     expect(data.locked).toBe(false)
-    expect(data.frozenDays).toContain(tuesday)
-    expect(data.tasks.filter((t) => t.scope === 'HARIAN' && t.workDate === tuesday)).toEqual([])
+    expect(data.frozenDays).toContain(wednesday)
+    expect(data.tasks.filter((t) => t.scope === 'HARIAN' && t.workDate === wednesday)).toEqual([])
     const task = data.tasks.find((t) => t.scope === 'MINGGUAN')!
     const response = await request('/api/tasks', '', {
-      method: 'PATCH', body: JSON.stringify({ projectId: 'p2', week: '2026-W41', moves: [{ id: task.id, lane: '2026-10-06', sortOrder: 0 }] }),
+      method: 'PATCH', body: JSON.stringify({ projectId: 'p2', week: '2026-W41', moves: [{ id: task.id, lane: '2026-10-07', sortOrder: 0 }] }),
     })
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({ frozen: 'FORWARDED', locked: true })

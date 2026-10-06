@@ -11,6 +11,8 @@
  */
 
 import * as mock from './mock-data'
+import { actor, divisions, entities, groupRoles } from './mock-catalog'
+import type { UnlockItem } from '@/lib/admin-meta'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
   DAILY_CUTOFF_LABEL,
@@ -36,6 +38,7 @@ import {
   validateProgressReport,
   weekPeriodOf,
   weeklyDeadlines,
+  weeklyWriteBlock,
   wibDateKey,
   type Period,
   type ProgressCadence,
@@ -110,11 +113,7 @@ type Holder = {
   tasks?: { total: number; done: number }
 }
 
-export const ENTITIES: Record<string, { id: string; name: string; code: string; region: string | null }> = {
-  e1: { id: 'e1', name: 'PT Ratu Karya', code: 'RTK', region: 'Jakarta' },
-  e2: { id: 'e2', name: 'PT Sigma Daya', code: 'SGD', region: 'Bandung' },
-  e3: { id: 'e3', name: 'PT Bumi Lestari', code: 'BML', region: 'Surabaya' },
-}
+export const ENTITIES = Object.fromEntries(entities.map((e) => [e.id, e]))
 
 const atToday = (h: number, m = 0) => new Date(todayDate().getTime() + h * HOUR + m * 60000).toISOString()
 
@@ -134,7 +133,7 @@ const EXTRA_HOLDERS: { holder: Holder; entityId: string }[] = [
   },
   {
     entityId: 'e3',
-    holder: { id: 'bm1', code: 'BML-PRJ-01', name: 'Audit Kontrak Vendor', phase: 'PENYELESAIAN', picName: 'Lina Marlina', tasks: { total: 2, done: 2 }, report: null },
+    holder: { id: 'bm1', code: 'BML-PRJ-01', name: 'Audit Kontrak Vendor', phase: 'PENYELESAIAN', picName: 'Lina Marlina Putri', tasks: { total: 2, done: 2 }, report: null },
   },
 ]
 
@@ -157,13 +156,31 @@ export function dailyProjects() {
 
 function visibleDaily(role: string): DailyProject[] {
   const all = dailyCatalog()
-  if (isMasterRole(role)) return all
+  if (role === 'PIC_PROYEK') return all.filter((p) => isPicProject(p.holder.id))
+  if (groupRoles.includes(role)) return all
   const scope = scopeOf(role)
   return scope ? all.filter((p) => p.entityId === scope) : []
 }
 
-/** Laporan hari lampau (hanya yang dibuat lewat buka kunci di pratinjau). */
+/** Laporan historis disimpan saat hari WIB berganti, tanpa kehilangan buka kunci. */
 const pastReports: Record<string, DailyRow> = {}
+let reportDay = wibDateKey(new Date())
+export function refreshPreviewDay() {
+  const key = wibDateKey(new Date())
+  if (key === reportDay) return
+  for (const p of dailyCatalog()) {
+    if (p.holder.report) pastReports[`${p.holder.id}|${reportDay}`] = p.holder.report
+    p.holder.report = null
+    if (p.holder.tasks) p.holder.tasks = { total: 0, done: 0 }
+  }
+  reportDay = key
+  mock.deskPic.today = todayIso()
+  mock.deskAdmin.today = todayIso()
+}
+function reportDayOf(id: string) {
+  const key = Object.entries(pastReports).find(([, r]) => r.id === id)?.[0].split('|')[1]
+  return key ? parseWibDateKey(key)! : todayDate()
+}
 
 function reportFor(p: DailyProject, dayKey: string): DailyRow | null {
   return dayKey === wibDateKey(todayDate()) ? p.holder.report : (pastReports[`${p.holder.id}|${dayKey}`] ?? null)
@@ -173,12 +190,17 @@ function reportFor(p: DailyProject, dayKey: string): DailyRow | null {
 // Buka kunci laporan harian (status pengajuan dari pratinjau)
 // ------------------------------------------------------------------
 
-type UnlockInfo = { id: string; status: string; unlockUntil: string | null }
-const unlocks: Record<string, UnlockInfo> = {}
-
-const activeUnlock = (reportId: string | undefined) => {
+export const unlockItems: UnlockItem[] = []
+const unlocks: Record<string, UnlockItem> = {}
+export const activeUnlock = (reportId: string | undefined) => {
   const u = reportId ? unlocks[reportId] : undefined
-  return u && u.status === 'DIEKSEKUSI' && u.unlockUntil && Date.parse(u.unlockUntil) > Date.now() ? u : null
+  if (u?.status === 'DIEKSEKUSI' && !u.reLockedAt && u.unlockUntil) {
+    if (Date.parse(u.unlockUntil) > Date.now()) return u
+    u.reLockedAt = new Date().toISOString()
+    const target = unlockTarget(u.targetType, u.targetId)
+    if (target) Object.assign(target.report, { isLocked: true })
+  }
+  return null
 }
 
 function frozenOf(r: DailyRow | null): 'FORWARDED' | 'LOCKED' | null {
@@ -249,11 +271,15 @@ function evidenceLock(type: string, id: string, role: string): string | null {
     const r = findDailyById(id)
     const f = frozenOf(r)
     if (f) return frozenText(f)
-    if (isDailyLocked(todayDate()) && !activeUnlock(id)) return `Laporan ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`
+    if (isDailyLocked(reportDayOf(id)) && !activeUnlock(id)) return `Laporan ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`
   }
   if (type === 'PROGRESS_REPORT') {
     const r = Object.values(progress).find((x) => x.id === id)
     if (r && (r.isLocked || isProgressLocked(r.period))) return 'Periode ini sudah dikunci.'
+  }
+  if (type === 'WEEKLY_ITEM') {
+    const r = mock.weeklyInput.divisions.find((d) => d.report.items.some((it) => it.id === id))?.report
+    if (r && !activeUnlock(r.id) && (r.forwardedAt || r.isLocked || isWeeklyLocked(new Date(mock.weeklyInput.week.start)))) return 'Laporan mingguan dikunci.'
   }
   if (type === 'TASK') {
     const t = findTask(id)
@@ -284,7 +310,18 @@ function syncCount(type: string, id: string): number {
 }
 
 function projectOfReport(reportId: string): string {
-  return dailyCatalog().find((p) => p.holder.report?.id === reportId)?.holder.id ?? ''
+  return dailyCatalog().find((p) => p.holder.report?.id === reportId)?.holder.id ?? Object.entries(pastReports).find(([, r]) => r.id === reportId)?.[0].split('|')[0] ?? ''
+}
+
+function evidenceAccess(type: string, id: string, role: string, write: boolean) {
+  if (type === 'WEEKLY_ITEM') {
+    if (!write || can(role, 'weekly:input')) return null
+    return json({ error: 'Peran Anda tidak mengubah bukti mingguan.' }, 403)
+  }
+  const pid = type === 'DAILY_REPORT' ? projectOfReport(id) : type === 'TASK' ? findTask(id)?.projectId : Object.values(progress).find((r) => r.id === id)?.projectId
+  if (!pid) return json({ error: 'Data induk bukti tidak ditemukan.' }, 404)
+  const guard = guardProject(pid, role, write)
+  return guard.ok ? null : guard.res
 }
 
 function evidenceRoute(path: string, url: string, init: RequestInit | undefined, role: string): Promise<Response> | null {
@@ -295,6 +332,8 @@ function evidenceRoute(path: string, url: string, init: RequestInit | undefined,
     const type = String(fd.get('targetType') ?? '')
     const id = String(fd.get('targetId') ?? '')
     if (!ownsTarget(type, id)) return null
+    const denied = evidenceAccess(type, id, role, method !== 'GET')
+    if (denied) return denied
     const file = fd.get('file')
     const f = file instanceof File ? file : null
     if (!f) return json({ error: 'Berkas wajib dipilih' }, 422)
@@ -316,6 +355,8 @@ function evidenceRoute(path: string, url: string, init: RequestInit | undefined,
       const type = sp.get('targetType') ?? ''
       const id = sp.get('targetId') ?? ''
       if (!ownsTarget(type, id)) return null
+      const denied = evidenceAccess(type, id, role, method !== 'GET')
+      if (denied) return denied
       const items = evidenceOf(type, id)
       return json({ items, total: items.length })
     }
@@ -323,6 +364,8 @@ function evidenceRoute(path: string, url: string, init: RequestInit | undefined,
     const type = str(b.targetType, 40)
     const id = str(b.targetId, 64)
     if (!ownsTarget(type, id)) return null
+    const denied = evidenceAccess(type, id, role, method !== 'GET')
+    if (denied) return denied
     const fileName = str(b.fileName, 200)
     const link = typeof b.url === 'string' && b.url.length <= 2000 ? b.url.trim() : ''
     const locked = evidenceLock(type, id, role)
@@ -341,6 +384,8 @@ function evidenceRoute(path: string, url: string, init: RequestInit | undefined,
   const list = Object.values(evidence).find((l) => l.some((e) => e.id === evId))
   const ev = list?.find((e) => e.id === evId)
   if (!list || !ev) return null
+  const denied = evidenceAccess(ev.targetType, ev.targetId, role, method !== 'GET')
+  if (denied) return denied
   if (method === 'DELETE') {
     const locked = evidenceLock(ev.targetType, ev.targetId, role)
     if (locked) return json({ error: locked, locked: true }, 409)
@@ -425,7 +470,7 @@ const isPicProject = (pid: string) => mock.deskPic.projects.some((p) => p.id ===
 /** Daftar task hari ini untuk proyek ini — objek yang sama dengan meja kerja PIC bila proyeknya proyek PIC. */
 function todayList(pid: string, role: string): TaskRow[] {
   preparePicTasks()
-  if (role === 'PIC_PROYEK' || (pid === 'p2' && isPicProject(pid))) {
+  if (mock.deskTasks[pid]) {
     const lists = mock.deskTasks as unknown as Record<string, TaskRow[]>
     return (lists[pid] ??= [])
   }
@@ -459,6 +504,7 @@ function seedWeek(pid: string, period: Period) {
     // p2 keeps one frozen lane empty when there are at least two past days,
     // so preview can verify both populated and empty frozen lanes (CX2).
     if (pid === 'p2' && pastDays.length > 1 && i === pastDays.length - 1) return
+    if (todayList(pid, 'SUPERADMIN').some((t) => t.scope === 'HARIAN' && t.workDate === d.toISOString())) return
     list.push(mkTask(pid, TITLES[(i * 3 + 4 + hashOf(pid)) % TITLES.length], 'SELESAI', d.toISOString(), { sortOrder: 0 }))
     if (i % 2 === 0) list.push(mkTask(pid, TITLES[(i * 3 + 5 + hashOf(pid)) % TITLES.length], 'BERJALAN', d.toISOString(), { sortOrder: 1, progressPct: 60 }))
   })
@@ -491,11 +537,9 @@ export function markTaskEscalated(taskId: string, esc: { id: string; status: str
 }
 
 /** Laporan harian proyek ini untuk instan tengah malam `dayIso`, dilihat dari peran mana pun. */
-function dailyReportOn(pid: string, dayIso: string, role: string): DailyRow | null {
+export function dailyReportOn(pid: string, dayIso: string, _role = 'SUPERADMIN'): DailyRow | null {
   const key = wibDateKey(new Date(dayIso))
   if (key === wibDateKey(todayDate())) {
-    // PIC melihat laporan dari meja kerjanya (mock-pic); peran lain dari meja kerja Admin PT.
-    if (role === 'PIC_PROYEK') return (mock.deskPic.projects.find((p) => p.id === pid)?.report as unknown as DailyRow | undefined) ?? null
     return dailyCatalog().find((p) => p.holder.id === pid)?.holder.report ?? null
   }
   return pastReports[`${pid}|${key}`] ?? null
@@ -542,7 +586,7 @@ function afterTaskChange(pid: string, role: string) {
     pic.tasks = { total: list.length, done: list.filter((t) => t.status === 'SELESAI').length, blocked: list.filter((t) => t.status === 'TERKENDALA').length }
   }
   const admin = dailyCatalog().find((p) => p.holder.id === pid)?.holder
-  if (admin && admin.tasks && role !== 'PIC_PROYEK') admin.tasks = { total: list.length, done: list.filter((t) => t.status === 'SELESAI').length }
+  if (admin && admin.tasks) admin.tasks = { total: list.length, done: list.filter((t) => t.status === 'SELESAI').length }
   const r = dailyReportOn(pid, today, role)
   const ru = rollup(list)
   if (r && ru && !frozenOf(r)) {
@@ -560,7 +604,7 @@ function guardProject(pid: string, role: string, write = false): GuardOk | { ok:
   }
   const p = dailyCatalog().find((x) => x.holder.id === pid)
   if (!p) return { ok: false, res: json({ error: 'Proyek tidak ditemukan' }, 404) }
-  if (!isMasterRole(role) && p.entityId !== scopeOf(role)) return { ok: false, res: json({ error: 'Proyek ini bukan tanggung jawab Anda' }, 403) }
+  if (!groupRoles.includes(role) && p.entityId !== scopeOf(role)) return { ok: false, res: json({ error: 'Proyek ini bukan tanggung jawab Anda' }, 403) }
   if (write && !can(role, 'daily:input')) return { ok: false, res: json({ error: 'Peran Anda tidak mengelola task harian' }, 403) }
   return { ok: true, entityId: p.entityId }
 }
@@ -882,7 +926,8 @@ function dailyInputRoute(url: string, init: RequestInit | undefined, role: strin
   const dayKey = wibDateKey(day)
   const p = dailyCatalog().find((x) => x.holder.id === pid)
   if (!p) return json({ error: 'Proyek tidak ditemukan' }, 404)
-  if (!isMasterRole(role) && p.entityId !== scopeOf(role)) return json({ error: 'Proyek ini bukan tanggung jawab Anda' }, 403)
+  const guard = guardProject(pid, role, true)
+  if (!guard.ok) return guard.res
   const existing = reportFor(p, dayKey)
   const unlock = activeUnlock(existing?.id)
   const frozen = frozenOf(existing)
@@ -928,7 +973,7 @@ function dailyInputRoute(url: string, init: RequestInit | undefined, role: strin
       409
     )
   }
-  const ownEvidence = existing ? evidenceOf('DAILY_REPORT', existing.id).length : 0
+  const ownEvidence = existing ? evidenceOf('DAILY_REPORT', existing.id, Math.min(existing.evidenceCount, 3)).length : 0
   const ru = rollup(allTasks(pid, role).filter((t) => t.workDate === day.toISOString() && t.scope === 'HARIAN'))
   const effStatus = ru ? ru.status : status
   const effProgress = ru ? ru.progressPct : progressPct
@@ -976,27 +1021,12 @@ type DeskDivision = {
   head: { id: string; name: string } | null
   report: {
     id: string; statusHeader: string; submittedAt: string | null; approvedAt: string | null; forwardedAt: string | null
-    items: number; done: number; blocked: number; missingEvidence: number
+    items: number; done: number; blocked: number; missingEvidence: number; isLocked?: boolean
   } | null
 }
 
-let sdmAdded = false
-/** Divisi meja kerja Admin PT; ditambah satu divisi yang sudah disetujui agar alur "Teruskan" bisa dicoba. */
 function deskDivisions(): DeskDivision[] {
-  const list = mock.deskAdmin.divisions as unknown as DeskDivision[]
-  if (!sdmAdded) {
-    sdmAdded = true
-    if (!list.some((d) => d.id === 'sdm')) {
-      list.splice(list.length - 1, 0, {
-        id: 'sdm', name: 'SDM', head: { id: 'u4', name: 'Rudi Hartono' },
-        report: {
-          id: 'w4', statusHeader: 'DISETUJUI', submittedAt: new Date(Date.now() - 26 * HOUR).toISOString(),
-          approvedAt: new Date(Date.now() - 20 * HOUR).toISOString(), forwardedAt: null, items: 7, done: 6, blocked: 0, missingEvidence: 0,
-        },
-      })
-    }
-  }
-  return list
+  return mock.deskAdmin.divisions as unknown as DeskDivision[]
 }
 
 /** Laporan mingguan divisi yang diteruskan dari penerimaan — dibaca mock-proyek untuk arsip /api/weekly-reports. */
@@ -1087,10 +1117,12 @@ function inboxRoute(init: RequestInit | undefined, role: string): Promise<Respon
   if (w.statusHeader !== 'DISETUJUI') return json({ error: 'Kepala divisi belum menyetujui laporan ini' }, 422)
   if (w.forwardedAt) return json({ error: 'Laporan ini sudah diteruskan' }, 409)
   const at = new Date().toISOString()
-  w.forwardedAt = at
+  const beforeLocked = w.isLocked ?? false
+  Object.assign(w, { forwardedAt: at, isLocked: true })
   const undoToken = issueUndo(() => {
     if (w.forwardedAt !== at) return { ok: false, status: 409, error: 'Laporan ini sudah berubah sejak diteruskan.' }
-    w.forwardedAt = null
+    if (unlocks[w.id]) return { ok: false, status: 409, error: 'Laporan sudah diajukan buka kunci.' }
+    Object.assign(w, { forwardedAt: null, isLocked: beforeLocked })
     return { ok: true, message: 'Penerusan laporan mingguan diurungkan.' }
   })
   return json({ ok: true, undoToken })
@@ -1257,26 +1289,131 @@ function progressRoute(url: string, init: RequestInit | undefined, role: string)
 // Buka kunci: efek samping untuk laporan harian di sini
 // ------------------------------------------------------------------
 
-/**
- * POST /api/unlock-requests untuk laporan harian berkas ini: validasi seperti
- * route, catat status "diajukan" pada laporannya, lalu kembalikan null agar
- * mock Admin/Grup tetap mencatat pengajuannya di daftar buka kunci.
- */
-function unlockSideEffect(init: RequestInit | undefined, role: string): Promise<Response> | null {
-  if ((init?.method ?? 'GET') !== 'POST') return null
-  const b = body(init)
-  if (b.targetType !== 'DAILY_REPORT') return null
-  const id = str(b.targetId, 64)
-  const r = findDailyById(id)
-  if (!r) return null
-  if (!can(role, 'unlock:request')) return json({ error: 'Peran Anda tidak mengajukan buka kunci' }, 403)
-  if (str(b.reason, 1000).length < 10) return json({ error: 'Tulis alasan minimal 10 karakter.' }, 422)
-  const p = dailyCatalog().find((x) => x.holder.report?.id === id)
-  if (p && !isMasterRole(role) && p.entityId !== scopeOf(role)) return json({ error: 'Laporan tidak ditemukan di perusahaan Anda.' }, 404)
-  const open = unlocks[id]
-  if (open && (open.status === 'DIAJUKAN' || open.status === 'DISETUJUI' || activeUnlock(id))) return json({ error: 'Buka kunci untuk laporan ini masih diproses.' }, 409)
-  unlocks[id] = { id: uid('ul'), status: 'DIAJUKAN', unlockUntil: null }
+function unlockTarget(type: string, id: string) {
+  if (type === 'DAILY_REPORT') {
+    const p = dailyCatalog().find((p) => p.holder.report?.id === id)
+    const report = findDailyById(id)
+    const owner = p ?? dailyCatalog().find((p) => p.holder.id === projectOfReport(id))
+    if (report && owner) return { report, entityId: owner.entityId, projectId: owner.holder.id, label: `Laporan harian ${owner.holder.name} · ${wibDateKey(reportDayOf(id))}` }
+  }
+  if (type === 'WEEKLY_REPORT') {
+    const d = deskDivisions().find((d) => d.report?.id === id)
+    if (d?.report) return { report: d.report, entityId: 'e1', projectId: null, label: `Laporan mingguan Divisi ${d.name} · ${mock.weeklyInput.week.key}` }
+  }
   return null
+}
+
+function unlockRoute(url: string, init: RequestInit | undefined, role: string): Promise<Response> {
+  const method = init?.method ?? 'GET'
+  unlockItems.forEach((u) => activeUnlock(u.targetId))
+  const me = actor(role)
+  if (method === 'GET') {
+    const status = params(url).get('status')
+    const items = unlockItems.filter((u) => {
+      if (status && status !== 'all' && u.status !== status) return false
+      if (role === 'PIC_PROYEK' || role === 'KEPALA_DIVISI') return u.requestedBy?.id === me.id
+      return groupRoles.includes(role) || unlockTarget(u.targetType, u.targetId)?.entityId === 'e1'
+    })
+    return json({ items, total: items.length, page: 1, pageSize: 30, can: { request: can(role, 'unlock:request'), approve: can(role, 'unlock:approve'), execute: can(role, 'unlock:execute') }, me: me.id })
+  }
+  const b = body(init)
+  const at = new Date().toISOString()
+  if (method === 'POST') {
+    if (!can(role, 'unlock:request')) return json({ error: 'Peran Anda tidak mengajukan buka kunci' }, 403)
+    const targetType = str(b.targetType)
+    const targetId = str(b.targetId)
+    const target = unlockTarget(targetType, targetId)
+    if (!target || (!groupRoles.includes(role) && target.entityId !== 'e1') || (role === 'PIC_PROYEK' && (!target.projectId || !isPicProject(target.projectId)))) return json({ error: 'Laporan tidak ditemukan di cakupan Anda.' }, 404)
+    const reason = str(b.reason, 500)
+    if (reason.length < 10) return json({ error: 'Tulis alasan minimal 10 karakter.' }, 422)
+    if (unlocks[targetId] && ['DIAJUKAN', 'DISETUJUI'].includes(unlocks[targetId].status)) return json({ error: 'Buka kunci untuk laporan ini masih diproses.' }, 409)
+    const item: UnlockItem = { id: uid('ul'), targetType, targetId, targetLabel: target.label, reason, status: 'DIAJUKAN', requestedBy: me, approvedBy: null, executedBy: null, approvedAt: null, executedAt: null, unlockUntil: null, reLockedAt: null, createdAt: at }
+    unlocks[targetId] = item
+    unlockItems.unshift(item)
+    return json({ ok: true, item }, 201)
+  }
+  const action = str(b.action)
+  if (!['approve', 'reject', 'execute', 'relock'].includes(action)) return json({ error: 'Permintaan tidak valid' }, 400)
+  if (!can(role, action === 'approve' || action === 'reject' ? 'unlock:approve' : 'unlock:execute')) return json({ error: 'Peran Anda tidak memproses buka kunci ini.' }, 403)
+  const item = unlockItems.find((u) => u.id === b.id)
+  if (!item) return json({ error: 'Pengajuan tidak ditemukan' }, 404)
+  const target = unlockTarget(item.targetType, item.targetId)
+  if (!target) return json({ error: 'Laporan yang dituju sudah tidak ada.' }, 404)
+  if (['approve', 'reject'].includes(action) && item.requestedBy?.id === me.id) return json({ error: 'Anda tidak dapat memutuskan pengajuan Anda sendiri.' }, 403)
+  const expected = ['approve', 'reject'].includes(action) ? 'DIAJUKAN' : action === 'execute' ? 'DISETUJUI' : 'DIEKSEKUSI'
+  if (item.status !== expected || (action === 'relock' && item.reLockedAt)) return json({ error: 'Status pengajuan sudah berubah.' }, 409)
+  if (action === 'approve' || action === 'reject') Object.assign(item, { status: action === 'approve' ? 'DISETUJUI' : 'DITOLAK', approvedAt: at, approvedBy: me })
+  if (action === 'execute') {
+    const hours = typeof b.hours === 'number' && Number.isFinite(b.hours) ? Math.min(72, Math.max(1, Math.floor(b.hours))) : 24
+    Object.assign(item, { status: 'DIEKSEKUSI', executedBy: me, executedAt: at, unlockUntil: new Date(Date.now() + hours * HOUR).toISOString() })
+    Object.assign(target.report, { isLocked: false })
+  }
+  if (action === 'relock') {
+    item.reLockedAt = at
+    Object.assign(target.report, { isLocked: true })
+  }
+  return json({ ok: true, item })
+}
+
+function weeklyInputRoute(url: string, init: RequestInit | undefined, role: string) {
+  const method = init?.method ?? 'GET'
+  if (!can(role, 'weekly:input') && !can(role, 'weekly:approve')) return json({ error: 'Peran Anda tidak mengisi laporan mingguan.' }, 403)
+  const src = mock.weeklyInput
+  const blockOf = (r: typeof src.divisions[number]['report']) => weeklyWriteBlock({ period: weekPeriodOf(new Date(src.week.start)), report: { ...r, forwardedAt: r.forwardedAt ? new Date(r.forwardedAt) : null }, unlocked: Boolean(activeUnlock(r.id)) })
+  const isFrozen = (r: typeof src.divisions[number]['report']) => Boolean(blockOf(r))
+  if (method === 'GET') return json({ ...src, canApprove: can(role, 'weekly:approve'), locked: isWeeklyLocked(new Date(src.week.start)), divisions: src.divisions.map((d) => ({ ...d, writable: !isFrozen(d.report), editable: !isFrozen(d.report), locked: isFrozen(d.report), lockReason: blockOf(d.report)?.message ?? null, frozen: blockOf(d.report)?.reason === 'FORWARDED', unlockUntil: activeUnlock(d.report.id)?.unlockUntil ?? null, unlock: unlocks[d.report.id] ?? null })) })
+  const b = body(init)
+  let itemId = method === 'DELETE' ? params(url).get('itemId') ?? params(url).get('id') : b.itemId ?? b.id
+  const d = src.divisions.find((d) => d.id === b.divisionId || d.report.items.some((i) => i.id === itemId))
+  if (!d) return json({ error: 'Divisi tidak ditemukan di cakupan Anda.' }, 404)
+  const r = d.report
+  if (isFrozen(r)) return json({ error: 'Laporan mingguan dikunci. Ajukan buka kunci untuk mengubahnya.' }, 409)
+  if (method === 'POST') {
+    const approve = b.action === 'approve'
+    if (!can(role, approve ? 'weekly:approve' : 'weekly:input')) return json({ error: 'Peran Anda tidak menyetujui laporan mingguan.' }, 403)
+    if (r.statusHeader !== (approve ? 'MENUNGGU_PERSETUJUAN' : 'DRAFT')) return json({ error: 'Status laporan sudah berubah.' }, 409)
+    Object.assign(r, approve ? { statusHeader: 'DISETUJUI', approvedAt: new Date().toISOString() } : { statusHeader: 'MENUNGGU_PERSETUJUAN', submittedAt: new Date().toISOString() })
+    return json({ ok: true, reportId: r.id })
+  }
+  if (!can(role, 'weekly:input')) return json({ error: 'Peran Anda tidak mengubah laporan mingguan.' }, 403)
+  if (method === 'DELETE') {
+    const i = r.items.findIndex((i) => i.id === itemId)
+    if (i < 0) return json({ error: 'Butir tidak ditemukan.' }, 404)
+    r.items.splice(i, 1)
+  } else if (method === 'PATCH') {
+    const moves = Array.isArray(b.moves) ? b.moves as Record<string, unknown>[] : []
+    if (!moves.length) return json({ error: 'Tidak ada kartu yang dipindahkan.' }, 422)
+    const updates: { item: typeof r.items[number]; workDate: string | null; position: number }[] = []
+    for (const move of moves) {
+      const item = r.items.find((i) => i.id === move.itemId)
+      const day = move.workDate ? parseWibDateKey(move.workDate) : null
+      if (!item || (move.workDate && (!day || !src.days.includes(day.toISOString())))) return json({ error: 'Kartu atau hari tujuan berada di luar laporan ini.' }, 422)
+      updates.push({ item, workDate: day?.toISOString() ?? null, position: Math.max(0, Math.floor(Number(move.position) || 0)) })
+    }
+    updates.forEach(({ item, ...change }) => Object.assign(item, change))
+  } else if (method === 'PUT') {
+    let item = r.items.find((i) => i.id === itemId)
+    if (itemId && !item) return json({ error: 'Butir tidak ditemukan.' }, 404)
+    const workItem = str(b.workItem, 4000)
+    const status = str(b.status)
+    const aspect = src.aspects.find((a) => a.id === b.aspectCategoryId)
+    const priority = src.priorities.find((p) => p.id === b.priorityId)
+    if (!workItem || !['BELUM_MULAI', 'ON_PROGRESS', 'TERKENDALA', 'SELESAI'].includes(status) || !aspect || !priority) return json({ error: 'Lengkapi pekerjaan, status, aspek dan prioritas.' }, 422)
+    if (status === 'TERKENDALA' && !str(b.obstacleFollowUp)) return json({ error: 'Kendala wajib diisi untuk status Terkendala.' }, 422)
+    const day = b.workDate ? parseWibDateKey(b.workDate) : null
+    if (b.workDate && (!day || !src.days.includes(day.toISOString()))) return json({ error: 'Hari pengerjaan berada di luar minggu ini.' }, 422)
+    if (!item) {
+      item = { id: uid('wi'), workItem, targetOutput: '', picName: '', picTitle: '', status, progressPct: 0, achievementThisWeek: '', obstacleFollowUp: null, followUp: null, workDate: null, position: r.items.length, evidenceCount: 0, tags: [], subtasks: [], evidence: [], aspectCategory: aspect, priority }
+      r.items.push(item)
+      itemId = item.id
+    }
+    Object.assign(item, { workItem, status, aspectCategory: aspect, priority, progressPct: status === 'SELESAI' ? 100 : Math.max(0, Math.min(100, Number(b.progressPct) || 0)), ...(b.workDate !== undefined ? { workDate: day?.toISOString() ?? null } : {}) })
+    for (const key of ['targetOutput', 'picName', 'picTitle', 'achievementThisWeek', 'obstacleFollowUp', 'followUp']) {
+      if (key in b) Object.assign(item, { [key]: str(b[key], 4000) })
+    }
+  } else return json({ error: 'Metode tidak didukung.' }, 405)
+
+  return json({ ok: true, reportId: r.id, itemId })
 }
 
 // ------------------------------------------------------------------
@@ -1284,16 +1421,29 @@ function unlockSideEffect(init: RequestInit | undefined, role: string): Promise<
 // ------------------------------------------------------------------
 
 /**
- * Dipanggil paling depan di AREA_MOCKS (preview-app.tsx). Laporan harian PIC,
- * bukti OUTPUT, dan bukti laporan harian PIC tetap ditangani mock-pic (null).
+ * Dipanggil paling depan untuk laporan semua peran, task, penerusan dan unlock.
+ * Bukti OUTPUT diteruskan ke mock-pic (null).
  */
 export function handle(path: string, url: string, init: RequestInit | undefined, role: string): Promise<Response> | null {
-  if (path === '/api/daily-input') return role === 'PIC_PROYEK' ? null : dailyInputRoute(url, init, role)
+  if (role === 'AUDITOR' && (init?.method ?? 'GET') !== 'GET') return json({ error: 'Peran Anda hanya dapat membaca.' }, 403)
+  if (path === '/api/daily-input') return dailyInputRoute(url, init, role)
+  if (path === '/api/weekly-input') return weeklyInputRoute(url, init, role)
   if (path === '/api/tasks') return tasksRoute(url, init, role)
   if (path === '/api/progress-reports') return progressRoute(url, init, role)
   if (path === '/api/inbox') return inboxRoute(init, role)
   if (path === '/api/evidence' || path.startsWith('/api/evidence/')) return evidenceRoute(path, url, init, role)
-  if (path === '/api/unlock-requests') return unlockSideEffect(init, role)
+  if (path === '/api/unlock-requests') return unlockRoute(url, init, role)
   if (path === '/api/undo') return undoRoute(init)
   return null
+}
+
+// Seed satu kali: angka laporan mengikuti rumus computeRollup (src/lib/daily-rollup.ts),
+// termasuk laporan contoh yang sudah dibekukan. Sesudah seed, mutasi selalu lewat gate.
+for (const p of dailyCatalog()) {
+  const tasks = todayList(p.holder.id, 'ADMIN_PT')
+  const derived = rollup(tasks)
+  if (p.holder.report && derived) {
+    Object.assign(p.holder.report, { status: derived.status, progressPct: derived.progressPct, needsEscalation: ['TERKENDALA', 'MENUNGGU_KEPUTUSAN'].includes(derived.status) })
+    p.holder.report.obstacle ??= tasks.filter((t) => t.obstacle || t.decisionNeeded).map((t) => t.obstacle || t.decisionNeeded).join(' | ') || null
+  }
 }

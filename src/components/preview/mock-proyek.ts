@@ -12,6 +12,8 @@
  */
 
 import * as mock from './mock-data'
+import { divisions as catalogDivisions, people, groupRoles, actor } from './mock-catalog'
+import { deriveProjectStatus } from '@/lib/project-status'
 import { ENTITIES, dailyProjects, deskWeeklyReports, findTask, markTaskEscalated } from './mock-laporan'
 import { approvalChainFor, can, canSignSlot, isMasterRole, pendingSlot, PROJECT_ENTITY_SLOTS } from '@/lib/rbac'
 import { NO_APPROVAL_LABEL, PROJECT_APPROVER_LABELS } from '@/lib/constants'
@@ -90,22 +92,8 @@ type Proj = {
   fallbackReport: { status: string; progressPct: number; days: number; isLate: boolean } | null
 }
 
-const DIVISIONS: Record<string, { id: string; name: string }[]> = {
-  e1: [{ id: 'dv-tek', name: 'Teknologi' }, { id: 'dv-keu', name: 'Keuangan' }, { id: 'dv-med', name: 'Media' }, { id: 'dv-ops', name: 'Operasional' }],
-  e2: [{ id: 'dv-sg-tek', name: 'Teknik' }, { id: 'dv-sg-kom', name: 'Komersial' }],
-  e3: [{ id: 'dv-bm-hum', name: 'Humas' }, { id: 'dv-bm-huk', name: 'Hukum' }],
-}
-const PIC_CANDIDATES: Record<string, { id: string; name: string; email: string }[]> = {
-  e1: [
-    { id: 'pratinjau-PIC_PROYEK', name: 'Rina Kartika', email: 'rina.kartika@karya.co.id' },
-    { id: 'u-p1', name: 'Yoga Saputra', email: 'yoga.saputra@karya.co.id' },
-    { id: 'u-p4', name: 'Sari Wulandari', email: 'sari.wulandari@karya.co.id' },
-    { id: 'u-p5', name: 'Bayu Prakoso', email: 'bayu.prakoso@karya.co.id' },
-    { id: 'u-p7', name: 'Lina Marlina', email: 'lina.marlina@karya.co.id' },
-  ],
-  e2: [{ id: 'u-dimas', name: 'Dimas Saputra', email: 'dimas.saputra@sigma.co.id' }, { id: 'u-sari2', name: 'Sekar Ayu', email: 'sekar.ayu@sigma.co.id' }],
-  e3: [{ id: 'u-lina3', name: 'Lina Marlina', email: 'lina.marlina@bumi.co.id' }, { id: 'u-maya3', name: 'Maya Anggraini', email: 'maya.anggraini@bumi.co.id' }],
-}
+const DIVISIONS = Object.fromEntries(Object.keys(ENTITIES).map((id) => [id, catalogDivisions.filter((d) => d.entityId === id)]))
+const PIC_CANDIDATES = Object.fromEntries(Object.keys(ENTITIES).map((id) => [id, people.filter((p) => p.scopeEntityId === id && p.role === 'PIC_PROYEK')]))
 const PHASES = ['INISIASI', 'PERENCANAAN', 'PELAKSANAAN', 'PENYELESAIAN']
 const MANAGED = ['AKTIF', 'DITUTUP', 'DIARSIPKAN']
 
@@ -126,7 +114,7 @@ const DAILY_DETAIL: Record<string, Partial<Proj>> = {
   p6: { divisionId: 'dv-keu', phase: 'PERENCANAAN', startDate: ago(5), targetEndDate: ahead(80), fallbackReport: { status: 'ON_PROGRESS', progressPct: 6, days: 1, isLate: false } },
   p7: { divisionId: 'dv-med', startDate: ago(20), targetEndDate: ahead(21), picUserId: 'u-p7' },
   sg1: { divisionId: 'dv-sg-tek', phase: 'PERENCANAAN', startDate: ago(20), targetEndDate: ahead(30), picUserId: 'u-dimas', approvedByName: 'Wahyu Hidayat' },
-  bm1: { divisionId: 'dv-bm-huk', phase: 'PENYELESAIAN', startDate: ago(45), targetEndDate: ahead(6), picUserId: 'u-lina3', approvedByName: 'Sri Rahayu', fallbackReport: { status: 'ON_PROGRESS', progressPct: 81, days: 1, isLate: false } },
+  bm1: { divisionId: 'dv-bm-huk', phase: 'PENYELESAIAN', startDate: ago(45), targetEndDate: ahead(6), picUserId: 'u-bm-pic', approvedByName: 'Sri Rahayu', fallbackReport: { status: 'ON_PROGRESS', progressPct: 81, days: 1, isLate: false } },
 }
 
 const projects: Proj[] = [
@@ -134,7 +122,7 @@ const projects: Proj[] = [
     base({ id: p.id, code: p.code, name: p.name, entityId: p.entityId, phase: p.phase, picName: p.picName, ...(DAILY_DETAIL[p.id] ?? {}) })
   ),
   base({
-    id: 'sg2', code: 'SGD-PRJ-02', name: 'Portal Pelanggan', entityId: 'e2', picUserId: 'u-sari2', picName: 'Sekar Ayu', divisionId: 'dv-sg-kom',
+    id: 'sg2', code: 'SGD-PRJ-02', name: 'Portal Pelanggan', entityId: 'e2', picUserId: 'u-sari2', picName: 'Sekar Wulandari', divisionId: 'dv-sg-kom',
     startDate: ago(25), targetEndDate: ahead(35), approvedByName: 'Wahyu Hidayat', fallbackReport: { status: 'ON_PROGRESS', progressPct: 55, days: 0, isLate: false },
   }),
   base({
@@ -192,6 +180,28 @@ const projects: Proj[] = [
     picName: 'Sari Wulandari', divisionId: 'dv-ops', startDate: ago(300), targetEndDate: ago(220), fallbackReport: { status: 'SELESAI', progressPct: 100, days: 221, isLate: false },
   }),
 ]
+
+function inProjectScope(p: Proj, role: string) {
+  if (role === 'PIC_PROYEK') return p.picUserId === actor(role).id
+  if (role === 'KEPALA_DIVISI') return catalogDivisions.some((d) => d.id === p.divisionId && d.headId === actor(role).id)
+  return groupRoles.includes(role) || p.entityId === 'e1'
+}
+
+/** Satu proyeksi proyek, dipakai Ringkasan, Tim, Sheet entitas dan pencarian. */
+export function projectSnapshots(role: string) {
+  return projects.filter((p) => inProjectScope(p, role)).map((p) => {
+    const latest = latestReport(p)
+    const live = dailyProjects().find((d) => d.id === p.id)?.report
+    return {
+      ...format(p, viewer(role)),
+      ...deriveProjectStatus({ lifecycle: p.lifecycle, targetEndDate: p.targetEndDate ? new Date(p.targetEndDate) : null }, latest ? { ...latest, reportDate: new Date(latest.reportDate), obstacle: live?.obstacle ?? null, needsEscalation: live?.needsEscalation ?? false } : null),
+      entityId: p.entityId, entityName: ENTITIES[p.entityId].name, entityCode: ENTITIES[p.entityId].code,
+      divisionName: catalogDivisions.find((d) => d.id === p.divisionId)?.name ?? null,
+      pic: p.picName, reportedToday: Boolean(live?.submittedAt), lastReportAt: live?.submittedAt ?? null,
+      lastNote: live?.achievementToday ?? live?.achievement ?? null,
+    }
+  })
+}
 
 const DAILY_IDS = new Set(dailyProjects().map((p) => p.id))
 
@@ -345,6 +355,7 @@ function projectsRoute(url: string, init: RequestInit | undefined, role: string)
     }
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10) || 20))
+    const id = sp.get('id') || ''
     const lifecycle = sp.get('lifecycle') || 'AKTIF'
     const phase = sp.get('phase') || ''
     const search = (sp.get('search') || '').toLowerCase()
@@ -352,13 +363,27 @@ function projectsRoute(url: string, init: RequestInit | undefined, role: string)
     const scope = scopeIds(v)
     const order = (s: string) => s
     const list = projects
+      .filter((p) => !id || p.id === id)
       .filter((p) => (lifecycle === 'ALL' ? true : p.lifecycle === lifecycle))
       .filter((p) => !phase || p.phase === phase)
       .filter((p) => !search || p.name.toLowerCase().includes(search))
       .filter((p) => !scope || scope.includes(p.entityId) || p.related.some((r) => scope.includes(r)))
       .filter((p) => !entityId || p.entityId === entityId || p.related.includes(entityId))
       .sort((a, b) => order(a.lifecycle).localeCompare(order(b.lifecycle)) || a.code.localeCompare(b.code))
-    return json({ items: list.slice((page - 1) * pageSize, page * pageSize).map((p) => format(p, v)), total: list.length, page, pageSize })
+    const summary = { running: 0, waiting: 0, resubmit: 0, late: 0, risk: 0, silent: 0 }
+    for (const p of list) {
+      const permissions = format(p, v).permissions
+      if (p.lifecycle === 'DIUSULKAN' && permissions.approve) summary.waiting++
+      if (permissions.resubmit) summary.resubmit++
+      if (p.lifecycle !== 'AKTIF') continue
+      summary.running++
+      const report = latestReport(p)
+      const state = deriveProjectStatus({ lifecycle: p.lifecycle, targetEndDate: p.targetEndDate ? new Date(p.targetEndDate) : null }, report ? { ...report, obstacle: null, needsEscalation: false, reportDate: new Date(report.reportDate) } : null).status
+      if (state === 'late') summary.late++
+      if (state === 'risk') summary.risk++
+      if (!report) summary.silent++
+    }
+    return json({ items: list.slice((page - 1) * pageSize, page * pageSize).map((p) => format(p, v)), total: list.length, page, pageSize, summary })
   }
 
   if (method === 'DELETE') {
@@ -701,12 +726,8 @@ function genItems(reportId: string, n: number, done: number, blocked: number, pe
   })
 }
 
-const HEADS: Record<string, string> = { a: 'Andi Wijaya', b: 'Sinta Dewi', c: 'Lina Marlina', sdm: 'Rudi Hartono', d: 'Ratna Sari' }
-const OTHER_DIVS = [
-  { id: 'dv-sg-tek', name: 'Teknik', entityId: 'e2', head: 'Wahyu Hidayat' },
-  { id: 'dv-sg-kom', name: 'Komersial', entityId: 'e2', head: 'Sekar Ayu' },
-  { id: 'dv-bm-hum', name: 'Humas', entityId: 'e3', head: 'Maya Anggraini' },
-]
+const HEADS = Object.fromEntries(catalogDivisions.map((d) => [d.id, d.head]))
+const OTHER_DIVS = catalogDivisions.filter((d) => d.entityId !== 'e1')
 
 function weekMeta(offset: number) {
   const ref = new Date(Date.now() - offset * 7 * DAY)
@@ -778,13 +799,21 @@ function currentWeekE1(): WR[] {
         id: r.id, divisionId: d.divisionId, entityId: 'e1', isoYear: w.isoYear, isoWeek: w.isoWeek, periodStart: w.periodStart, periodEnd: w.periodEnd,
         statusHeader: status, submittedById: submittedAt ? `u-${d.divisionId}` : null, submittedAt, forwardedById: forwardedAt ? 'pratinjau-ADMIN_PT' : null,
         forwardedAt, approvedById: approvedAt ? `u-${d.divisionId}` : null, approvedAt, approvedBy: approvedAt ? person(`u-${d.divisionId}`, head) : null,
-        approvalHash: null, isLocked: false, lockedAt: null, isLate: false, createdAt: w.periodStart, updatedAt: forwardedAt ?? approvedAt ?? submittedAt ?? w.periodStart,
+        approvalHash: null, isLocked: Boolean(r.isLocked), lockedAt: null, isLate: false, createdAt: w.periodStart, updatedAt: forwardedAt ?? approvedAt ?? submittedAt ?? w.periodStart,
         division: { id: d.divisionId, name: d.name }, entity: ENTITIES.e1, items,
       }
     })
 }
 
-function weeklyReportsRoute(url: string, role: string): Promise<Response> {
+export function weeklySnapshots(role: string) {
+  return [...currentWeekE1(), ...archive].filter((r) => {
+    if (role === 'PIC_PROYEK') return false
+    if (role === 'KEPALA_DIVISI') return r.divisionId === 'dv-tek'
+    return groupRoles.includes(role) || r.entityId === 'e1'
+  })
+}
+
+export function weeklyReportsRoute(url: string, role: string): Promise<Response> {
   const v = viewer(role)
   const sp = params(url)
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
@@ -792,7 +821,7 @@ function weeklyReportsRoute(url: string, role: string): Promise<Response> {
   const scope = scopeIds(v)
   const isoYear = sp.get('isoYear') ? parseInt(sp.get('isoYear')!, 10) : null
   const isoWeek = sp.get('isoWeek') ? parseInt(sp.get('isoWeek')!, 10) : null
-  const rows = [...currentWeekE1(), ...archive]
+  const rows = weeklySnapshots(role)
     .filter((r) => !scope || scope.includes(r.entityId))
     .filter((r) => !sp.get('entityId') || r.entityId === sp.get('entityId'))
     .filter((r) => !sp.get('statusHeader') || r.statusHeader === sp.get('statusHeader'))

@@ -8,30 +8,31 @@
  */
 
 import * as mock from './mock-data'
+import { reportHistory } from './mock-history'
+import { actor, divisions } from './mock-catalog'
+import { projectSnapshots } from './mock-proyek'
+import { startOfWibDay, wibDateKey } from '@/lib/lock'
 
 const DAY = 86400000
 const now = Date.now()
-const day = (n: number, h = 3) => new Date(now + n * DAY - (now % DAY) + h * 3600000).toISOString()
+const day = (n: number, h = 10) => new Date(startOfWibDay(new Date(now)).getTime() + n * DAY + h * 3600000).toISOString()
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`
-const ME = { id: 'pratinjau-PIC_PROYEK', name: 'Rina Kartika' }
-const HEAD = { id: 'u-andi', name: 'Andi Wijaya' }
+const ME = actor('PIC_PROYEK')
+const HEAD = actor('KEPALA_DIVISI')
 
 type Out = {
   id: string; projectId: string; title: string; description: string | null; status: string; dueDate: string | null
   ownerId: string; reviewerId: string | null; revisionNote: string | null; submittedAt: string | null; reviewedAt: string | null
   createdAt: string; updatedAt: string; projectName: string; projectCode: string; ownerName: string; reviewerName: string | null
 }
-const PROJ: Record<string, { name: string; code: string; target: string }> = {
-  p2: { name: 'Aplikasi Absensi', code: 'PRJ-P2', target: day(19) },
-  p7: { name: 'Portal Pelanggan', code: 'PRJ-P7', target: day(60) },
-}
+const PROJ = Object.fromEntries(projectSnapshots('SUPERADMIN').map((p) => [p.id, { name: p.name, code: p.code, target: p.targetEndDate ?? day(30), ownerId: p.picUserId ?? ME.id, ownerName: p.picName ?? ME.name }]))
 const O = (id: string, projectId: string, title: string, status: string, due: number | null, o: Partial<Out> = {}): Out => ({
-  id, projectId, title, description: null, status, dueDate: due === null ? null : day(due), ownerId: ME.id,
+  id, projectId, title, description: null, status, dueDate: due === null ? null : day(due), ownerId: PROJ[projectId].ownerId,
   reviewerId: status === 'DITERIMA' || status === 'PERLU_REVISI' ? HEAD.id : null, revisionNote: null,
   submittedAt: status === 'DIKERJAKAN' ? null : day(-2, 9), reviewedAt: status === 'DITERIMA' || status === 'PERLU_REVISI' ? day(-1, 10) : null,
-  createdAt: day(-20), updatedAt: day(-1), projectName: PROJ[projectId].name, projectCode: PROJ[projectId].code, ownerName: ME.name,
+  createdAt: day(-20), updatedAt: day(-1), projectName: PROJ[projectId].name, projectCode: PROJ[projectId].code, ownerName: PROJ[projectId].ownerName,
   reviewerName: status === 'DITERIMA' || status === 'PERLU_REVISI' ? HEAD.name : null, ...o,
 })
 
@@ -47,8 +48,8 @@ const outputs: Out[] = [
   O('o6', 'p2', 'Desain antarmuka v2', 'DITERIMA', -12),
   O('o7', 'p2', 'Spesifikasi kebutuhan', 'DITERIMA', -25),
   O('o8', 'p2', 'Rencana proyek', 'DITERIMA', -35),
-  O('p7o1', 'p7', 'Peta kebutuhan portal', 'DIKERJAKAN', 9),
-  O('p7o2', 'p7', 'Rencana anggaran portal', 'MENUNGGU_REVIEW', 3),
+  O('p7o1', 'p4', 'Peta kebutuhan portal', 'DIKERJAKAN', 9),
+  O('p7o2', 'p4', 'Rencana anggaran portal', 'MENUNGGU_REVIEW', 3),
 ]
 
 type Ev = { id: string; fileName: string; mime: string; size: number; url: string | null; createdAt: string }
@@ -72,7 +73,7 @@ const notes: Record<string, Note[]> = {
     { id: 'n2', body: 'Belum, Pak. Vendor menjanjikan Kamis. Saya siapkan usulan geser rilis ke 31 Oktober.', createdAt: day(-1, 3), readAt: day(-1, 4), authorId: ME.id, authorName: ME.name, authorRole: 'PIC_PROYEK' },
     { id: 'n3', body: 'Oke. Panduan pengguna tolong lengkapi bagian izin dan cuti, lalu kirim ulang.', createdAt: day(0, 1), readAt: null, authorId: HEAD.id, authorName: HEAD.name, authorRole: 'KEPALA_DIVISI' },
   ],
-  p7: [],
+  p4: [],
 }
 
 type Stage = { id: string; name: string; position: number; startDate: string | null; dueDate: string | null; status: string; note: string | null; updatedAt: string }
@@ -88,7 +89,7 @@ const stages: Record<string, Stage[]> = {
     S('s5', 'Pelatihan pengguna', 4, 7, 13, 'BELUM_MULAI'),
     S('s6', 'Rilis', 5, 14, 19, 'BELUM_MULAI'),
   ],
-  p7: [],
+  p4: [],
 }
 
 type Prop = {
@@ -120,19 +121,21 @@ const counts = (list: Out[]) => {
 const withEv = (o: Out) => ({ ...o, evidenceCount: evidence[o.id]?.length ?? 0 })
 const dateFromKey = (k: unknown) => (typeof k === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k) ? new Date(`${k}T00:00:00+07:00`).toISOString() : null)
 
-function outputsRoute(url: string, init?: RequestInit) {
+function outputsRoute(url: string, init: RequestInit | undefined, role: string) {
   const method = init?.method ?? 'GET'
   const sp = params(url)
+  const visible = new Set(projectSnapshots(role).map((p) => p.id))
   if (method === 'GET') {
     const pid = sp.get('projectId')
-    const base = outputs.filter((o) => !pid || o.projectId === pid)
+    const base = outputs.filter((o) => visible.has(o.projectId) && (!pid || o.projectId === pid))
     const st = sp.get('status')
     const list = st ? base.filter((o) => o.status === st) : base
     return json({ items: list.map(withEv), counts: counts(base), total: base.length })
   }
+  if (!['PIC_PROYEK', 'ADMIN_PT', 'TI', 'SUPERADMIN'].includes(role)) return json({ error: 'Peran Anda tidak mengubah output.' }, 403)
   if (method === 'DELETE') {
     const i = outputs.findIndex((o) => o.id === sp.get('id'))
-    if (i < 0) return json({ error: 'Output tidak ditemukan' }, 404)
+    if (i < 0 || !visible.has(outputs[i].projectId)) return json({ error: 'Output tidak ditemukan' }, 404)
     if (evidence[outputs[i].id]?.length) return json({ error: 'Hapus bukti output ini dulu' }, 409)
     outputs.splice(i, 1)
     return json({ ok: true })
@@ -140,7 +143,7 @@ function outputsRoute(url: string, init?: RequestInit) {
   const b = body(init)
   if (method === 'POST') {
     const pid = String(b.projectId ?? '')
-    if (!PROJ[pid]) return json({ error: 'Proyek tidak ditemukan' }, 404)
+    if (!PROJ[pid] || !visible.has(pid)) return json({ error: 'Proyek tidak ditemukan' }, 404)
     const title = String(b.title ?? '').trim()
     if (title.length < 3) return json({ error: 'Judul output minimal 3 huruf' }, 422)
     const o = O(uid('o'), pid, title, 'DIKERJAKAN', null, {
@@ -153,7 +156,7 @@ function outputsRoute(url: string, init?: RequestInit) {
   }
   // PATCH
   const o = outputs.find((x) => x.id === b.id)
-  if (!o) return json({ error: 'Output tidak ditemukan' }, 404)
+  if (!o || !visible.has(o.projectId)) return json({ error: 'Output tidak ditemukan' }, 404)
   const at = new Date().toISOString()
   switch (b.action) {
     case 'update':
@@ -177,16 +180,21 @@ function outputsRoute(url: string, init?: RequestInit) {
   return json({ ok: true, output: withEv(o) })
 }
 
-function evidenceRoute(path: string, url: string, init?: RequestInit) {
+function evidenceRoute(path: string, url: string, init: RequestInit | undefined, role: string) {
   const method = init?.method ?? 'GET'
+  const guard = (id: string) => {
+    const output = outputSnapshots(role).find((o) => o.id === id)
+    if (!output) return json({ error: 'Data induk bukti tidak ditemukan' }, 404)
+    if (method !== 'GET' && !['PIC_PROYEK', 'ADMIN_PT', 'TI', 'SUPERADMIN'].includes(role)) return json({ error: 'Peran Anda tidak mengubah bukti output.' }, 403)
+    if (method !== 'GET' && ['MENUNGGU_REVIEW', 'DITERIMA'].includes(output.status)) return json({ error: 'Output ini sedang direview atau sudah diterima' }, 409)
+    return null
+  }
   if (path === '/api/evidence/upload') {
     const fd = init?.body instanceof FormData ? init.body : null
-    if (fd && fd.get('targetType') === 'DAILY_REPORT') return dailyUpload(fd)
     if (!fd || fd.get('targetType') !== 'OUTPUT') return null
     const id = String(fd.get('targetId') ?? '')
-    const o = outputs.find((x) => x.id === id)
-    if (!o) return json({ error: 'Data induk bukti tidak ditemukan' }, 404)
-    if (o.status === 'MENUNGGU_REVIEW' || o.status === 'DITERIMA') return json({ error: 'Output ini sedang direview atau sudah diterima' }, 409)
+    const denied = guard(id)
+    if (denied) return denied
     const file = fd.get('file')
     const f = file instanceof File ? file : null
     const ev: Ev = { id: uid('ev'), fileName: f?.name ?? 'Berkas', mime: f?.type || 'application/octet-stream', size: f?.size ?? 0, url: null, createdAt: new Date().toISOString() }
@@ -197,12 +205,16 @@ function evidenceRoute(path: string, url: string, init?: RequestInit) {
     if (method === 'GET') {
       const sp = params(url)
       if (sp.get('targetType') !== 'OUTPUT') return null
+      const denied = guard(sp.get('targetId') ?? '')
+      if (denied) return denied
       const items = evidence[sp.get('targetId') ?? ''] ?? []
       return json({ items, total: items.length })
     }
     const b = body(init)
     if (b.targetType !== 'OUTPUT') return null
     const id = String(b.targetId ?? '')
+    const denied = guard(id)
+    if (denied) return denied
     if (!/^https?:\/\/\S+$/i.test(String(b.url ?? ''))) return json({ error: 'Tautan bukti harus berupa URL yang diawali http:// atau https://' }, 422)
     const ev: Ev = { id: uid('ev'), fileName: String(b.fileName ?? 'Tautan'), mime: 'text/uri-list', size: 0, url: String(b.url), createdAt: new Date().toISOString() }
     ;(evidence[id] ??= []).unshift(ev)
@@ -210,10 +222,10 @@ function evidenceRoute(path: string, url: string, init?: RequestInit) {
   }
   // /api/evidence/<id>
   const evId = path.slice('/api/evidence/'.length)
-  const daily = dailyEvidenceRoute(evId, method)
-  if (daily) return daily
   const owner = Object.keys(evidence).find((k) => evidence[k].some((e) => e.id === evId))
   if (!owner) return null
+  const denied = guard(owner)
+  if (denied) return denied
   const ev = evidence[owner].find((e) => e.id === evId)!
   if (method === 'DELETE') {
     evidence[owner] = evidence[owner].filter((e) => e.id !== evId)
@@ -222,34 +234,34 @@ function evidenceRoute(path: string, url: string, init?: RequestInit) {
   return json({ url: ev.url ?? 'data:text/plain;charset=utf-8,' + encodeURIComponent(`Pratinjau: ${ev.fileName}`), kind: ev.url ? 'link' : 'file' })
 }
 
-function notesRoute(url: string, init?: RequestInit) {
+type NoteRead = { noteId: string; userId: string; readAt: string }
+const noteReads: NoteRead[] = []
+const readAtFor = (n: Note, userId: string) => n.readAt ?? noteReads.find((r) => r.noteId === n.id && (n.authorId === userId ? r.userId !== userId : r.userId === userId))?.readAt ?? null
+export function unreadNotes(role: string) {
+  const ids = new Set(projectSnapshots(role).map((p) => p.id))
+  return Object.entries(notes).flatMap(([id, list]) => ids.has(id) ? list : []).filter((n) => n.authorId !== actor(role).id && !readAtFor(n, actor(role).id)).length
+}
+function notesRoute(url: string, init: RequestInit | undefined, role: string) {
+  if (role === 'AUDITOR') return json({ error: 'Peran Anda tidak mengelola catatan.' }, 403)
   const method = init?.method ?? 'GET'
   const sp = params(url)
-  if (method === 'GET' && sp.get('unread') === '1') {
-    return json({ unread: Object.values(notes).flat().filter((n) => !n.readAt && n.authorId !== ME.id).length })
-  }
-  const pid = method === 'GET' ? (sp.get('projectId') ?? '') : String(body(init).projectId ?? '')
-  if (!PROJ[pid]) return json({ error: 'Proyek tidak ditemukan' }, 404)
-  const list = (notes[pid] ??= [])
-  if (method === 'GET') {
-    return json({
-      projectId: pid,
-      projectName: PROJ[pid].name,
-      unread: list.filter((n) => !n.readAt && n.authorId !== ME.id).length,
-      heads: [HEAD.name],
-      items: list.map((n) => ({ ...n, mine: n.authorId === ME.id })),
-    })
-  }
+  const me = actor(role)
+  if (method === 'GET' && sp.get('unread') === '1') return json({ unread: ['PIC_PROYEK', 'KEPALA_DIVISI', 'ADMIN_PT'].includes(role) ? unreadNotes(role) : 0 })
+  const pid = method === 'GET' ? sp.get('projectId') ?? '' : String(body(init).projectId ?? '')
+  const p = projectSnapshots(role).find((p) => p.id === pid)
+  if (!p) return json({ error: 'Proyek tidak ditemukan di cakupan Anda.' }, 404)
+  const list = notes[pid] ??= []
+  const shape = (n: Note) => ({ ...n, mine: n.authorId === me.id, readAt: readAtFor(n, me.id), readCount: noteReads.filter((r) => r.noteId === n.id && r.userId !== n.authorId).length })
+  if (method === 'GET') return json({ projectId: pid, projectName: p.name, heads: divisions.filter((d) => d.id === p.divisionId).map((d) => d.head), unread: list.filter((n) => n.authorId !== me.id && !readAtFor(n, me.id)).length, items: list.slice(-100).map(shape) })
   const at = new Date().toISOString()
-  list.forEach((n) => {
-    if (!n.readAt && n.authorId !== ME.id) n.readAt = at
-  })
-  if (method === 'PATCH') return json({ ok: true })
-  const text = String(body(init).body ?? '').trim()
-  if (!text) return json({ error: 'Catatan tidak boleh kosong' }, 422)
-  const n: Note = { id: uid('n'), body: text, createdAt: at, readAt: null, authorId: ME.id, authorName: ME.name, authorRole: 'PIC_PROYEK' }
+  const text = String(body(init).body ?? '').trim().slice(0, 2000)
+  if (method === 'POST' && !text) return json({ error: 'Catatan tidak boleh kosong' }, 422)
+  let marked = 0
+  for (const n of list) if (n.authorId !== me.id && !readAtFor(n, me.id)) { noteReads.push({ noteId: n.id, userId: me.id, readAt: at }); marked++ }
+  if (method === 'PATCH') return json({ ok: true, marked })
+  const n: Note = { id: uid('n'), body: text, createdAt: at, readAt: null, authorId: me.id, authorName: me.name, authorRole: role }
   list.push(n)
-  return json({ ok: true, note: { ...n, mine: true } }, 201)
+  return json({ ok: true, note: shape(n) }, 201)
 }
 
 function stagesRoute(url: string, init?: RequestInit) {
@@ -337,131 +349,13 @@ function proposalsRoute(url: string, init?: RequestInit) {
 /* [F2-PIC] Laporan harian (/api/daily-input) & progres proyek          */
 /* ------------------------------------------------------------------ */
 
-type DailyRep = {
-  id: string; status: string; progressPct: number; achievementToday: string; obstacle: string | null; followUp: string | null
-  decisionRequestedFrom: string | null; evidenceCount: number; submittedAt: string | null; forwardedAt: string | null; isLocked: boolean
-  evidence: Ev[]
-}
-const DAILY_TEXT: Record<string, { achievement: string; obstacle: string | null; followUp: string | null }> = {
-  p2: {
-    achievement: 'Perbaikan sinkronisasi data cuti selesai; panduan pengguna versi iPhone sedang disusun.',
-    obstacle: 'Perangkat uji gelombang 2 belum tiba dari vendor.',
-    followUp: 'Konfirmasi jadwal kirim perangkat, lanjutkan panduan pengguna.',
-  },
-  p7: { achievement: 'Wawancara kebutuhan tim layanan dan sketsa alur pendaftaran selesai.', obstacle: null, followUp: null },
-}
-const dailyEvidence: Record<string, Ev[]> = {
-  'dr-p2': [{ id: 'ev-dr-p2a', fileName: 'Foto rak perangkat uji.jpg', mime: 'image/jpeg', size: 412000, url: null, createdAt: day(0, 4) }],
-}
-function dailyReport(pid: string): DailyRep | null {
-  const p = mock.deskPic.projects.find((x) => x.id === pid)
-  if (!p?.report) return null
-  const id = `dr-${pid}`
-  const ev = dailyEvidence[id] ?? []
-  const t = DAILY_TEXT[pid] ?? { achievement: '', obstacle: null, followUp: null }
-  return {
-    id, status: p.report.status, progressPct: p.report.progressPct, achievementToday: t.achievement, obstacle: t.obstacle, followUp: t.followUp,
-    decisionRequestedFrom: null, evidenceCount: ev.length, submittedAt: p.report.submittedAt, forwardedAt: p.report.forwardedAt, isLocked: false, evidence: ev,
-  }
-}
-function dailyUpload(fd: FormData) {
-  const id = String(fd.get('targetId') ?? '')
-  const pid = id.replace(/^dr-/, '')
-  const p = mock.deskPic.projects.find((x) => x.id === pid)
-  if (!p?.report) return json({ error: 'Simpan draf dulu agar bukti bisa dilampirkan' }, 404)
-  if (p.report.forwardedAt) return json({ error: 'Laporan sudah diteruskan ke holding. Ajukan buka kunci untuk mengubahnya.' }, 409)
-  const file = fd.get('file')
-  const f = file instanceof File ? file : null
-  const ev: Ev = { id: uid('ev-dr'), fileName: f?.name ?? 'Foto', mime: f?.type || 'image/jpeg', size: f?.size ?? 0, url: null, createdAt: new Date().toISOString() }
-  ;(dailyEvidence[id] ??= []).unshift(ev)
-  p.report.evidenceCount = dailyEvidence[id].length
-  return json({ ok: true, evidence: ev, evidenceCount: dailyEvidence[id].length })
-}
-function dailyEvidenceRoute(evId: string, method: string) {
-  const owner = Object.keys(dailyEvidence).find((k) => dailyEvidence[k].some((e) => e.id === evId))
-  if (!owner) return null
-  if (method === 'DELETE') {
-    dailyEvidence[owner] = dailyEvidence[owner].filter((e) => e.id !== evId)
-    const p = mock.deskPic.projects.find((x) => `dr-${x.id}` === owner)
-    if (p?.report) p.report.evidenceCount = dailyEvidence[owner].length
-    return json({ ok: true, evidenceCount: dailyEvidence[owner].length })
-  }
-  const ev = dailyEvidence[owner].find((e) => e.id === evId)!
-  return json({ url: 'data:text/plain;charset=utf-8,' + encodeURIComponent(`Pratinjau: ${ev.fileName}`), kind: 'file' })
-}
-
-function dailyInputRoute(url: string, init?: RequestInit) {
-  const method = init?.method ?? 'GET'
-  const desk = mock.deskPic
-  if (method === 'GET') {
-    if (params(url).get('date')) return json({ error: 'Pratinjau hanya memuat laporan hari ini' }, 422)
-    return json({
-      reportDate: desk.today,
-      reportDateKey: desk.today.slice(0, 10),
-      today: true,
-      todayKey: desk.today.slice(0, 10),
-      lockAt: desk.lockAt,
-      locked: desk.locked,
-      countdown: desk.countdown,
-      canRequestUnlock: true,
-      openDays: [],
-      projects: desk.projects.map((p) => {
-        const report = dailyReport(p.id)
-        const forwarded = Boolean(report?.forwardedAt)
-        return {
-          id: p.id, code: p.code, name: p.name, phase: p.phase, taskCount: mock.deskTasks[p.id]?.length ?? 0,
-          derived: (mock.deskTasks[p.id]?.length ?? 0) > 0,
-          editable: !desk.locked && !forwarded,
-          lockReason: forwarded ? 'FORWARDED' : desk.locked ? 'TIME' : null,
-          unlock: null,
-          report,
-        }
-      }),
-    })
-  }
-  if (method === 'DELETE') {
-    const pid = params(url).get('projectId') ?? ''
-    const p = desk.projects.find((x) => x.id === pid)
-    if (!p?.report) return json({ error: 'Laporan tidak ditemukan' }, 404)
-    if (p.report.forwardedAt) return json({ error: 'Laporan yang sudah diteruskan ke holding tidak bisa dihapus.' }, 409)
-    p.report = null as unknown as typeof p.report
-    return json({ ok: true })
-  }
-  // PUT { projectId, action, status, progressPct, achievementToday, obstacle, followUp }
-  const b = body(init)
-  const p = desk.projects.find((x) => x.id === b.projectId)
-  if (!p) return json({ error: 'Proyek tidak ditemukan' }, 404)
-  if (desk.locked) return json({ error: 'Tenggat 17.00 sudah lewat; laporan hari ini terkunci.' }, 409)
-  if (p.report?.forwardedAt) return json({ error: 'Laporan sudah diteruskan ke holding. Ajukan buka kunci untuk mengubahnya.', frozen: true }, 409)
-  const derived = (mock.deskTasks[p.id]?.length ?? 0) > 0
-  const status = derived && p.report ? p.report.status : String(b.status ?? '')
-  if (!status) return json({ error: 'Pilih status laporan' }, 422)
-  const achievement = String(b.achievementToday ?? '').trim()
-  if (b.action === 'submit' && achievement.length < 3) return json({ error: 'Tulis capaian hari ini' }, 422)
-  const obstacle = String(b.obstacle ?? '').trim() || null
-  const followUp = String(b.followUp ?? '').trim() || null
-  if (b.action === 'submit' && (status === 'TERKENDALA' || status === 'MENUNGGU_KEPUTUSAN') && !obstacle) return json({ error: 'Tulis kendalanya' }, 422)
-  if (b.action === 'submit' && status === 'TERKENDALA' && !followUp) return json({ error: 'Tulis rencana besok' }, 422)
-  DAILY_TEXT[p.id] = { achievement, obstacle, followUp }
-  const prev = p.report
-  p.report = {
-    status,
-    progressPct: derived && prev ? prev.progressPct : Number(b.progressPct ?? 0),
-    submittedAt: b.action === 'submit' ? new Date().toISOString() : (prev?.submittedAt ?? null),
-    forwardedAt: null,
-    isLate: false,
-    evidenceCount: dailyEvidence[`dr-${p.id}`]?.length ?? 0,
-  }
-  return json({ ok: true, report: dailyReport(p.id) })
-}
-
 function progressRoute(url: string) {
   const pid = params(url).get('projectId') ?? ''
   if (!PROJ[pid]) return json({ error: 'Proyek tidak ditemukan' }, 404)
   const desk = mock.deskPic.projects.find((x) => x.id === pid)
   const r = desk?.report ?? null
   // Enam minggu terakhir: aktual dari riwayat contoh, rencana dari tahapan contoh (setara rumus src/lib/pic-progress.ts).
-  const actual = pid === 'p2' ? [12, 22, 33, 45, 58, 64] : [0, 0, 0, 0, 10, 22]
+  const actual = reportHistory(pid, Array.from({ length: 6 }, (_, i) => startOfWibDay(new Date(Date.now() - (5 - i) * 7 * DAY)).toISOString())).map((h) => h.progressPct)
   const plan = pid === 'p2' ? [15, 27, 39, 51, 63, 75] : [0, 0, 0, 0, 12, 20]
   const nowD = new Date(now)
   const wk = (() => {
@@ -470,7 +364,7 @@ function progressRoute(url: string) {
     return Math.ceil(((x.getTime() - Date.UTC(x.getUTCFullYear(), 0, 1)) / DAY + 1) / 7)
   })()
   const weeks = actual.map((a, i) => ({
-    key: `2026-W${String(wk - 5 + i).padStart(2, '0')}`, label: `M${wk - 5 + i}`, start: day(-(5 - i) * 7), actual: a, plan: plan[i], reported: a > 0,
+    key: `2026-W${String(wk - 5 + i).padStart(2, '0')}`, label: `M${wk - 5 + i}`, start: day(-(5 - i) * 7), actual: a, plan: plan[i], reported: a !== null,
   }))
   const pending = proposals.find((x) => x.projectId === pid && x.status === 'DIAJUKAN')
   const st = stages[pid] ?? []
@@ -507,19 +401,11 @@ function progressRoute(url: string) {
   const top = deadlines.slice(0, 5)
   const target = deadlines.find((x) => x.kind === 'PROJECT')
   if (target && !top.includes(target)) top[top.length - 1] = target
-  const history = (desk?.history ?? []).slice(-6).map((h, i, arr) => {
-    const last = i === arr.length - 1
-    const state = last
-      ? r?.forwardedAt ? 'FORWARDED' : r?.submittedAt ? 'SENT' : r ? 'DRAFT' : 'PENDING'
-      : !h.submitted ? 'MISSING' : h.isLate ? 'LATE' : i < arr.length - 2 ? 'FORWARDED' : 'SENT'
-    return {
-      date: h.date.slice(0, 10) === h.date ? h.date : new Date(Date.parse(h.date) + 7 * 3600000).toISOString().slice(0, 10),
-      state,
-      status: last ? (r?.status ?? null) : h.status,
-      progressPct: last ? (r?.progressPct ?? null) : h.progressPct,
-      submittedAt: last ? (r?.submittedAt ?? null) : h.submitted ? new Date(Date.parse(h.date) + 16 * 3600000).toISOString() : null,
-    }
-  })
+  const history = reportHistory(pid).slice(-6).map((h) => ({
+    date: h.key,
+    state: h.forwarded ? 'FORWARDED' : h.submitted ? h.isLate ? 'LATE' : 'SENT' : h.progressPct !== null ? 'DRAFT' : 'MISSING',
+    status: h.status, progressPct: h.progressPct, submittedAt: h.submittedAt,
+  }))
   return json({
     projectId: pid,
     today: r ? { submittedAt: r.submittedAt, forwardedAt: r.forwardedAt, isLate: r.isLate, progressPct: r.progressPct } : null,
@@ -529,11 +415,58 @@ function progressRoute(url: string) {
   })
 }
 
+/** Output dan riwayat revisi yang sama dipakai PIC, kepala divisi, serta ringkasan. */
+export function outputSnapshots(role: string) {
+  const ps = projectSnapshots(role)
+  return outputs.filter((o) => ps.some((p) => p.id === o.projectId)).map((o) => {
+    const p = ps.find((p) => p.id === o.projectId)!
+    return { ...withEv(o), projectName: p.name, projectCode: p.code, divisionId: p.divisionId,
+      project: { id: p.id, name: p.name, code: p.code }, owner: { id: o.ownerId, name: o.ownerName, initials: o.ownerName.split(' ').map((s) => s[0]).join('') } }
+  })
+}
+type OutputRevision = { outputId: string; reviewerId: string; note: string; previousNote: string | null; reviewedAt: string; undoneAt: string | null }
+const revisions: OutputRevision[] = []
+function reviewRoute(init: RequestInit | undefined, role: string) {
+  if (!['KEPALA_DIVISI', 'TI', 'SUPERADMIN'].includes(role)) return json({ error: 'Peran Anda tidak mereview output.' }, 403)
+  const items = outputSnapshots(role)
+  if ((init?.method ?? 'GET') === 'GET') return json({ queue: items.filter((o) => o.status === 'MENUNGGU_REVIEW'), decided: items.filter((o) => o.reviewerId === actor(role).id && o.reviewedAt && Date.now() - Date.parse(o.reviewedAt) < DAY), undoMinutes: 15 })
+  const b = body(init)
+  const me = actor(role)
+  const at = new Date().toISOString()
+  const ids = new Set(Array.isArray(b.ids) ? b.ids : [b.id])
+  if (!['accept', 'revise', 'accept-all', 'undo'].includes(String(b.action))) return json({ error: 'Aksi tidak dikenal' }, 400)
+  const note = String(b.note ?? '').trim()
+  if (b.action === 'revise' && note.length < 5) return json({ error: 'Tulis catatan revisi minimal 5 huruf.' }, 422)
+  const rows = outputs.filter((o) => items.some((i) => i.id === o.id) && (b.action === 'accept-all' && !Array.isArray(b.ids) || ids.has(o.id)))
+    .filter((o) => b.action === 'undo' ? o.status !== 'MENUNGGU_REVIEW' && o.reviewerId === me.id && o.reviewedAt && Date.now() - Date.parse(o.reviewedAt) <= 15 * 60000 : o.status === 'MENUNGGU_REVIEW')
+  if (['accept', 'revise'].includes(String(b.action)) && !rows.length) return json({ error: 'Output ini sudah diputuskan.' }, 409)
+  for (const o of rows) {
+    if (b.action === 'undo') {
+      if (o.status === 'PERLU_REVISI') {
+        const rev = revisions.findLast((r) => r.outputId === o.id && r.reviewerId === me.id && !r.undoneAt)
+        if (rev) { o.revisionNote = rev.previousNote; rev.undoneAt = at }
+      }
+      Object.assign(o, { status: 'MENUNGGU_REVIEW', reviewerId: null, reviewerName: null, reviewedAt: null })
+    } else {
+      if (b.action === 'revise') {
+        revisions.push({ outputId: o.id, reviewerId: me.id, note, previousNote: o.revisionNote, reviewedAt: at, undoneAt: null })
+        o.revisionNote = note
+      }
+      Object.assign(o, { status: b.action === 'revise' ? 'PERLU_REVISI' : 'DITERIMA', reviewerId: me.id, reviewerName: me.name, reviewedAt: at })
+    }
+  }
+  return json({ ok: true, ids: rows.map((o) => o.id), reviewedAt: at })
+}
+
 export function handle(path: string, url: string, init: RequestInit | undefined, role: string): Promise<Response> | null {
+  if (path === '/api/project-notes') return notesRoute(url, init, role)
+  if (path === '/api/outputs/review') return reviewRoute(init, role)
+  if (path === '/api/outputs') return outputsRoute(url, init, role)
+  if (path === '/api/evidence' || path.startsWith('/api/evidence/')) return evidenceRoute(path, url, init, role)
   if (role !== 'PIC_PROYEK') return null
   if (path === '/api/nav-badges') {
     const outstanding = mock.deskPic.projects.filter((p) => !p.report?.submittedAt).length
-    const unread = Object.values(notes).flat().filter((n) => !n.readAt && n.authorId !== ME.id).length
+    const unread = unreadNotes(role)
     return json({
       badges: {
         ...(!mock.deskPic.locked && outstanding ? { 'daily-input': outstanding } : {}),
@@ -541,11 +474,7 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
       },
     })
   }
-  if (path === '/api/daily-input') return dailyInputRoute(url, init)
   if (path === '/api/project-progress') return progressRoute(url)
-  if (path === '/api/outputs') return outputsRoute(url, init)
-  if (path === '/api/evidence' || path.startsWith('/api/evidence/')) return evidenceRoute(path, url, init)
-  if (path === '/api/project-notes') return notesRoute(url, init)
   if (path === '/api/project-stages') return stagesRoute(url, init)
   if (path === '/api/deadline-proposals') return proposalsRoute(url, init)
   return null

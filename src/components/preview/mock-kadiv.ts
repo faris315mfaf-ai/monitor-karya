@@ -1,3 +1,10 @@
+import { onTime30 } from './mock-history'
+import { projectSnapshots } from './mock-proyek'
+import { outputSnapshots } from './mock-pic'
+import { people } from './mock-catalog'
+import { dailyProjects } from './mock-laporan'
+import * as mock from './mock-data'
+import { isDailyLocked } from '@/lib/lock'
 /**
  * Rute pratinjau tambahan untuk area kepala divisi (P2-B). Kembalikan Response
  * untuk path yang ditangani, atau null agar diteruskan ke rute lain. Hanya mode
@@ -5,7 +12,7 @@
  * supaya muat ulang tetap konsisten selama sesi pratinjau.
  */
 
-import type { AttendanceStatus, KadivProject, KadivTeam, ReviewOutput, TeamMember, WeeklySummaryView } from '@/components/kadiv/types'
+import type { AttendanceStatus, KadivProject, KadivTeam, TeamMember, WeeklySummaryView } from '@/components/kadiv/types'
 
 const DAY = 86400000
 const now = () => new Date()
@@ -26,53 +33,18 @@ function workdays(n: number) {
   return out
 }
 
-const PROJECTS = {
-  mig: { id: 'kp-mig', code: 'RTK-021', name: 'Migrasi Server' },
-  abs: { id: 'kp-abs', code: 'RTK-024', name: 'Aplikasi Absensi' },
-  gws: { id: 'kp-gws', code: 'RTK-027', name: 'Google Workspace' },
-  por: { id: 'kp-por', code: 'RTK-030', name: 'Portal Pelanggan' },
-}
-
-const isoDay = (offset: number) => new Date(wibMidnight(now()).getTime() + offset * DAY).toISOString()
-
-/** Detail proyek untuk Timeline & Sheet proyek [F2-KADIV]. */
 function projectDetails(): KadivProject[] {
-  const outs = (pid: string) => {
-    const mine = state.outputs.filter((o) => o.project.id === pid)
-    return { pending: mine.filter((o) => o.status === 'MENUNGGU_REVIEW').length, acceptedNow: mine.filter((o) => o.status === 'DITERIMA').length, revise: mine.filter((o) => o.status === 'PERLU_REVISI').length }
-  }
-  const base = [
-    { p: PROJECTS.mig, pic: 'Yoga Saputra', phase: 'PELAKSANAAN', start: -48, end: 40, status: 'on' as const, reason: null, progress: 64, accepted: 9, open: 3, due: 3, last: -0 },
-    { p: PROJECTS.abs, pic: 'Rina Kartika', phase: 'PELAKSANAAN', start: -35, end: 21, status: 'risk' as const, reason: 'Perangkat sidik jari cabang Bekasi belum terpasang.', progress: 48, accepted: 6, open: 4, due: 2, last: -1 },
-    { p: PROJECTS.gws, pic: 'Dewi Lestari', phase: 'PENYELESAIAN', start: -60, end: 12, status: 'on' as const, reason: null, progress: 82, accepted: 11, open: 1, due: 5, last: 0 },
-    { p: PROJECTS.por, pic: 'Sari Wulandari', phase: 'PERENCANAAN', start: -14, end: 75, status: 'on' as const, reason: null, progress: 22, accepted: 5, open: 6, due: 8, last: 0 },
-  ]
-  return base.map((b) => {
-    const o = outs(b.p.id)
-    const accepted = b.accepted + o.acceptedNow
-    return {
-      ...b.p,
-      picName: b.pic,
-      phase: b.phase,
-      startDate: isoDay(b.start),
-      targetEndDate: isoDay(b.end),
-      status: b.status,
-      reason: b.reason,
-      progress: b.progress,
-      outputs: { total: accepted + o.pending + o.revise + b.open, accepted, pending: o.pending, revise: o.revise, open: b.open },
-      nextOutputDue: isoDay(b.due),
-      stages: [
-        { id: `${b.p.id}-s1`, name: 'Analisis kebutuhan', status: 'SELESAI', dueDate: isoDay(b.start + 14) },
-        { id: `${b.p.id}-s2`, name: 'Pelaksanaan', status: b.status === 'risk' ? 'TERTAHAN' : 'BERJALAN', dueDate: isoDay(b.end - 10) },
-        { id: `${b.p.id}-s3`, name: 'Serah terima', status: 'BELUM_MULAI', dueDate: isoDay(b.end) },
-      ],
-      lastReport: { date: isoDay(b.last), status: b.status === 'risk' ? 'TERKENDALA' : 'ON_PROGRESS', submittedAt: ago(60) },
-    }
+  return projectSnapshots('KEPALA_DIVISI').filter((p) => p.lifecycle === 'AKTIF').map((p) => {
+    const list = outputSnapshots('KEPALA_DIVISI').filter((o) => o.projectId === p.id)
+    const accepted = list.filter((o) => o.status === 'DITERIMA').length
+    const pending = list.filter((o) => o.status === 'MENUNGGU_REVIEW').length
+    const revise = list.filter((o) => o.status === 'PERLU_REVISI').length
+    return { ...p, outputs: { total: list.length, accepted, pending, revise, open: list.length - accepted - pending - revise }, nextOutputDue: list.filter((o) => o.status !== 'DITERIMA' && o.dueDate).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))[0]?.dueDate ?? null, stages: [], lastReport: p.latestReport ? { date: p.latestReport.reportDate, status: p.latestReport.status, submittedAt: p.lastReportAt } : null }
   })
 }
 
 /* Ringkasan laporan mingguan untuk Direktur [F2-KADIV] */
-const summary = { status: 'DRAF' as 'DRAF' | 'TERKIRIM', points: null as string[] | null, sentAt: null as string | null, updatedAt: null as string | null }
+export const summary = { status: 'DRAF' as 'DRAF' | 'TERKIRIM', points: null as string[] | null, sentAt: null as string | null, updatedAt: null as string | null }
 
 function weekInfo() {
   const today = wibMidnight(now())
@@ -101,117 +73,28 @@ function summaryView(): WeeklySummaryView {
   const wk = weekInfo()
   const locked = Date.now() >= Date.parse(wk.lockAt)
   return {
-    division: { id: 'dv1', name: 'Teknologi' },
+    division: { id: 'dv-tek', name: 'Teknologi' },
     week: wk,
     live: { ...stats, points: live },
     saved: summary.points || summary.status === 'TERKIRIM'
       ? { ...stats, status: summary.status, points: summary.points ?? live, sentAt: summary.sentAt, updatedAt: summary.updatedAt ?? new Date().toISOString() }
       : null,
     daily: { sent: 17, required: 19 },
-    report: { id: 'wr1', statusHeader: 'DRAFT', submittedAt: null, approvedAt: null, forwardedAt: null },
+    report: mock.weeklyInput.divisions[0].report,
     directors: [{ id: 'dir1', name: 'Hadi Santoso' }],
     blocked: locked ? { code: 'LOCKED', message: 'Minggu ini sudah dikunci. Ringkasan tidak bisa diubah lagi.' } : null,
     undoMinutes: 15,
   }
 }
 
-type Seed = Omit<TeamMember, 'initials' | 'isMember'>
-const SEED: Seed[] = [
-  {
-    id: 'km-rina', name: 'Rina Kartika', title: 'Analis sistem', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [PROJECTS.abs],
-    report: { state: 'BELUM', required: 1, sent: 0, submittedAt: null, remindedAt: null, readAt: null },
-    today: {
-      achievements: [],
-      tasks: [
-        { id: 't1', title: 'Uji coba gelombang 2 di 3 cabang', status: 'TERKENDALA', progressPct: 30, projectName: 'Aplikasi Absensi' },
-        { id: 't2', title: 'Rekap umpan balik pengguna', status: 'BERJALAN', progressPct: 60, projectName: 'Aplikasi Absensi' },
-      ],
-      obstacles: ['Perangkat sidik jari cabang Bekasi belum terpasang.'],
-      plans: ['Jadwal ulang uji coba cabang Bekasi'],
-    },
-    load: { pct: 112, openTasks: 9, openMinutes: 1610 },
-  },
-  {
-    id: 'km-yoga', name: 'Yoga Saputra', title: 'Insinyur infrastruktur', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [PROJECTS.mig],
-    report: { state: 'TERKIRIM', required: 1, sent: 1, submittedAt: ago(35), remindedAt: null, readAt: null },
-    today: {
-      achievements: ['Uji beban server cadangan selesai, 1.200 pengguna serentak tanpa galat.'],
-      tasks: [
-        { id: 't3', title: 'Uji beban server cadangan', status: 'SELESAI', progressPct: 100, projectName: 'Migrasi Server' },
-        { id: 't4', title: 'Pindahkan basis data arsip', status: 'BERJALAN', progressPct: 45, projectName: 'Migrasi Server' },
-      ],
-      obstacles: [],
-      plans: ['Pemindahan basis data arsip tahap 2'],
-    },
-    load: { pct: 86, openTasks: 6, openMinutes: 1240 },
-  },
-  {
-    id: 'km-sari', name: 'Sari Wulandari', title: 'Desainer produk', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [PROJECTS.por],
-    report: { state: 'TERKIRIM', required: 1, sent: 1, submittedAt: ago(140), remindedAt: null, readAt: null },
-    today: { achievements: [], tasks: [{ id: 't5', title: 'Desain halaman tagihan', status: 'BERJALAN', progressPct: 55, projectName: 'Portal Pelanggan' }], obstacles: [], plans: ['Uji keterbacaan dengan 5 pelanggan'] },
-    load: { pct: 74, openTasks: 4, openMinutes: 1070 },
-  },
-  {
-    id: 'km-dewi', name: 'Dewi Lestari', title: 'Administrator TI', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [PROJECTS.gws],
-    report: { state: 'TERKIRIM', required: 1, sent: 1, submittedAt: ago(70), remindedAt: null, readAt: null },
-    today: { achievements: [], tasks: [{ id: 't6', title: 'Migrasi akun divisi Keuangan', status: 'SELESAI', progressPct: 100, projectName: 'Google Workspace' }], obstacles: [], plans: ['Migrasi akun divisi SDM'] },
-    load: { pct: 63, openTasks: 3, openMinutes: 910 },
-  },
-  {
-    id: 'km-bagus', name: 'Bagus Pratama', title: 'Pengembang', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [PROJECTS.mig],
-    report: { state: 'TERKIRIM', required: 1, sent: 1, submittedAt: ago(20), remindedAt: null, readAt: null },
-    today: { achievements: [], tasks: [{ id: 't7', title: 'Skrip pemantauan server baru', status: 'BERJALAN', progressPct: 80, projectName: 'Migrasi Server' }], obstacles: [], plans: [] },
-    load: { pct: 81, openTasks: 5, openMinutes: 1170 },
-  },
-  {
-    id: 'km-fajar', name: 'Fajar Nugroho', title: 'Teknisi jaringan', role: 'PIC_PROYEK', attendance: 'CUTI', attendanceNote: 'Cuti tahunan sampai Rabu',
-    projects: [],
-    report: { state: 'ABSEN', required: 0, sent: 0, submittedAt: null, remindedAt: null, readAt: null },
-    today: { achievements: [], tasks: [], obstacles: [], plans: [] },
-    load: { pct: null, openTasks: 2, openMinutes: 240 },
-  },
-  {
-    id: 'km-lina', name: 'Lina Marlina', title: 'Penguji perangkat lunak', role: 'PIC_PROYEK', attendance: 'HADIR', attendanceNote: null,
-    projects: [],
-    report: { state: 'TIDAK_WAJIB', required: 0, sent: 0, submittedAt: null, remindedAt: null, readAt: null },
-    today: { achievements: [], tasks: [{ id: 't8', title: 'Laporan uji Aplikasi Absensi', status: 'BERJALAN', progressPct: 40, projectName: 'Aplikasi Absensi' }], obstacles: [], plans: [] },
-    load: { pct: 68, openTasks: 4, openMinutes: 980 },
-  },
-]
-
 const initialsOf = (n: string) => n.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
-
 const state = {
-  members: SEED.map((m) => ({ ...m, initials: initialsOf(m.name), isMember: true })) as TeamMember[],
-  accepted: 31,
-  target: 38,
-  outputs: [
-    { id: 'ko1', title: 'Laporan uji beban server cadangan', project: PROJECTS.mig, owner: 'km-yoga', min: 2900, ev: 2 },
-    { id: 'ko2', title: 'Runbook pemindahan basis data', project: PROJECTS.mig, owner: 'km-bagus', min: 1500, ev: 1 },
-    { id: 'ko3', title: 'Hasil uji coba gelombang 1', project: PROJECTS.abs, owner: 'km-rina', min: 600, ev: 3 },
-    { id: 'ko4', title: 'Daftar akun termigrasi divisi Keuangan', project: PROJECTS.gws, owner: 'km-dewi', min: 240, ev: 1 },
-    { id: 'ko5', title: 'Tautan desain halaman tagihan', project: PROJECTS.por, owner: 'km-sari', min: 95, ev: 1 },
-  ].map(
-    (o): ReviewOutput => ({
-      id: o.id,
-      title: o.title,
-      description: null,
-      status: 'MENUNGGU_REVIEW',
-      project: o.project,
-      owner: { id: o.owner, name: SEED.find((m) => m.id === o.owner)?.name ?? '', initials: initialsOf(SEED.find((m) => m.id === o.owner)?.name ?? '') },
-      submittedAt: ago(o.min),
-      dueDate: null,
-      evidenceCount: o.ev,
-      reviewedAt: null,
-      revisionNote: null,
-    }),
-  ),
-  notes: [] as { id: string; body: string; createdAt: string; authorName: string; mine: boolean; readAt: string | null; projectId: string }[],
+  members: people.filter((p) => p.divisionId === 'dv-tek' && p.role === 'PIC_PROYEK').map((p): TeamMember => ({
+    id: p.id, name: p.name, title: p.title, role: p.role, initials: initialsOf(p.name), isMember: true,
+    attendance: 'HADIR', attendanceNote: null, projects: [], report: { state: 'TIDAK_WAJIB', required: 0, sent: 0, submittedAt: null, remindedAt: null, readAt: null },
+    today: { tasks: [], achievements: [], obstacles: [], plans: [] }, load: { pct: null, openTasks: 0, openMinutes: 0 },
+  })),
+  get outputs() { return outputSnapshots('KEPALA_DIVISI') },
 }
 
 const HEAT_BASE = [
@@ -232,17 +115,28 @@ function team(): KadivTeam {
   const days = workdays(10)
   const today = wibMidnight(now())
   const lockAt = new Date(today.getTime() + 17 * 3600000)
+  const ps = projectSnapshots('KEPALA_DIVISI').filter((p) => p.lifecycle === 'AKTIF')
+  for (const m of state.members) {
+    const owned = ps.filter((p) => p.picUserId === m.id)
+    m.projects = owned.map((p) => ({ id: p.id, name: p.name, code: p.code }))
+    const sent = owned.filter((p) => p.reportedToday).length
+    m.report = { ...m.report, state: absent(m) ? 'ABSEN' : !owned.length ? 'TIDAK_WAJIB' : sent === owned.length ? 'TERKIRIM' : 'BELUM', required: absent(m) ? 0 : owned.length, sent, submittedAt: owned.find((p) => p.lastReportAt)?.lastReportAt ?? null, remindedAt: mock.deskAdmin.projects.find((p) => owned.some((o) => o.id === p.id))?.remindedAt ?? m.report.remindedAt }
+    const reps = dailyProjects().filter((p) => owned.some((o) => o.id === p.id)).map((p) => p.report)
+    m.today.achievements = reps.flatMap((r) => r?.submittedAt && (r.achievementToday || r.achievement) ? [r.achievementToday ?? r.achievement!] : [])
+    m.today.obstacles = reps.flatMap((r) => r?.obstacle ? [r.obstacle] : [])
+    m.today.plans = reps.flatMap((r) => r?.followUp ? [r.followUp] : [])
+  }
   const ms = state.members
   const reporters = ms.filter((m) => m.report.state === 'TERKIRIM' || m.report.state === 'BELUM')
   const loads = ms.map((m) => m.load.pct).filter((v): v is number => v !== null)
-  const accepted = state.accepted + state.outputs.filter((o) => o.status === 'DITERIMA').length
+  const accepted = state.outputs.filter((o) => o.status === 'DITERIMA').length
   return {
     today: today.toISOString(),
     lockAt: lockAt.toISOString(),
-    locked: false,
+    locked: isDailyLocked(new Date()),
     cutoffLabel: '17.00',
-    division: { id: 'dv1', name: 'Teknologi', entityName: 'PT Ratu Karya' },
-    divisions: [{ id: 'dv1', name: 'Teknologi' }],
+    division: { id: 'dv-tek', name: 'Teknologi', entityName: 'PT Ratu Karya' },
+    divisions: [{ id: 'dv-tek', name: 'Teknologi' }],
     projects: projectDetails(),
     members: ms,
     days: days.map((d) => d.toISOString()),
@@ -256,7 +150,7 @@ function team(): KadivTeam {
       { id: 'a5', actorName: 'Sari Wulandari', initials: 'SW', text: 'mengirim laporan harian · Portal Pelanggan', at: ago(140) },
       { id: 'a6', actorName: 'Lina Marlina', initials: 'LM', text: 'menambah task · Laporan uji Aplikasi Absensi', at: ago(300) },
     ],
-    onTime30: { pct: 82, ok: 70, total: 85, target: 85, days: 21 },
+    onTime30: onTime30('KEPALA_DIVISI'),
     summary: {
       members: ms.length,
       present: ms.filter((m) => !absent(m)).length,
@@ -265,7 +159,7 @@ function team(): KadivTeam {
       reporters: reporters.length,
       reported: reporters.filter((m) => m.report.state === 'TERKIRIM').length,
       outputsAccepted: accepted,
-      outputsTarget: state.target,
+      outputsTarget: state.outputs.length,
       pendingReview: state.outputs.filter((o) => o.status === 'MENUNGGU_REVIEW').length,
       avgLoad: loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : null,
       overloaded: loads.filter((v) => v > 100).length,
@@ -296,6 +190,7 @@ function body(init?: RequestInit): Record<string, unknown> {
 
 export function handle(path: string, url: string, init: RequestInit | undefined, role: string): Promise<Response> | null {
   const method = init?.method ?? 'GET'
+  if (role === 'KEPALA_DIVISI') team()
 
   if (path === '/api/kadiv/team') {
     if (role !== 'KEPALA_DIVISI') return json({ error: 'Divisi ini di luar tanggung jawab Anda' }, 403)
@@ -354,42 +249,6 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
     return json({ error: 'Aksi tidak dikenal' }, 400)
   }
 
-  if (path === '/api/outputs/review') {
-    if (role !== 'KEPALA_DIVISI') return json({ error: 'Divisi ini di luar tanggung jawab Anda' }, 403)
-    if (method === 'POST') {
-      const b = body(init)
-      const at = new Date().toISOString()
-      const byId = (id: unknown) => state.outputs.find((o) => o.id === id)
-      if (b.action === 'accept' || b.action === 'revise') {
-        const o = byId(b.id)
-        if (!o || o.status !== 'MENUNGGU_REVIEW') return json({ error: 'Output ini sudah diputuskan' }, 409)
-        if (b.action === 'revise' && String(b.note ?? '').trim().length < 5) return json({ error: 'Tulis catatan revisi untuk PIC, minimal 5 huruf' }, 422)
-        Object.assign(o, { status: b.action === 'accept' ? 'DITERIMA' : 'PERLU_REVISI', reviewedAt: at, revisionNote: b.action === 'revise' ? String(b.note) : null })
-        return json({ ok: true, ids: [o.id], reviewedAt: at })
-      }
-      if (b.action === 'accept-all') {
-        const ids = Array.isArray(b.ids) ? (b.ids as string[]) : null
-        const rows = state.outputs.filter((o) => o.status === 'MENUNGGU_REVIEW' && (!ids || ids.includes(o.id)))
-        rows.forEach((o) => Object.assign(o, { status: 'DITERIMA', reviewedAt: at }))
-        return json({ ok: true, ids: rows.map((o) => o.id), reviewedAt: at })
-      }
-      if (b.action === 'undo') {
-        const ids = Array.isArray(b.ids) ? (b.ids as string[]) : []
-        const rows = state.outputs.filter((o) => ids.includes(o.id) && o.status !== 'MENUNGGU_REVIEW')
-        // Sama dengan server [F1-D]: urungkan "minta revisi" memulihkan catatan putaran sebelumnya
-        // (di data contoh selalu putaran pertama, jadi kosong); urungkan "terima" tidak mengubah catatan.
-        rows.forEach((o) => Object.assign(o, { status: 'MENUNGGU_REVIEW', reviewedAt: null, revisionNote: o.status === 'PERLU_REVISI' ? null : o.revisionNote }))
-        return json({ ok: true, ids: rows.map((o) => o.id) })
-      }
-      return json({ error: 'Aksi tidak dikenal' }, 400)
-    }
-    return json({
-      queue: state.outputs.filter((o) => o.status === 'MENUNGGU_REVIEW'),
-      decided: state.outputs.filter((o) => o.status !== 'MENUNGGU_REVIEW'),
-      undoMinutes: 15,
-    })
-  }
-
   if (path === '/api/attendance' && role === 'KEPALA_DIVISI') {
     const sp = new URL(url, 'http://pratinjau').searchParams
     if (method === 'DELETE') {
@@ -412,26 +271,15 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
       return json({ ok: true, previousDivisionId: null })
     }
     return json({
-      division: { id: 'dv1', name: 'Teknologi' },
+      division: { id: 'dv-tek', name: 'Teknologi' },
       people: [
-        ...state.members.map((m) => ({ id: m.id, name: m.name, title: m.title, role: m.role, divisionId: m.isMember ? 'dv1' : null, divisionName: m.isMember ? 'Teknologi' : null, isMember: m.isMember })),
+        ...state.members.map((m) => ({ id: m.id, name: m.name, title: m.title, role: m.role, divisionId: m.isMember ? 'dv-tek' : null, divisionName: m.isMember ? 'Teknologi' : null, isMember: m.isMember })),
         { id: 'km-hadi', name: 'Hendra Gunawan', title: 'Staf keuangan', role: 'PIC_PROYEK', divisionId: 'dv2', divisionName: 'Keuangan', isMember: false },
       ],
-      projects: Object.values(PROJECTS).map((p) => ({ ...p, picName: null, divisionId: 'dv1', divisionName: 'Teknologi' })),
+      projects: projectSnapshots('KEPALA_DIVISI').map((p) => ({ ...p, picName: null, divisionId: 'dv-tek', divisionName: 'Teknologi' })),
     })
   }
 
-  if (path === '/api/project-notes' && role === 'KEPALA_DIVISI') {
-    const sp = new URL(url, 'http://pratinjau').searchParams
-    if (method === 'POST') {
-      const b = body(init)
-      state.notes.push({ id: `kn${state.notes.length}`, body: String(b.body ?? ''), createdAt: new Date().toISOString(), authorName: 'Andi Wijaya', mine: true, readAt: null, projectId: String(b.projectId ?? '') })
-      return json({ ok: true }, 201)
-    }
-    if (method === 'PATCH') return json({ ok: true, marked: 0 })
-    const pid = sp.get('projectId') ?? ''
-    return json({ projectId: pid, unread: 0, heads: ['Andi Wijaya'], items: state.notes.filter((n) => n.projectId === pid) })
-  }
 
   return null
 }
