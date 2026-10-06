@@ -67,3 +67,7 @@ best-effort, bukan bukti bahwa seluruh graph lengkap. Graph tidak dimutasi.
 MinIO lokal terpisah pada loopback 19000: unggah nama Unicode, baca presigned GET dengan nama unduhan, penolakan overwrite, hapus, hapus ulang dan GET 404 semuanya lolos. Container tidak memakai layanan SIMRS MinIO atau kredensial nyata. Supabase tidak dipanggil.
 
 CSP produksi perlu perubahan lintas zona di security-headers.ts sebelum preview gambar S3 di dalam aplikasi bisa dipakai. Permintaan dicatat di PEMBAGIAN-TUGAS; driver backend dan buka URL unduhan langsung sudah teruji.
+
+## Pembaruan integrasi lanjutan
+
+Tindak lanjut lintas zona dalam laporan awal telah diterapkan di cabang Codex atas permintaan pengguna. Hasil browser, jumlah tes terbaru dan gambar ada di [README](README.md#integrasi-lanjutan). Catatan awal di atas merupakan riwayat sebelum integrasi.

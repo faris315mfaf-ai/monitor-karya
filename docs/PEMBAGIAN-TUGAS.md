@@ -126,10 +126,10 @@ Tulis di sini bila sebuah tugas butuh perubahan di zona pihak lain.
 
 | Dari | Untuk | Berkas | Perubahan yang diminta | Status |
 |---|---|---|---|---|
-| CX 2 | Claude CD 1 | `src/components/preview/mock-pic.ts` | Pratinjau laporan mingguan PIC perlu mock `/api/progress-reports` dan `/api/tasks?week=` dengan `frozenDays`, agar visual hari beku dapat diuji. | diminta |
-| CX 2 | Claude CD 3 | `src/components/weekly-board.tsx` | Prop opsional `disabledLanes` dan `renderLaneNote` agar lajur beku tetap pada urutan kronologis satu papan. CX2 sekarang menampilkan bagian baca-saja terpisah dengan guard mutasi. | diminta |
-| CX 7 | Claude CD 4 | `src/lib/security-headers.ts` | Izinkan origin storage S3 yang dipilih konfigurasi pada img/media/connect CSP (tanpa wildcard). CSP sekarang hanya mengenal Supabase, sehingga preview gambar S3 di produksi diblokir. | diminta |
-| CX 7 | Claude CD 4 | `src/app/api/evidence/upload/route.ts` | Pesan needsConfig masih hanya menyebut SUPABASE_SERVICE_ROLE_KEY; sesuaikan dengan driver aktif. Ekspor/fungsi driver tetap kompatibel. | diminta |
+| CX 2 | Claude CD 1 | `src/components/preview/mock-pic.ts` | Pratinjau laporan mingguan PIC perlu mock `/api/progress-reports` dan `/api/tasks?week=` dengan `frozenDays`, agar visual hari beku dapat diuji. | diterapkan di codex/kerja |
+| CX 2 | Claude CD 3 | `src/components/weekly-board.tsx` | Prop opsional `disabledLanes` dan `renderLaneNote` agar lajur beku tetap pada urutan kronologis satu papan. CX2 sekarang menampilkan bagian baca-saja terpisah dengan guard mutasi. | diterapkan di codex/kerja |
+| CX 7 | Claude CD 4 | `src/lib/security-headers.ts` | Izinkan origin storage S3 yang dipilih konfigurasi pada img/media/connect CSP (tanpa wildcard). CSP sekarang hanya mengenal Supabase, sehingga preview gambar S3 di produksi diblokir. | diterapkan di codex/kerja |
+| CX 7 | Claude CD 4 | `src/app/api/evidence/upload/route.ts` | Pesan needsConfig masih hanya menyebut SUPABASE_SERVICE_ROLE_KEY; sesuaikan dengan driver aktif. Ekspor/fungsi driver tetap kompatibel. | diterapkan di codex/kerja |
 
 ## Sinkronisasi
 
@@ -147,4 +147,4 @@ Claude saat itu; folder dan cabang Claude tidak berubah.
 
 ## Serah terima CX 1–7
 
-Implementasi dan kriteria pemeriksaan CX selesai pada 6 Oktober 2026. Hasil integrasi dan batas verifikasi ada di [docs/codex/README.md](codex/README.md). CI GitHub menunggu push; uji visual CX2 dan CSP gambar S3 membutuhkan tindak lanjut lintas zona di tabel di atas. Tidak ada merge ke desain-baru atau akses Supabase.
+Implementasi dan kriteria pemeriksaan CX selesai pada 6 Oktober 2026. Hasil integrasi dan batas verifikasi ada di [docs/codex/README.md](codex/README.md). Tindak lanjut lintas zona di atas telah diterapkan dan diuji di codex/kerja. CI tersedia pada cabang integrasi setelah push. Tidak ada merge ke desain-baru atau akses Supabase.

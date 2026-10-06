@@ -21,11 +21,24 @@ Implementasi selesai di worktree `/Users/godam/PROYEK/monitor-karya-codex`, caba
 - Runner dengan DB lokal: login admin, sesi, dan entitas masing-masing 200. SUPERADMIN tidak memiliki meja kerja, sehingga endpoint tersebut menolak dengan 400 sesuai perannya.
 - MinIO lokal terpisah: unggah nama Unicode, presigned GET privat, penolakan overwrite, hapus, hapus ulang, serta GET 404 setelah hapus lulus. Penyimpanan lain tidak disentuh.
 
-## Tindak lanjut integrasi
+## Integrasi lanjutan
 
-1. Claude CD1: mock progress-reports dan frozenDays untuk pratinjau PIC. Saat ini pratinjau mingguan berhenti pada pesan tanpa basis data; uji visual DnD/layout nyata belum terbukti. Tes CX2 memakai mock/SSR.
-2. Claude CD3: dukungan lajur nonaktif di WeeklyBoard agar hari beku kembali di urutan kronologis. Saat ini bagian baca-saja ditempatkan setelah papan aktif dan CSS bergantung struktur lajur bersama.
-3. Claude CD4: CSP perlu mengizinkan origin S3 yang dikonfigurasi untuk preview gambar inline; backend dan unduhan langsung sudah teruji. Pesan route unggahan juga perlu mengikuti driver yang dipilih.
-4. Workflow CI perlu dijalankan di GitHub setelah push. Script deploy, backup/restore, SSH/UFW/WireGuard, serta Caddy pada VPS memerlukan verifikasi operator di host tujuan.
+Permintaan pengguna untuk menyelesaikan sisa tugas telah ditindaklanjuti. Potret terbaru Claude `f0ce8ee` digabungkan ke cabang Codex; mock laporan/proyek dan tes Admin terbaru dipertahankan. Integrasi lintas zona hanya dilakukan di worktree Codex.
 
-Resource Docker untuk pembuktian bersifat sementara. Perintah penggunaan normal tersedia di panduan lokal. Peralihan ke S3 tidak otomatis memindahkan objek lama; Supabase tetap driver default.
+- PIC pratinjau mingguan kini terbuka. Fixture Aplikasi Absensi mempunyai Senin 5 Oktober beku terisi; minggu sebelumnya juga mempunyai hari beku kosong.
+- Hari beku tetap dalam urutan kronologis di WeeklyBoard. Prop disabledLanes/renderLaneNote opsional; sortable/droppable dan handler drag memblokir asal/tujuan terkunci. Ketergantungan CSS nth-child dihapus.
+- CSP mengizinkan origin tepat dari driver S3 yang valid, tanpa wildcard. Tes diferensial memastikan origin CSP sama dengan signer. Pesan konfigurasi unggah mengikuti driver, setelah pemeriksaan akses.
+- Pemeriksaan final: **46 berkas, 862 tes**, TypeScript dan ESLint lulus; Next production build lulus dengan URL DB tiruan. CI GitHub menjalankan rangkaian pemeriksaan serta Docker build pada cabang yang di-push; hasil dapat dilihat pada tab Actions repository.
+- Browser nyata: login admin ke database lokal berhasil; pratinjau hari beku terisi, tanpa handle/tombol tambah/edit, diuji keyboard serta seret pointer ke hari beku (jumlah kartu tetap 2/4). Lebar 1440/834/390 tidak meluapkan halaman; tema terang/gelap serta aksen merah/biru/grafit diperiksa. Pembaca layar nyata dan zoom OS 200% belum diuji.
+
+## Localhost yang dapat dipakai
+
+Buka **http://localhost:3200/login**. Username uji `admin`, kata sandi lokal `kata-sandi-lokal-aman`. Server memakai PostgreSQL Docker lokal loopback **54339**, karena 54329 dipakai PostgreSQL lain. Container/volume lokal dan server ini dipertahankan untuk pemeriksaan pengguna. Supabase Storage dinonaktifkan di server pengujian; bukti tautan tetap dapat dipakai. Pratinjau tanpa login: http://localhost:3200/pratinjau?peran=PIC_PROYEK.
+
+Server Claude di port 3100 tetap berjalan terpisah. Folder utama masih mempunyai perubahan Claude yang belum di-commit dan proses Claude aktif; penggabungan kembali dilakukan setelah worktree itu siap, sesuai KOORDINASI-AGEN.md. Hasil integrasi lengkap sudah tersedia di codex/kerja.
+
+![Papan hari beku — tema gelap](gambar/hari-beku-gelap.png)
+
+![Papan hari beku — ponsel](gambar/hari-beku-390.png)
+
+Script deploy, backup/restore, SSH/UFW/WireGuard, dan Caddy pada VPS masih membutuhkan operator serta akses host tujuan. Peralihan penyimpanan tidak memindahkan objek lama; Supabase tetap driver default.

@@ -46,3 +46,7 @@ Penjagaan klien mengikuti snapshot GET terbaru; pembekuan di server setelah snap
 ## Percobaan visual oleh agen induk
 
 Browser pratinjau PIC pada port Codex 3200 dapat membuka Laporan harian. Memilih Mingguan berhenti pada pesan “Pratinjau tanpa basis data” karena mock progress-reports belum tersedia di snapshot ini. Tidak mengubah zona pratinjau Claude; permintaan CD1 dicatat. Verifikasi visual hari beku belum dapat dinyatakan lulus.
+
+## Pembaruan integrasi lanjutan
+
+Tindak lanjut lintas zona dalam laporan awal telah diterapkan di cabang Codex atas permintaan pengguna. Hasil browser, jumlah tes terbaru dan gambar ada di [README](README.md#integrasi-lanjutan). Catatan awal di atas merupakan riwayat sebelum integrasi.
