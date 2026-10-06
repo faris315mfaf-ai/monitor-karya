@@ -1,0 +1,107 @@
+/* ============================================================
+   Entitas, aktivitas per perusahaan, log aktivitas, sistem & akses,
+   pengaturan & meja akun. Semua nilai dari token (design-system/tokens.css).
+   ============================================================ */
+
+/* ---------- Kolom isian teks (pasangan .mk-select) ---------- */
+.mk-adm-input {
+  height: 44px; width: 100%; min-width: 0; border: 0; border-radius: var(--radius-sm);
+  background: var(--fill-1); color: var(--ink); padding: 0 14px; font: var(--text-body);
+  transition: box-shadow var(--dur-fast) var(--ease-standard);
+}
+.mk-adm-input::placeholder { color: var(--ink-3); }
+.mk-adm-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-adm-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.mk-adm-input[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--bahaya); }
+.mk-adm-input.is-mono { font-family: var(--font-mono); }
+.mk-adm-input.is-date { width: auto; min-width: 160px; }
+
+/* ---------- Pohon entitas ---------- */
+.mk-tree__spacer { width: 28px; height: 28px; flex: 0 0 auto; }
+.mk-tree__title.is-on { background: var(--accent-soft); color: var(--accent); }
+.mk-tree__type { font: var(--text-caption); color: var(--ink-2); flex: 0 0 auto; }
+.mk-tree__score { flex: 0 0 auto; display: flex; }
+@media (max-width: 599px) { .mk-tree__type { display: none; } }
+
+/* ---------- Ringkasan isi sheet ---------- */
+.mk-adm-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font: var(--text-footnote); color: var(--ink-2); }
+.mk-adm-crumb > .is-current { color: var(--ink); font-weight: 600; }
+.mk-adm-sec { display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-adm-row { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: 10px 0; }
+.mk-adm-row__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mk-adm-row__title { font: var(--text-body-strong); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-adm-row__meta { font: var(--text-footnote); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-adm-row__prog { flex: 0 0 132px; }
+@media (max-width: 599px) { .mk-adm-row { flex-wrap: wrap; } .mk-adm-row__prog { flex: 1 1 100%; } }
+.mk-adm-num { font-variant-numeric: tabular-nums; }
+.mk-adm-vol { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: var(--space-3); }
+.mk-adm-vol__cell { padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 2px; }
+.mk-adm-vol__num { font: var(--text-title-3); color: var(--ink); font-variant-numeric: tabular-nums; }
+.mk-adm-vol__label { font: var(--text-footnote); color: var(--ink-2); }
+
+/* ---------- Tabel (log aktivitas, akun) ---------- */
+.mk-adm-table { width: 100%; border-collapse: collapse; font: var(--text-body); color: var(--ink); }
+.mk-adm-table th { text-align: left; font: var(--text-caption); color: var(--ink-2); padding: 0 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mk-adm-table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mk-adm-table tr:last-child td { border-bottom: 0; }
+.mk-adm-table tbody tr { transition: background-color var(--dur-fast) var(--ease-standard); }
+.mk-adm-table tbody tr:hover { background: var(--fill-1); }
+.mk-adm-table td:first-child, .mk-adm-table th:first-child { padding-left: 4px; }
+.mk-adm-table td:last-child, .mk-adm-table th:last-child { padding-right: 4px; }
+.mk-adm-sub { display: block; font: var(--text-footnote); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.mk-adm-code { font: var(--text-code); color: var(--ink-2); }
+
+/* Diff sebelum/sesudah */
+.mk-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.mk-diff.is-single { grid-template-columns: minmax(0, 1fr); }
+.mk-diff__side { border-radius: var(--radius-sm); padding: 8px 10px; min-width: 0; }
+.mk-diff__side.is-before { background: var(--bahaya-soft); }
+.mk-diff__side.is-after { background: var(--sukses-soft); }
+.mk-diff__label { display: block; font: var(--text-caption); margin-bottom: 4px; }
+.mk-diff__side.is-before .mk-diff__label { color: var(--bahaya); }
+.mk-diff__side.is-after .mk-diff__label { color: var(--sukses); }
+.mk-diff__code { margin: 0; font: var(--text-code); color: var(--ink); white-space: pre-wrap; word-break: break-all; }
+.mk-diff--compact { max-width: 420px; }
+.mk-diff--compact .mk-diff__code { max-height: 96px; overflow: hidden; }
+@media (max-width: 599px) { .mk-diff { grid-template-columns: minmax(0, 1fr); } }
+
+/* Pagination */
+.mk-adm-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.mk-adm-pager__nav { display: flex; align-items: center; gap: var(--space-2); }
+
+/* ---------- Aktivitas per perusahaan ---------- */
+.mk-actboard__controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.mk-actboard__controls .mk-select { width: auto; min-width: 180px; }
+.mk-entsec { border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.mk-entsec__head { font: inherit; color: inherit; width: 100%; display: flex; align-items: center; gap: var(--space-3); padding: 14px 16px; min-height: 64px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.mk-entsec__head:hover { background: var(--fill-1); }
+.mk-entsec__head:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.mk-entsec__chev { color: var(--ink-3); flex: 0 0 auto; }
+@media (prefers-reduced-motion: no-preference) { .mk-entsec__chev { transition: transform var(--dur-base) var(--ease-standard); } }
+.mk-entsec__chev.is-open { transform: rotate(180deg); }
+.mk-entsec__body { border-top: 1px solid var(--line); padding: var(--space-4); }
+.mk-entsec__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mk-entsec__cols { display: grid; gap: var(--space-4); }
+@media (min-width: 1280px) { .mk-entsec__cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mk-actblock { border-radius: var(--radius-md); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mk-actitem { border-radius: var(--radius-sm); background: var(--fill-1); padding: 8px 10px; border-left: 3px solid var(--chart-idle); }
+.mk-actitem.is-late { border-left-color: var(--bahaya); }
+.mk-actitem.is-risk { border-left-color: var(--waspada); }
+.mk-actitem.is-info { border-left-color: var(--info); }
+.mk-actitem__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; font: var(--text-caption); color: var(--ink-2); }
+.mk-actnote { font: var(--text-footnote); margin: 4px 0 0; }
+.mk-actnote.is-obstacle { color: var(--bahaya); }
+.mk-actnote.is-follow { color: var(--info); }
+.mk-disclose { font: var(--text-callout); color: var(--accent); display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; cursor: pointer; align-self: flex-start; }
+.mk-disclose:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-xs); }
+.mk-is-loading { opacity: 0.6; }
+@media (prefers-reduced-motion: no-preference) { .mk-is-loading { transition: opacity var(--dur-base) var(--ease-standard); } }
+
+/* ---------- Pengaturan ---------- */
+.mk-adm-place { display: flex; align-items: flex-start; gap: var(--space-3); padding: 10px 0; }
+.mk-adm-place__icon { width: 36px; height: 36px; flex: 0 0 auto; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.mk-adm-iconrow { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.mk-adm-userline { display: flex; align-items: center; gap: var(--space-2); min-height: 60px; padding: 0 4px 0 0; }
+.mk-adm-userline .mk-userrow { flex: 1 1 auto; min-width: 0; }
+.mk-adm-scroll { max-height: 26rem; overflow-y: auto; }
+.mk-adm-table .mk-diff--compact { min-width: 280px; }

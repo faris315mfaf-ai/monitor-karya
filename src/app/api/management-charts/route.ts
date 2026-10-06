@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { isGlobalRole, requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { isoWeekOf, startOfWibDay } from '@/lib/lock'
 import { lastNMonthKeys, monthKeyNow } from '@/lib/wib'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
  * The six series behind Management's charts. Each one answers a question a
@@ -206,7 +207,7 @@ export async function GET() {
       lowestPt,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Gagal menyusun data grafik'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Gagal menyusun data grafik. Coba lagi.', 'management-charts GET')
   }
 }

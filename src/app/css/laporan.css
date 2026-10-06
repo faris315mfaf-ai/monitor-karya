@@ -1,0 +1,139 @@
+/* ============================================================
+   Laporan kemajuan PIC (05-pic-proyek.md · Laporan harian):
+   kolom isian, pilihan chip, centang progres, kartu progres,
+   baris proyek/periode, dan bukti pendukung. Semua nilai dari token.
+   ============================================================ */
+
+/* Kolom isian & area teks */
+.mk-lap-input {
+  display: block; width: 100%; min-height: var(--touch-min); box-sizing: border-box;
+  border: 0; border-radius: var(--radius-sm); background: var(--fill-1); color: var(--ink);
+  font: var(--text-body); padding: 10px 14px;
+  transition: box-shadow var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
+}
+textarea.mk-lap-input { border-radius: var(--radius-md); resize: vertical; min-height: 88px; }
+.mk-lap-input::placeholder { color: var(--ink-3); }
+.mk-lap-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-lap-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.mk-lap-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--bahaya); }
+/* Di ponsel teks 17 px agar Safari tidak memperbesar halaman saat fokus. */
+@media (max-width: 599px) { .mk-lap-input { font: var(--text-body-lg); } }
+
+.mk-lap-range { display: block; width: 100%; height: var(--touch-min); accent-color: var(--accent-fill); cursor: pointer; }
+.mk-lap-range:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Nilai tetap yang tampil seperti kolom (mis. tanggal hari ini). */
+.mk-lap-static {
+  display: flex; align-items: center; gap: var(--space-2); min-height: var(--touch-min); padding: 0 14px;
+  border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-2); font: var(--text-body);
+}
+
+/* Pilihan berbentuk chip dengan target sentuh penuh. */
+.mk-lap-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mk-lap-chips .mk-chip { height: var(--touch-min); }
+.mk-lap-chips .mk-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Kotak isi bertingkat (alur, ringkasan turunan). */
+.mk-lap-inset { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mk-lap-stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.mk-lap-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+@media (max-width: 599px) { .mk-lap-actions > .mk-btn--primary { flex: 1 1 100%; } }
+.mk-lap-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.mk-lap-head > .mk-lap-grow { flex: 1 1 auto; min-width: 0; }
+
+/* Centang progres: kotak 24 radius 8, terisi aksen + centang putih. */
+.mk-lap-check {
+  flex: 0 0 var(--touch-min); width: var(--touch-min); height: var(--touch-min); margin: -10px -6px 0 -10px;
+  display: grid; place-items: center; border: 0; padding: 0; background: transparent; color: var(--on-accent);
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.mk-lap-check__box {
+  width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  transition: background-color var(--dur-base) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard);
+}
+.mk-lap-check[aria-checked="true"] .mk-lap-check__box { background: var(--accent-fill); box-shadow: none; }
+.mk-lap-check:not(:disabled):hover .mk-lap-check__box { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.mk-lap-check[aria-checked="true"]:not(:disabled):hover .mk-lap-check__box { box-shadow: none; }
+.mk-lap-check:disabled { cursor: not-allowed; opacity: 0.5; }
+.mk-lap-check:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .mk-lap-check[aria-checked="true"] .mk-lap-check__box { animation: mkLapPop var(--dur-base) var(--ease-spring); }
+  @keyframes mkLapPop { from { transform: scale(0.82); } to { transform: scale(1); } }
+}
+
+/* Kartu progres (task): garis kiri = urgensi. */
+.mk-lap-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-lap-task {
+  --lap-rail: var(--line-strong);
+  display: flex; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line), inset 3px 0 0 var(--lap-rail);
+}
+.mk-lap-task.is-late { --lap-rail: var(--bahaya); }
+.mk-lap-task.is-risk { --lap-rail: var(--waspada); }
+.mk-lap-task.is-info { --lap-rail: var(--info); }
+.mk-lap-task__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-lap-task__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.mk-lap-task__title { font: var(--text-body-strong); color: var(--ink); margin: 0; overflow-wrap: anywhere; }
+.mk-lap-task__desc { font: var(--text-footnote); color: var(--ink-2); margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mk-lap-task.is-done .mk-lap-task__title { text-decoration: line-through; color: var(--ink-2); }
+.mk-lap-task__badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; }
+@media (max-width: 599px) {
+  .mk-lap-task__top { flex-direction: column; }
+  .mk-lap-task__badges { flex-direction: row; align-items: center; flex-wrap: wrap; }
+}
+.mk-lap-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-3); font: var(--text-footnote); color: var(--ink-2); }
+.mk-lap-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.mk-lap-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.mk-lap-urg { display: inline-flex; align-items: center; gap: 6px; font: var(--text-caption); color: var(--ink-2); white-space: nowrap; }
+
+/* Baris yang bisa diklik: proyek & periode laporan → Sheet. */
+.mk-lap-rows { list-style: none; margin: 0; padding: 0; }
+.mk-lap-rows > li + li { border-top: 1px solid var(--line); }
+.mk-lap-row {
+  font: inherit; color: inherit; width: 100%; display: flex; align-items: center; gap: var(--space-3);
+  min-height: 60px; padding: 10px 8px; border: 0; background: transparent; text-align: left; cursor: pointer;
+  border-radius: var(--radius-md); transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.mk-lap-row:hover { background: var(--fill-1); }
+.mk-lap-row:active { background: var(--fill-2); }
+.mk-lap-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.mk-lap-row__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mk-lap-row__title { font: var(--text-body-strong); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-lap-row__meta { font: var(--text-footnote); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-lap-row__prog { flex: 0 1 160px; min-width: 96px; }
+.mk-lap-row__chev { flex: 0 0 auto; color: var(--ink-3); }
+@media (max-width: 599px) { .mk-lap-row__prog { display: none; } }
+
+/* Bukti pendukung */
+.mk-lap-evi { display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-lap-evi--box { padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mk-lap-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--space-2); }
+.mk-lap-thumb { position: relative; display: block; aspect-ratio: 1 / 1; border-radius: var(--radius-md); overflow: hidden; background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line); }
+.mk-lap-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mk-lap-thumb__ph { width: 100%; height: 100%; display: grid; place-items: center; color: var(--ink-3); }
+.mk-lap-thumb__name {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 8px 6px; font: var(--text-caption);
+  color: var(--putih); background: linear-gradient(to top, var(--scrim), transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mk-lap-thumb__del { position: absolute; top: 4px; right: 4px; }
+.mk-lap-file { display: flex; align-items: center; gap: var(--space-2); min-height: var(--touch-min); padding: 2px 0; }
+.mk-lap-file__name { flex: 1 1 auto; min-width: 0; font: var(--text-body); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-lap-file__size { flex: 0 0 auto; font: var(--text-caption); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.mk-lap-drop {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4);
+  border-radius: var(--radius-md); border: 1.5px dashed var(--line-strong); color: var(--ink-2); font: var(--text-footnote);
+  transition: background-color var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard);
+}
+.mk-lap-drop.is-over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.mk-lap-drop__text { flex: 1 1 200px; min-width: 0; }
+.mk-lap-linkform { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: var(--space-2); align-items: center; }
+@media (max-width: 599px) { .mk-lap-linkform { grid-template-columns: 1fr; } }
+
+/* Bagian lipat di dalam form (chevron berputar). */
+.mk-lap-chev { transition: transform var(--dur-base) var(--ease-standard); }
+.mk-lap-chev.is-open { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .mk-lap-chev, .mk-lap-input, .mk-lap-check__box, .mk-lap-row, .mk-lap-drop { transition: none; } }
+.mk-lap-check--flat { margin: 0; }

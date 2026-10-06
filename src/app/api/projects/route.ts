@@ -4,6 +4,8 @@ import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { approvalChainFor, can, canSignSlot, isMasterRole, pendingSlot } from '@/lib/rbac'
 import { NO_APPROVAL_LABEL } from '@/lib/constants'
 import { Prisma } from '@prisma/client'
+import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
  * Modul proyek (11 Sep 2026).
@@ -25,6 +27,7 @@ const MANAGED_LIFECYCLES = ['AKTIF', 'DITUTUP', 'DIARSIPKAN']
 const PROJECT_INCLUDE = {
   entity: { select: { id: true, name: true, code: true, region: true } },
   picUser: { select: { id: true, name: true } },
+  division: { select: { id: true, name: true } }, // [F2-ADMIN]
   proposedBy: { select: { id: true, name: true, role: true } },
   approvals: {
     select: { role: true, decision: true, note: true, decidedAt: true, decidedBy: { select: { name: true } } },
@@ -75,6 +78,9 @@ function format(p: ProjectRow, user: SessionUser) {
     lifecycle: p.lifecycle,
     picName: p.picName,
     picUserId: p.picUserId,
+    // [F2-ADMIN] divisi pelaksana (Project.divisionId)
+    divisionId: p.divisionId,
+    division: p.division,
     description: p.description,
     purpose: p.purpose,
     proposedBy: p.proposedBy,
@@ -111,7 +117,9 @@ function format(p: ProjectRow, user: SessionUser) {
 /** PT yang boleh dituju pengaju: PT-nya sendiri untuk peran berlingkup, PT mana pun untuk peran global. */
 async function proposalEntity(user: SessionUser, requested: string | null) {
   const select = { id: true, code: true, name: true, type: true, isActive: true }
-  const id = user.scopeEntityId ?? requested
+  // Peran berlingkup selalu terpaku pada PT-nya; tanpa PT berarti tidak ada
+  // tujuan (gagal-tertutup), bukan PT bebas pilihan dari permintaan.
+  const id = isMasterRole(user.role) || can(user.role, 'group:read') ? (user.scopeEntityId ?? requested) : user.scopeEntityId
   if (!id) return null
   const e = await db.entity.findUnique({ where: { id }, select })
   return e && e.type === 'PT' && e.isActive ? e : null
@@ -154,6 +162,8 @@ export async function GET(req: NextRequest) {
         entityPinned: Boolean(user.scopeEntityId),
         entities,
         candidates: entity ? await picCandidates(entity.id) : [],
+        // [F2-ADMIN] pilihan divisi pelaksana di PT pemilik
+        divisions: entity ? await db.division.findMany({ where: { entityId: entity.id, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : [],
         chain: approvalChainFor(user.role),
         picIsSelf: user.role === 'PIC_PROYEK',
       })
@@ -195,15 +205,15 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items: items.map((p) => format(p, user)), total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Proyek belum termuat. Coba lagi.', 'projects GET')
   }
 }
 
 /** Membaca isian proyek dari badan permintaan; dipakai POST dan PATCH. */
 async function readFields(body: Record<string, unknown>, entityId: string, opts: { partial: boolean }) {
   const has = (k: string) => body[k] !== undefined
-  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, 4000) : '')
   const errors: string[] = []
   const data: Prisma.ProjectUpdateInput & Prisma.ProjectUncheckedUpdateInput = {}
 
@@ -249,6 +259,16 @@ async function readFields(body: Record<string, unknown>, entityId: string, opts:
         data.picUserId = pic.id
         data.picName = pic.name
       }
+    }
+  }
+  // [F2-ADMIN] divisi pelaksana: divisi aktif di PT pemilik, atau kosong.
+  if (has('divisionId')) {
+    const divisionId = str('divisionId').slice(0, 64)
+    if (!divisionId) data.divisionId = null
+    else {
+      const div = await db.division.findFirst({ where: { id: divisionId, entityId, isActive: true }, select: { id: true } })
+      if (!div) errors.push('Divisi yang dipilih bukan divisi aktif di PT ini.')
+      else data.divisionId = div.id
     }
   }
   const related = has('relatedEntityIds') ? await readRelated(body.relatedEntityIds, entityId) : undefined
@@ -328,7 +348,7 @@ export async function POST(req: NextRequest) {
       action: skipApproval ? 'CREATE_PROJECT_NO_APPROVAL' : active ? 'CREATE_PROJECT' : 'PROPOSE_PROJECT',
       targetType: 'PROJECT',
       targetId: project.id,
-      afterData: JSON.stringify({ code, name: project.name, phase: project.phase, chain, skipApproval, related: related ?? [] }),
+      afterData: JSON.stringify({ code, name: project.name, phase: project.phase, chain, skipApproval, divisionId: project.divisionId, related: related ?? [] }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       userAgent: req.headers.get('user-agent') || null,
     },
@@ -364,6 +384,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Hanya pengajuan yang ditolak yang bisa diajukan ulang' }, { status: 409 })
     }
     const active = existing.approvalChain.length === 0
+    // [F2-URUNGKAN] baris persetujuan lengkap sebelum dikosongkan, untuk urungkan.
+    const priorApprovals = await db.projectApproval.findMany({
+      where: { projectId: id },
+      select: { role: true, decision: true, note: true, decidedById: true, decidedAt: true },
+    })
     const updated = await db.$transaction(async (tx) => {
       await tx.projectApproval.deleteMany({ where: { projectId: id } })
       return tx.project.update({
@@ -386,7 +411,25 @@ export async function PATCH(req: NextRequest) {
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       },
     })
-    return NextResponse.json({ ok: true, project: format(updated, user) })
+    // [F2-URUNGKAN]
+    const undoToken = await issueUndo({
+      action: 'RESUBMIT_PROJECT',
+      targetType: 'PROJECT',
+      targetId: id,
+      entityId: existing.entityId,
+      actorId: user.id,
+      snapshot: {
+        project: {
+          lifecycle: existing.lifecycle,
+          approvedAt: existing.approvedAt?.toISOString() ?? null,
+          approvedByName: existing.approvedByName,
+          proposedAt: existing.proposedAt?.toISOString() ?? null,
+        },
+        approvals: priorApprovals.map(approvalSnap),
+      },
+      stamp: await projectStamp(id),
+    })
+    return NextResponse.json({ ok: true, project: format(updated, user), undoToken })
   }
 
   const { errors, data, related } = await readFields(body, existing.entityId, { partial: true })
@@ -424,13 +467,33 @@ export async function PATCH(req: NextRequest) {
       action: 'UPDATE_PROJECT',
       targetType: 'PROJECT',
       targetId: id,
-      beforeData: JSON.stringify({ name: existing.name, phase: existing.phase, lifecycle: existing.lifecycle, picUserId: existing.picUserId }),
-      afterData: JSON.stringify({ name: updated.name, phase: updated.phase, lifecycle: updated.lifecycle, picUserId: updated.picUserId, related: related ?? undefined }),
+      beforeData: JSON.stringify({ name: existing.name, phase: existing.phase, lifecycle: existing.lifecycle, picUserId: existing.picUserId, divisionId: existing.divisionId }),
+      afterData: JSON.stringify({ name: updated.name, phase: updated.phase, lifecycle: updated.lifecycle, picUserId: updated.picUserId, divisionId: updated.divisionId, related: related ?? undefined }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 
-  return NextResponse.json({ ok: true, project: format(updated, user) })
+  // [F2-URUNGKAN] Pengarsipan bisa diurungkan: hanya siklus hidup yang dipulihkan.
+  const undoToken =
+    updated.lifecycle === 'DIARSIPKAN' && existing.lifecycle !== 'DIARSIPKAN'
+      ? await issueUndo({
+          action: 'ARCHIVE_PROJECT',
+          targetType: 'PROJECT',
+          targetId: id,
+          entityId: existing.entityId,
+          actorId: user.id,
+          snapshot: {
+            project: {
+              lifecycle: existing.lifecycle,
+              approvedAt: existing.approvedAt?.toISOString() ?? null,
+              approvedByName: existing.approvedByName,
+            },
+          },
+          stamp: await projectStamp(id),
+        })
+      : null
+
+  return NextResponse.json({ ok: true, project: format(updated, user), undoToken })
 }
 
 /** DELETE ?id= — hapus proyek yang belum punya laporan/task; selebihnya diarsipkan. */

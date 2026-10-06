@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser } from '@/lib/auth'
-import { PROJECT_ENTITY_SLOTS, can, canSignSlot, pendingSlot } from '@/lib/rbac'
+import { requireApiUser, scopeEntityIds } from '@/lib/auth'
+import { PROJECT_ENTITY_SLOTS, can, canSignSlot, isMasterRole, pendingSlot } from '@/lib/rbac'
 import { PROJECT_APPROVER_LABELS } from '@/lib/constants'
+import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
 
 /**
  * Persetujuan pengajuan proyek (11 Sep 2026): slot demi slot mengikuti
@@ -43,7 +44,11 @@ export async function POST(req: NextRequest) {
 
   const project = await db.project.findUnique({
     where: { id: projectId },
-    select: { id: true, name: true, entityId: true, lifecycle: true, approvalChain: true, approvals: { select: { role: true, decision: true } } },
+    select: {
+      id: true, name: true, entityId: true, lifecycle: true, approvalChain: true, approvedAt: true, approvedByName: true,
+      // [F2-URUNGKAN] baris lengkap agar urungkan memulihkan slot persis.
+      approvals: { select: { role: true, decision: true, note: true, decidedById: true, decidedAt: true } },
+    },
   })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (project.lifecycle !== 'DIUSULKAN') {
@@ -53,9 +58,20 @@ export async function POST(req: NextRequest) {
   const approvedRoles = project.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
   const slot = pendingSlot(project.approvalChain, approvedRoles)
   if (!slot) {
-    // Rantai kosong tetapi masih DIUSULKAN — data lama. Aktifkan saja.
+    // Rantai kosong tetapi masih DIUSULKAN — data lama. Aktifkan saja, tetapi
+    // hanya oleh akun yang memang menjangkau PT proyek itu (6 Okt 2026).
+    const reach = isMasterRole(user.role) ? null : await scopeEntityIds(user)
+    if (reach !== null && !reach.includes(project.entityId)) {
+      return NextResponse.json({ error: 'Proyek ini di luar cakupan Anda' }, { status: 403 })
+    }
     await db.project.update({ where: { id: projectId }, data: { lifecycle: 'AKTIF', approvedAt: new Date(), approvedByName: user.name } })
-    return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [] })
+    // [F2-URUNGKAN]
+    const undoToken = await issueUndo({
+      action: 'APPROVE_PROJECT', targetType: 'PROJECT', targetId: projectId, entityId: project.entityId, actorId: user.id,
+      snapshot: { project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName }, slot: null },
+      stamp: await projectStamp(projectId),
+    })
+    return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [], undoToken })
   }
   if (!canSignSlot(user, slot, project.entityId)) {
     const label = PROJECT_APPROVER_LABELS[slot] ?? slot
@@ -91,6 +107,21 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // [F2-URUNGKAN] tiket urungkan: slot dan status proyek persis sebelum keputusan ini.
+  const prior = project.approvals.find((a) => a.role === slot)
+  const undoToken = await issueUndo({
+    action: decision === 'DISETUJUI' ? 'APPROVE_PROJECT' : 'REJECT_PROJECT',
+    targetType: 'PROJECT',
+    targetId: projectId,
+    entityId: project.entityId,
+    actorId: user.id,
+    snapshot: {
+      project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName },
+      slot: { role: slot, before: prior ? approvalSnap(prior) : null },
+    },
+    stamp: await projectStamp(projectId),
+  })
+
   const approvals = await db.projectApproval.findMany({ where: { projectId }, select: { role: true, decision: true, note: true, decidedAt: true } })
-  return NextResponse.json({ ok: true, lifecycle, pending: lifecycle === 'DIUSULKAN' ? nextPending : null, approvals })
+  return NextResponse.json({ ok: true, lifecycle, pending: lifecycle === 'DIUSULKAN' ? nextPending : null, approvals, undoToken })
 }

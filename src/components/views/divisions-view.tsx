@@ -1,25 +1,20 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useFetch } from '@/hooks/use-fetch'
-import { LoadingSpinner, EmptyState, ErrorState } from '@/components/loading-states'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Progress } from '@/components/ui/progress'
+import { useMemo, useState } from 'react'
+import { useResource } from '@/hooks/use-resource'
+import { NotificationButton } from '@/components/shell'
+import {
+  Button, Card, Chip, EmptyNote, ErrorNote, Hero, Icon, PageHeader, ProgressBar, SearchField, Sheet, Skeleton, StatTile,
+  StatusBadge,
+} from '@/components/mk'
+import { InfoLine, SectionTitle } from '@/components/companies/parts'
 import {
   WeeklyHeaderBadge,
   WeeklyItemStatusBadge,
   PriorityBadge,
+  weeklyItemStatus,
 } from '@/components/status-badges'
-import {
-  Archive, CalendarRange, Lock, CheckCircle2, AlertTriangle, Search, Filter,
-  ChevronLeft, ChevronRight, User, FileText, Target, ChevronDown,
-} from 'lucide-react'
-import { formatDate, formatNumber } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { formatDate, formatDateShort, formatNumber } from '@/lib/format'
 import { ASPECT_CATEGORY_LABELS } from '@/lib/constants'
 import { can } from '@/lib/rbac'
 import { useApp } from '@/components/app-provider'
@@ -68,11 +63,25 @@ type WeeklyListData = {
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'Semua status' },
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'MENUNGGU_PERSETUJUAN', label: 'Menunggu Persetujuan' },
+  { value: 'DRAFT', label: 'Draf' },
+  { value: 'MENUNGGU_PERSETUJUAN', label: 'Menunggu persetujuan' },
   { value: 'DISETUJUI', label: 'Disetujui' },
   { value: 'TERKUNCI', label: 'Terkunci' },
 ]
+
+const BREAKDOWN: Array<{ status: string; label: string }> = [
+  { status: 'SELESAI', label: 'selesai' },
+  { status: 'ON_PROGRESS', label: 'berjalan' },
+  { status: 'BELUM_MULAI', label: 'belum mulai' },
+  { status: 'TERKENDALA', label: 'terkendala' },
+  { status: 'NA', label: 'N/A' },
+]
+
+function countBy(items: WeeklyItem[]) {
+  const counts: Record<string, number> = {}
+  for (const it of items) counts[it.status] = (counts[it.status] || 0) + 1
+  return counts
+}
 
 export function DivisionsView() {
   const { user } = useApp()
@@ -80,6 +89,8 @@ export function DivisionsView() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statusHeader, setStatusHeader] = useState<string>('ALL')
+  const [detail, setDetail] = useState<{ report: WeeklyReport; n: number } | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const params = useMemo(() => {
     const p = new URLSearchParams({ page: String(page), pageSize: '10' })
@@ -88,264 +99,297 @@ export function DivisionsView() {
     return p.toString()
   }, [page, statusHeader, search])
 
-  const { data, loading, error } = useFetch<WeeklyListData>(`/api/weekly-reports?${params}`)
+  const { data, loading, error, reload } = useResource<WeeklyListData>(`/api/weekly-reports?${params}`)
+  const reports = useMemo(() => data?.items ?? [], [data])
+  const filtered = statusHeader !== 'ALL' || search.trim() !== ''
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
+
+  const waiting = reports.filter((r) => r.statusHeader === 'MENUNGGU_PERSETUJUAN').length
+  const late = reports.filter((r) => r.isLate).length
+  const answer = !data
+    ? ''
+    : data.total === 0
+      ? filtered
+        ? 'Tidak ada laporan mingguan dengan saringan ini.'
+        : 'Belum ada laporan mingguan divisi.'
+      : `${formatNumber(data.total)} laporan mingguan divisi${filtered ? ' cocok dengan saringan' : ' tercatat'}.`
+  const supportParts = [waiting ? `${waiting} menunggu persetujuan` : null, late ? `${late} terlambat` : null].filter(Boolean)
+  const support = supportParts.length
+    ? `Di halaman ini: ${supportParts.join(', ')}.`
+    : reports.length
+      ? 'Ketuk laporan untuk membaca butir, capaian, dan kendalanya.'
+      : undefined
+
+  function resetFilters() {
+    setSearch('')
+    setStatusHeader('ALL')
+    setPage(1)
+  }
+  function openDetail(r: WeeklyReport) {
+    setDetail((d) => ({ report: r, n: (d?.n ?? 0) + 1 }))
+    setDetailOpen(true)
+  }
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Modul Divisi</h1>
-        <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
-          {canInput ? 'Pilih entitas dan divisi yang dilaporkan, lalu isi capaian per hari' : 'Siklus pelaporan mingguan divisi'}
-        </p>
-      </div>
+    <>
+      <PageHeader
+        context={canInput ? 'Pilih entitas dan divisi, lalu isi capaian per hari' : 'Siklus pelaporan mingguan divisi'}
+        title="Divisi"
+        tools={
+          <span className="mk-desktop-only">
+            <NotificationButton />
+          </span>
+        }
+      />
 
       {/* Meja isian (8 Sep 2026): Admin PT / Kepala Divisi / TI menyusun laporan
           mingguan divisinya di sini; arsip seluruh laporan ada di bawahnya. */}
-      {canInput && (
+      {canInput ? (
         <>
           <DivisionWeeklyDesk />
-          <div className="flex items-center gap-2 pt-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
-            <Archive className="h-5 w-5 text-slate-500" /> Arsip laporan mingguan
-          </div>
+          <h2 className="t-title-3 flex items-center gap-2 pt-2">
+            <Icon name="dokumen" size={22} className="text-ink-2" /> Arsip laporan mingguan
+          </h2>
         </>
-      )}
-
-      {/* Filter bar */}
-      <Card className="glass">
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-              <Input
-                placeholder="Cari divisi, entitas, atau wilayah..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                className="glass pl-9 h-9 text-sm border-slate-200/60"
-              />
-            </div>
-            <Select value={statusHeader} onValueChange={(v) => { setStatusHeader(v); setPage(1) }}>
-              <SelectTrigger className="glass h-9 text-sm w-full sm:w-52">
-                <Filter className="h-3 w-3 mr-1 text-slate-400 dark:text-slate-500" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent className="glass-strong">
-                {STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      ) : loading && !data ? (
+        <div className="mk-hero" aria-busy="true" aria-label="Memuat ringkasan laporan">
+          <div className="mk-hero__text">
+            <Skeleton h={26} w={160} r={999} />
+            <Skeleton h={36} w="70%" r={12} />
+            <Skeleton h={20} w="55%" />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      ) : data ? (
+        <Hero eyebrow="Laporan mingguan divisi" answer={answer} support={support} />
+      ) : null}
 
-      {/* List */}
-      {loading ? (
-        <LoadingSpinner />
-      ) : error ? (
-        <ErrorState message={error} />
-      ) : !data?.items?.length ? (
-        <EmptyState
-          icon={<FileText className="h-5 w-5 text-slate-400 dark:text-slate-500" />}
-          title="Tidak ada laporan mingguan"
-          description="Coba ubah filter pencarian"
+      <div className="flex flex-col gap-3">
+        <div className="mk-chips" role="group" aria-label="Status laporan">
+          {STATUS_OPTIONS.map((o) => (
+            <Chip
+              key={o.value}
+              selected={statusHeader === o.value}
+              onClick={() => {
+                setStatusHeader(o.value)
+                setPage(1)
+              }}
+            >
+              {o.label}
+            </Chip>
+          ))}
+        </div>
+        <SearchField
+          id="dv-q"
+          label="Cari laporan"
+          placeholder="Cari divisi, entitas, atau wilayah"
+          value={search}
+          onChange={(v) => {
+            setSearch(v)
+            setPage(1)
+          }}
         />
+      </div>
+
+      {loading && !data ? (
+        <Card ariaLabel="Memuat laporan mingguan">
+          <div className="flex flex-col gap-3" aria-busy="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} h={56} r={12} />
+            ))}
+          </div>
+        </Card>
+      ) : error ? (
+        <Card>
+          <ErrorNote message={`Laporan mingguan belum termuat. ${error}`} onRetry={reload} />
+        </Card>
+      ) : !reports.length ? (
+        <Card>
+          <EmptyNote
+            icon="dokumen"
+            action={
+              filtered ? (
+                <Button size="sm" onClick={resetFilters}>
+                  Hapus saringan
+                </Button>
+              ) : undefined
+            }
+          >
+            {filtered ? 'Tidak ada laporan mingguan dengan saringan ini.' : 'Belum ada laporan mingguan divisi.'}
+          </EmptyNote>
+        </Card>
       ) : (
         <>
-          <div className="space-y-3">
-            {data.items.map((r) => (
-              <WeeklyReportCard key={r.id} report={r} />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              Menampilkan {data.items.length} dari {formatNumber(data.total)} laporan
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="glass h-8 text-sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-sm text-slate-600 dark:text-slate-300 px-2 tabular-nums">
-                {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="glass h-8 text-sm"
-                disabled={page * data.pageSize >= data.total}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
+          <Card
+            title="Laporan mingguan"
+            subtitle={`Menampilkan ${reports.length} dari ${formatNumber(data?.total ?? reports.length)} laporan. Ketuk baris untuk membuka detail.`}
+          >
+            <div className={loading ? 'mk-list opacity-60 transition-opacity' : 'mk-list'}>
+              {reports.map((r) => (
+                <ReportRow key={r.id} report={r} onOpen={() => openDetail(r)} />
+              ))}
             </div>
-          </div>
+          </Card>
+
+          {data && data.total > data.pageSize && (
+            <nav className="flex items-center justify-between gap-2" aria-label="Halaman laporan mingguan">
+              <Button icon="kiri" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Sebelumnya
+              </Button>
+              <span className="t-footnote text-ink-2 tabular-nums">
+                Halaman {page} dari {pages}
+              </span>
+              <Button iconAfter="kanan" disabled={page * data.pageSize >= data.total} onClick={() => setPage((p) => p + 1)}>
+                Berikutnya
+              </Button>
+            </nav>
+          )}
         </>
       )}
-    </div>
+
+      {detail && (
+        <WeeklyReportSheet key={detail.n} open={detailOpen} report={detail.report} onClose={() => setDetailOpen(false)} />
+      )}
+    </>
   )
 }
 
-function WeeklyReportCard({ report }: { report: WeeklyReport }) {
-  const [expanded, setExpanded] = useState(false)
+function ReportRow({ report, onOpen }: { report: WeeklyReport; onOpen: () => void }) {
+  return (
+    <button type="button" className="mk-rrow" onClick={onOpen} aria-label={`Buka laporan ${report.division.name} minggu ${report.isoWeek}`}>
+      <span className="mk-rrow__body">
+        <span className="mk-rrow__title">{report.division.name}</span>
+        <span className="mk-rrow__meta">
+          {report.entity.name} · M{report.isoWeek} {report.isoYear} · {formatDateShort(report.periodStart)}–{formatDateShort(report.periodEnd)}
+        </span>
+        <span className="mk-rrow__meta">
+          {report.items.length} butir
+          {report.approvedBy ? ` · disetujui ${report.approvedBy.name}` : ''}
+        </span>
+      </span>
+      <span className="mk-rrow__badges">
+        <WeeklyHeaderBadge status={report.statusHeader} />
+        {report.isLate && (
+          <StatusBadge status="late" size="sm">
+            Terlambat
+          </StatusBadge>
+        )}
+        {report.isLocked && report.statusHeader !== 'TERKUNCI' && <span className="mk-tag">Terkunci</span>}
+      </span>
+      <Icon name="kanan" size={18} className="mk-rrow__chev" />
+    </button>
+  )
+}
 
-  // Item status breakdown counts
-  const breakdown = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const it of report.items) {
-      counts[it.status] = (counts[it.status] || 0) + 1
-    }
-    return counts
-  }, [report.items])
-
-  const breakdownLabels: Array<{ status: string; label: string }> = [
-    { status: 'SELESAI', label: 'Selesai' },
-    { status: 'ON_PROGRESS', label: 'Berjalan' },
-    { status: 'BELUM_MULAI', label: 'Belum Mulai' },
-    { status: 'TERKENDALA', label: 'Terkendala' },
-    { status: 'NA', label: 'N/A' },
-  ]
-  const breakdownStr = breakdownLabels
-    .filter((b) => breakdown[b.status])
-    .map((b) => `${breakdown[b.status]} ${b.label}`)
+/** Detail laporan mingguan di Sheet: status, 3 angka, butir pekerjaan, kendala. */
+function WeeklyReportSheet({ open, report, onClose }: { open: boolean; report: WeeklyReport; onClose: () => void }) {
+  const counts = useMemo(() => countBy(report.items), [report.items])
+  const breakdown = BREAKDOWN.filter((b) => counts[b.status])
+    .map((b) => `${counts[b.status]} ${b.label}`)
     .join(' · ')
+  const blocked = counts.TERKENDALA || 0
 
   return (
-    <Card className="glass hover:shadow-lg transition-all">
-      <CardContent className="p-4 space-y-3">
-        {/* Top: title row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-800 dark:text-slate-100 truncate">{report.division.name}</h3>
-              <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono">
-                W{report.isoWeek}/{report.isoYear}
-              </Badge>
-              <WeeklyHeaderBadge status={report.statusHeader} />
-              {report.isLocked && (
-                <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 gap-0.5">
-                  <Lock className="h-2.5 w-2.5" /> Terkunci
-                </Badge>
-              )}
-              {report.isLate && (
-                <Badge className="text-[11px] h-4 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20 gap-0.5">
-                  <AlertTriangle className="h-2.5 w-2.5" /> Terlambat
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-1 text-[13px] text-slate-500 dark:text-slate-400 flex-wrap">
-              <span className="truncate">{report.entity.name}</span>
-              <span className="text-slate-300">·</span>
-              <span className="truncate">{report.entity.region || report.entity.code}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Period dates */}
-        <div className="flex items-center gap-1.5 text-[13px] text-slate-600 dark:text-slate-300">
-          <CalendarRange className="h-3.5 w-3.5 text-blue-500" />
-          <span>
-            {formatDate(report.periodStart)} — {formatDate(report.periodEnd)}
-          </span>
-        </div>
-
-        {/* Approved by */}
-        {report.approvedBy && report.approvedAt && (
-          <div className="flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/5 rounded-md px-2 py-1">
-            <CheckCircle2 className="h-3 w-3" />
-            <span>
-              Disetujui oleh <span className="font-semibold">{report.approvedBy.name}</span>
-              <span className="text-slate-500 dark:text-slate-400"> · {formatDate(report.approvedAt)}</span>
-            </span>
-          </div>
-        )}
-
-        {/* Items count + breakdown */}
-        <div className="flex items-center justify-between gap-2 text-[13px] bg-blue-500/5 rounded-md px-2 py-1.5">
-          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 min-w-0">
-            <Target className="h-3 w-3 text-blue-600 shrink-0" />
-            <span className="font-semibold">{report.items.length} item deliverable</span>
-            {breakdownStr && (
-              <span className="text-slate-500 dark:text-slate-400 truncate hidden sm:inline">· {breakdownStr}</span>
-            )}
-          </div>
-          {report.items.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="glass h-6 text-xs px-2 hover:bg-blue-500/10"
-              onClick={() => setExpanded((v) => !v)}
-            >
-              {expanded ? 'Sembunyikan' : 'Detail'}
-              <ChevronDown className={cn('h-3 w-3 ml-0.5 transition-transform', expanded && 'rotate-180')} />
-            </Button>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      size="wide"
+      title={report.division.name}
+      subtitle={`${report.entity.name} · M${report.isoWeek} ${report.isoYear}`}
+      eyebrow={
+        <span className="flex flex-wrap gap-2">
+          <WeeklyHeaderBadge status={report.statusHeader} />
+          {report.isLate && (
+            <StatusBadge status="late" size="sm">
+              Terlambat
+            </StatusBadge>
           )}
-        </div>
+          {report.isLocked && report.statusHeader !== 'TERKUNCI' && <span className="mk-tag">Terkunci</span>}
+        </span>
+      }
+      backLabel="Divisi"
+    >
+      <section className="flex flex-col gap-2">
+        <InfoLine icon="kalender">
+          {formatDate(report.periodStart)} sampai {formatDate(report.periodEnd)}
+        </InfoLine>
+        <InfoLine icon="gedung">
+          {report.entity.name} · {report.entity.region || report.entity.code}
+        </InfoLine>
+        {report.isLocked && report.lockedAt && <InfoLine icon="kunci">Dikunci {formatDate(report.lockedAt)}</InfoLine>}
+      </section>
 
-        {/* Expanded items list */}
-        {expanded && report.items.length > 0 && (
-          <div className="max-h-64 overflow-y-auto scrollbar-thin pr-1 -mr-1 space-y-2 animate-fade-in">
-            {report.items.map((it) => (
-              <WeeklyItemRow key={it.id} item={it} />
-            ))}
-          </div>
+      {report.approvedBy && report.approvedAt && (
+        <p className="mk-note-box mk-soft--done">
+          Disetujui oleh <strong>{report.approvedBy.name}</strong> · {formatDate(report.approvedAt)}
+        </p>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile label="Butir" value={report.items.length} delta={breakdown || undefined} />
+        <StatTile label="Selesai" value={counts.SELESAI || 0} tone="done" />
+        <StatTile label="Terkendala" value={blocked} tone={blocked ? 'risk' : 'neutral'} />
+      </div>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle icon="dokumen">Butir pekerjaan</SectionTitle>
+        {report.items.length === 0 ? (
+          <EmptyNote icon="dokumen">Belum ada butir di laporan ini.</EmptyNote>
+        ) : (
+          report.items.map((it) => <WeeklyItemBlock key={it.id} item={it} />)
         )}
-      </CardContent>
-    </Card>
+      </section>
+    </Sheet>
   )
 }
 
-function WeeklyItemRow({ item }: { item: WeeklyItem }) {
+function WeeklyItemBlock({ item }: { item: WeeklyItem }) {
   const aspectLabel = ASPECT_CATEGORY_LABELS[item.aspectCategory.code] || item.aspectCategory.name
+  const st = weeklyItemStatus(item.status)
   return (
-    <div className="glass rounded-xl p-3 border-l-2 border-l-blue-500/40">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-1">{item.workItem}</p>
-          <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-            <Badge variant="outline" className="text-[11px] h-3.5 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">
-              {aspectLabel}
-            </Badge>
+    <article className="mk-witem">
+      <div className="mk-witem__top">
+        <div className="min-w-0">
+          <h4 className="mk-witem__title">{item.workItem}</h4>
+          <div className="mk-witem__tags">
+            <span className="mk-tag">{aspectLabel}</span>
             <PriorityBadge priority={item.priority.code} />
+            {item.needsEscalation && (
+              <StatusBadge status="risk" size="sm">
+                Perlu eskalasi
+              </StatusBadge>
+            )}
           </div>
         </div>
         <WeeklyItemStatusBadge status={item.status} />
       </div>
 
-      {/* Progress */}
-      <div className="mt-2 flex items-center gap-2">
-        <Progress value={item.progressPct} className="h-1.5 flex-1" />
-        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tabular-nums">{item.progressPct}%</span>
-      </div>
+      <ProgressBar value={item.progressPct} status={st === 'neutral' || st === 'info' ? 'accent' : st} label={`Progres ${item.workItem}`} />
 
-      {/* PIC */}
-      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-        <User className="h-3 w-3" />
-        <span className="truncate">{item.picName}{item.picTitle ? `, ${item.picTitle}` : ''}</span>
-      </div>
+      <InfoLine icon="pengguna">
+        {item.picName}
+        {item.picTitle ? `, ${item.picTitle}` : ''}
+      </InfoLine>
+      {(item.targetOutput || item.targetDate) && (
+        <InfoLine icon="target">
+          {item.targetOutput || 'Target'}
+          {item.targetDate ? ` · ${formatDate(item.targetDate)}` : ''}
+        </InfoLine>
+      )}
+      {item.evidenceCount > 0 && <InfoLine icon="dokumen">{item.evidenceCount} bukti terlampir</InfoLine>}
 
-      {/* Achievement */}
       {item.achievementThisWeek && (
-        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2">
-          <span className="font-medium text-slate-700 dark:text-slate-200">Capaian: </span>
+        <p className="t-footnote text-ink">
+          <span className="font-semibold">Capaian: </span>
           {item.achievementThisWeek}
         </p>
       )}
 
-      {/* Obstacle */}
       {item.obstacleFollowUp && (
-        <div className="mt-1.5 text-xs bg-amber-500/5 border border-amber-500/20 rounded-md px-2 py-1 text-amber-800">
-          <span className="font-medium">Kendala/Tindak Lanjut: </span>
-          <span className="line-clamp-2">{item.obstacleFollowUp}</span>
-        </div>
+        <p className="mk-note-box mk-soft--risk">
+          <span className="font-semibold">Kendala dan tindak lanjut: </span>
+          {item.obstacleFollowUp}
+        </p>
       )}
-    </div>
+    </article>
   )
 }

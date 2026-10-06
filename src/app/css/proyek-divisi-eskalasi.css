@@ -1,0 +1,72 @@
+/* ============================================================
+   Modul Proyek, Divisi (arsip laporan mingguan), dan Eskalasi.
+   Semua nilai dari token (design-system/tokens.css).
+   ============================================================ */
+
+/* ---------- Baris laporan yang bisa diketuk ---------- */
+.mk-rrow {
+  font: inherit; color: inherit; width: 100%; display: flex; align-items: center; gap: var(--space-3);
+  min-height: 64px; padding: var(--space-3) var(--space-2); border: 0; background: transparent; text-align: left;
+  cursor: pointer; border-radius: var(--radius-md); transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.mk-rrow:hover { background: var(--fill-1); }
+.mk-rrow:active { background: var(--fill-2); }
+.mk-rrow:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.mk-rrow__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mk-rrow__title { font: var(--text-body-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-rrow__meta { font: var(--text-footnote); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mk-rrow__badges { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.mk-rrow__chev { flex: 0 0 auto; color: var(--ink-3); }
+@media (max-width: 599px) {
+  .mk-rrow { flex-wrap: wrap; row-gap: var(--space-2); }
+  .mk-rrow__badges { order: 3; width: 100%; justify-content: flex-start; }
+  .mk-rrow__chev { display: none; }
+}
+
+/* ---------- Butir laporan mingguan di dalam sheet ---------- */
+.mk-witem { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mk-witem__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.mk-witem__title { font: var(--text-body-strong); margin: 0; }
+.mk-witem__tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
+
+/* ---------- Papan eskalasi (Kanban) ---------- */
+.mk-kanban { display: flex; gap: var(--space-4); overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px var(--space-2); scrollbar-width: thin; }
+.mk-kanban__col {
+  flex: 0 0 300px; scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-3); border-radius: var(--radius-lg); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line);
+}
+@media (max-width: 599px) { .mk-kanban__col { flex-basis: 86%; } }
+@media (min-width: 1024px) {
+  .mk-kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; scroll-snap-type: none; }
+}
+.mk-kanban.is-single { display: block; overflow: visible; }
+.mk-kanban.is-single .mk-kanban__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); max-height: none; }
+.mk-kanban__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-1) 0; }
+.mk-kanban__count {
+  display: inline-grid; place-items: center; min-width: 28px; height: 24px; padding: 0 var(--space-2); border-radius: var(--radius-full);
+  background: var(--fill-1); color: var(--ink-2); font: var(--text-footnote); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.mk-kanban__list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 64vh; overflow-y: auto; padding: 2px; scrollbar-width: thin; }
+.mk-kanban__empty { font: var(--text-footnote); color: var(--ink-2); text-align: center; padding: var(--space-6) var(--space-2); }
+
+.mk-esc {
+  font: inherit; color: inherit; text-align: left; width: 100%; border: 0; cursor: pointer;
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--surface); box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur-base) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+@media (hover: hover) { .mk-esc:hover { box-shadow: var(--shadow-float); } }
+.mk-esc:active { transform: scale(0.99); }
+.mk-esc:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-esc.is-overdue { box-shadow: inset 3px 0 0 var(--bahaya), var(--shadow-card); }
+.mk-esc__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.mk-esc__entity { display: block; font: var(--text-body-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-esc__code { display: block; font: var(--text-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-esc__summary { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: var(--text-footnote); color: var(--ink); }
+.mk-esc__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); font: var(--text-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.mk-esc__meta strong { color: var(--ink); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-rrow, .mk-esc { transition: none; }
+  .mk-esc:active { transform: none; }
+}

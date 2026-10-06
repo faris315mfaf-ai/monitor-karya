@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Logo perusahaan (14 Sep 2026): gambar yang diunggah Super Admin, atau
- * monogram dari nama bila belum ada. Dipakai splash, navbar, menu akun,
+ * monogram dari nama bila belum ada. Dipakai splash, kerangka aplikasi,
  * halaman masuk, dan Pengaturan supaya rupanya sama di mana pun.
  */
 export function initialsOf(name: string): string {
@@ -29,7 +29,7 @@ export function BrandLogo({
   className?: string
 }) {
   const radius = size >= 96 ? 'rounded-3xl' : size >= 48 ? 'rounded-2xl' : 'rounded-xl'
-  const style = { width: size, height: size, fontSize: Math.max(11, Math.round(size * 0.38)) }
+  const style = { width: size, height: size, fontSize: Math.max(11, Math.round(size * 0.38)), borderRadius: Math.round(size * 0.28) }
   if (logoData) {
     return (
       <img
@@ -38,18 +38,18 @@ export function BrandLogo({
         width={size}
         height={size}
         style={style}
-        className={cn(radius, 'object-contain bg-white ring-1 ring-black/5 dark:ring-white/10 p-[6%] shrink-0 animate-fade-in', className)}
+        className={cn(radius, 'object-contain bg-[var(--putih)] p-[6%] shrink-0 shadow-[0_0_0_1px_var(--line)]', className)}
       />
     )
   }
   return (
     <div
       aria-label={name}
-      style={style}
+      style={{ ...style, background: tone === 'slate' ? 'var(--grad-malam)' : 'var(--kilau), var(--accent-grad)' }}
       className={cn(
         radius,
-        'flex items-center justify-center font-bold text-white shrink-0 shadow-glow-blue',
-        tone === 'slate' ? 'bg-gradient-to-br from-slate-700 to-slate-900' : 'bg-gradient-to-br from-blue-600 to-cyan-500',
+        'flex items-center justify-center font-bold shrink-0',
+        tone === 'slate' ? 'text-[var(--putih)]' : 'text-on-accent',
         className
       )}
     >

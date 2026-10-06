@@ -1,0 +1,66 @@
+/* ============================================================
+   [F1-D] Perbaikan utang teknis lintas layar (6 Okt 2026).
+   Nilai hanya dari design-system/tokens.css.
+   ============================================================ */
+
+/* ---------- Chip: target sentuh minimum 44 px (--touch-min) ---------- */
+.mk-chip { min-height: var(--touch-min); }
+
+/* ---------- DivisionBar: beban di atas 100% ---------- */
+.mk-divbar__val { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.mk-divbar.is-over .mk-divbar__val { color: var(--bahaya); }
+.mk-divbar__over {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font: var(--text-caption); color: var(--bahaya);
+  align-self: center;
+}
+/* Penanda "lebih": ujung batang bergaris di sisi kanan, di luar batas 100%. */
+.mk-divbar__overmark {
+  position: absolute; top: calc(var(--space-1) * -1); bottom: calc(var(--space-1) * -1); right: 0;
+  width: var(--space-1); border-radius: var(--radius-full);
+  background: var(--bahaya); box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* ---------- Lonceng header: Dock desktop sudah memuat lonceng ---------- */
+[data-nav="dock"] .mk-headbell { display: none; }
+
+/* ---------- Toast (sonner) bergaya token ----------
+   Wadah: latar surface, bayangan float, di atas tab bar (z-toast) dan diberi
+   jarak atas agar tidak tertutup tab bar mengambang tablet atau baris atas
+   ponsel. Jarak dipasang lewat --toast-top (dibaca prop offset di layout.tsx). */
+:root { --toast-top: var(--space-6); }
+@media (width < 1024px) {
+  /* Tab bar mengambang tablet: top 16px + tinggi target sentuh + celah. */
+  :root { --toast-top: calc(var(--space-4) + var(--touch-min) + var(--space-3)); }
+}
+@media (width < 600px) {
+  /* Ponsel: tab bar di bawah; toast di bawah baris atas (avatar & lonceng). */
+  :root { --toast-top: calc(var(--space-3) + var(--touch-min) + var(--space-2)); }
+}
+
+[data-sonner-toaster] {
+  z-index: var(--z-toast) !important;
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+  font: var(--text-body);
+  padding: var(--space-3) var(--space-4);
+  min-height: var(--touch-min);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-title] { font-weight: 600; }
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-description] { color: var(--ink-2); font: var(--text-footnote); }
+/* Tombol aksi toast ("Urungkan"): kata kerja beraksen, target sentuh cukup. */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+  height: auto; min-height: var(--touch-min); padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--accent-soft); color: var(--accent);
+  font: var(--text-footnote); font-weight: 600;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
+  background: var(--surface); color: var(--ink-2); border-color: var(--line);
+}
