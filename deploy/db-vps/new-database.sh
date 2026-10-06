@@ -15,8 +15,9 @@ ROLE="${DB}_app"
 WG_ADDR="${WG_ADDR:-10.10.0.1}"
 PASS="$(openssl rand -base64 36 | tr -d '/+=\n' | cut -c1-40)"
 
-sudo -u postgres psql -v ON_ERROR_STOP=1 \
-  -v db="$DB" -v role="$ROLE" -v pass="$PASS" <<'SQL'
+MK_ROLE_PASSWORD="$PASS" sudo --preserve-env=MK_ROLE_PASSWORD -u postgres psql -v ON_ERROR_STOP=1 \
+  -v db="$DB" -v role="$ROLE" <<'SQL'
+\getenv pass MK_ROLE_PASSWORD
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L CONNECTION LIMIT 60', :'role', :'pass')
  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role') \gexec
 SELECT format('ALTER ROLE %I PASSWORD %L', :'role', :'pass') \gexec

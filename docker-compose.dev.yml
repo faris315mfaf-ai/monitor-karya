@@ -1,0 +1,35 @@
+name: monitor-karya-dev
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: mk_local
+      POSTGRES_PASSWORD: mk_local_dev_only
+      POSTGRES_DB: monitor_karya_local
+    ports:
+      - "127.0.0.1:${LOCAL_DB_PORT:-54329}:5432"
+    volumes:
+      - postgres_local:/var/lib/postgresql/data
+    configs:
+      - source: storage_metadata_local
+        target: /docker-entrypoint-initdb.d/00-storage-metadata.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mk_local -d monitor_karya_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+volumes:
+  postgres_local:
+# Metadata lokal untuk migrasi lama 0006, bukan implementasi Storage.
+configs:
+  storage_metadata_local:
+    content: |
+      CREATE SCHEMA IF NOT EXISTS storage;
+      CREATE TABLE IF NOT EXISTS storage.buckets (
+        id text PRIMARY KEY,
+        name text NOT NULL,
+        public boolean NOT NULL DEFAULT false,
+        file_size_limit bigint,
+        allowed_mime_types text[]
+      );

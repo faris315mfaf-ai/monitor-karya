@@ -74,10 +74,15 @@ export async function POST(req: NextRequest) {
   // Checked only after authorisation, so an unauthorised caller learns nothing
   // about how this server is configured.
   if (!storageConfigured()) {
+    const driver = process.env.STORAGE_DRIVER ?? 'supabase'
+    const message = driver === 'supabase'
+      ? 'Penyimpanan berkas belum aktif. Isi SUPABASE_SERVICE_ROLE_KEY di .env, lalu jalankan ulang server.'
+      : driver === 's3'
+        ? 'Penyimpanan S3 belum aktif. Periksa konfigurasi S3 di server, lalu jalankan ulang server.'
+        : 'Penyimpanan berkas belum aktif. Periksa STORAGE_DRIVER di server: supabase atau s3.'
     return NextResponse.json(
       {
-        error:
-          'Penyimpanan berkas belum aktif. Isi SUPABASE_SERVICE_ROLE_KEY di .env, lalu jalankan ulang server.',
+        error: message,
         needsConfig: true,
       },
       { status: 503 }

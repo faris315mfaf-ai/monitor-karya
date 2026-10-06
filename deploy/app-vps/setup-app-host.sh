@@ -12,12 +12,15 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Jalankan sebagai root."; exit 1; }
 ADMIN_USER="${1:?Pakai: setup-app-host.sh <user_admin>}"
+[[ "$ADMIN_USER" =~ ^[a-z][a-z0-9_-]{0,31}$ && "$ADMIN_USER" != root ]] || { echo "Nama admin tidak sah."; exit 1; }
+id "$ADMIN_USER" >/dev/null
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # --- Docker Engine (repo resmi) ----------------------------------------------
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
+# shellcheck source=/dev/null
 . /etc/os-release
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
   > /etc/apt/sources.list.d/docker.list

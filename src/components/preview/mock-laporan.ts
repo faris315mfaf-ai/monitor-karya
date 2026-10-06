@@ -454,12 +454,14 @@ function seedWeek(pid: string, period: Period) {
   weeksSeeded.add(k)
   const list = (extras[pid] ??= [])
   const today = todayDate().getTime()
-  daysOfWeek(period)
-    .filter((d) => isWorkingDay(d) && d.getTime() < today)
-    .forEach((d, i) => {
-      list.push(mkTask(pid, TITLES[(i * 3 + 4 + hashOf(pid)) % TITLES.length], 'SELESAI', d.toISOString(), { sortOrder: 0 }))
-      if (i % 2 === 0) list.push(mkTask(pid, TITLES[(i * 3 + 5 + hashOf(pid)) % TITLES.length], 'BERJALAN', d.toISOString(), { sortOrder: 1, progressPct: 60 }))
-    })
+  const pastDays = daysOfWeek(period).filter((d) => isWorkingDay(d) && d.getTime() < today)
+  pastDays.forEach((d, i) => {
+    // p2 keeps one frozen lane empty when there are at least two past days,
+    // so preview can verify both populated and empty frozen lanes (CX2).
+    if (pid === 'p2' && pastDays.length > 1 && i === pastDays.length - 1) return
+    list.push(mkTask(pid, TITLES[(i * 3 + 4 + hashOf(pid)) % TITLES.length], 'SELESAI', d.toISOString(), { sortOrder: 0 }))
+    if (i % 2 === 0) list.push(mkTask(pid, TITLES[(i * 3 + 5 + hashOf(pid)) % TITLES.length], 'BERJALAN', d.toISOString(), { sortOrder: 1, progressPct: 60 }))
+  })
   list.push(mkTask(pid, 'Ringkasan capaian minggu ini', period.start.getTime() <= today && today < period.end.getTime() + DAY ? 'BERJALAN' : 'SELESAI', period.start.toISOString(), { scope: 'MINGGUAN', sortOrder: 0, urgency: 'TINGGI' }))
 }
 

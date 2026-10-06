@@ -14,10 +14,11 @@
 #   30 17 * * *      bash /srv/apps/monitor-karya/deploy/app-vps/cron.sh kpi-snapshot    >> /srv/apps/monitor-karya/cron.log 2>&1
 set -euo pipefail
 JOB="${1:?nama job cron}"
-[[ "$JOB" =~ ^[a-z-]+$ ]] || { echo "nama job tidak sah"; exit 1; }
+[[ "$JOB" == remind-divisions || "$JOB" == reminder-rules || "$JOB" == kpi-snapshot ]] || { echo "nama job tidak sah"; exit 1; }
 
 docker exec monitor-karya-monitor-karya-1 node -e "
-fetch('http://127.0.0.1:3000/api/cron/$JOB', { headers: { authorization: 'Bearer ' + process.env.CRON_SECRET } })
+if (!process.env.CRON_SECRET) { console.error('CRON_SECRET belum diisi'); process.exit(1); }
+fetch('http://127.0.0.1:3000/api/cron/$JOB', { headers: { authorization: 'Bearer ' + process.env.CRON_SECRET }, signal: AbortSignal.timeout(30000) })
   .then(async (r) => { console.log(new Date().toISOString(), '$JOB', r.status, (await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1) })
   .catch((e) => { console.error(new Date().toISOString(), '$JOB', e.message); process.exit(1) })
 "

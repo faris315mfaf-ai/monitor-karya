@@ -14,3 +14,14 @@ design-system/**/*.html
 .vercel
 Dockerfile
 .dockerignore
+
+# Berkas kredensial dan cadangan lokal tidak masuk konteks build.
+*.pem
+*.key
+*.dump
+*.dump.age
+*.sql.age
+.ssh
+.aws
+.agents
+.codex

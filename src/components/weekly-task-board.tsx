@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
 import {
@@ -21,12 +21,29 @@ type Data = {
   today: string
   days: string[]
   tasks: WeekTask[]
+  frozenDays?: string[]
 }
 
 type Card = WeekTask & { lane: string }
 
 // Tanpa workDate (data pratinjau lama) kartu jatuh ke lajur mingguan, bukan galat RangeError.
 const laneOf = (t: WeekTask) => (t.scope === 'MINGGUAN' || !t.workDate ? WEEKLY_LANE : wibKey(t.workDate))
+
+const FROZEN_NOTE = 'Diteruskan ke holding · ajukan buka kunci'
+
+/** Seluruh batch ditolak bila asal/tujuan beku, terkunci, atau kartu tidak dikenal. */
+export function canMoveTasks(
+  snapshot: Pick<Data, 'locked' | 'frozenDays' | 'days'>,
+  cards: { id: string; lane: string }[],
+  moves: BoardMove[],
+): boolean {
+  const frozen = new Set((snapshot.frozenDays ?? []).map(wibKey))
+  const lanes = new Set([...snapshot.days.map(wibKey), WEEKLY_LANE])
+  return !snapshot.locked && moves.length > 0 && moves.every((move) => {
+    const source = cards.find((card) => card.id === move.id)
+    return !!source && lanes.has(move.lane) && !frozen.has(source.lane) && !frozen.has(move.lane)
+  })
+}
 
 /** Kunci minggu ISO ("2026-W37") untuk sebuah instan, dihitung dalam WIB. */
 export function weekKeyOf(date: Date = new Date()): string {
@@ -110,11 +127,35 @@ export function WeeklyTaskBoard({
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [confirmEl, confirm] = useConfirm()
+  // Urungkan dapat hidup lebih lama daripada render yang membuat toast.
+  const current = useRef({ data, projectId, weekKey, loading, error })
+  useLayoutEffect(() => {
+    current.current = { data, projectId, weekKey, loading, error }
+    return () => { current.current = { ...current.current, loading: true } }
+  }, [data, projectId, weekKey, loading, error])
 
   const cards = useMemo<Card[]>(() => (data?.tasks ?? []).map((t) => ({ ...t, lane: laneOf(t) })), [data])
 
   if (loading && !data) return <BoardSkeleton />
   if (error || !data) return <ErrorNote message={error ?? 'Data capaian mingguan belum termuat.'} onRetry={reload} />
+
+  const frozen = new Set((data.frozenDays ?? []).map(wibKey))
+  const editableDays = data.days.filter((day) => !frozen.has(wibKey(day)))
+  const frozenSignature = [...frozen].sort().join(',')
+  const dialogAllowed = dialog && data.period.key === weekKey && !data.locked && !loading && !frozen.has(dialog.lane)
+    && (!dialog.task || !frozen.has(laneOf(data.tasks.find((t) => t.id === dialog.task!.id) ?? dialog.task)))
+
+  function canEdit(lane: string, id?: string): boolean {
+    const state = current.current
+    if (!state.data || state.loading || state.error || state.projectId !== projectId || state.weekKey !== weekKey || state.data.locked) return false
+    const lockedDays = new Set((state.data.frozenDays ?? []).map(wibKey))
+    const source = id ? state.data.tasks.find((t) => t.id === id) : null
+    return !lockedDays.has(lane) && (!id || (!!source && !lockedDays.has(laneOf(source))))
+  }
+
+  function openDialog(lane: string, task: WeekTask | null = null) {
+    if (canEdit(lane, task?.id)) setDialog({ task, lane })
+  }
 
   const done = data.tasks.filter((t) => t.status === 'SELESAI').length
   const blocked = data.tasks.filter((t) => t.status === 'TERKENDALA' || t.status === 'MENUNGGU_KEPUTUSAN').length
@@ -127,6 +168,14 @@ export function WeeklyTaskBoard({
 
   /** Kirim susunan ke server; true bila tersimpan. */
   async function persist(moves: BoardMove[]): Promise<boolean> {
+    const state = current.current
+    if (!state.data || state.loading || state.error || state.projectId !== projectId || state.weekKey !== weekKey
+      || state.data.period.key !== data!.period.key
+      || !canMoveTasks(state.data, state.data.tasks.map((t) => ({ id: t.id, lane: laneOf(t) })), moves)) {
+      toast.error('Susunan tidak dapat diubah. Periksa kunci hari dan muat ulang papan.')
+      setVersion((v) => v + 1)
+      return false
+    }
     try {
       const res = await fetch('/api/tasks', {
         method: 'PATCH',
@@ -154,7 +203,8 @@ export function WeeklyTaskBoard({
 
   async function move(moves: BoardMove[]) {
     // Susunan sebelum dipindah, untuk "Urungkan": lajur yang sama, urutan lama.
-    const undo = movesFor(cards, moves.map((m) => m.lane))
+    const sourceLanes = moves.map((m) => cards.find((c) => c.id === m.id)?.lane).filter((lane): lane is string => !!lane)
+    const undo = movesFor(cards, [...sourceLanes, ...moves.map((m) => m.lane)])
     if (!(await persist(moves))) return
     toast('Susunan tersimpan.', {
       action: {
@@ -167,13 +217,14 @@ export function WeeklyTaskBoard({
   }
 
   async function remove(t: WeekTask) {
+    if (!canEdit(laneOf(t), t.id)) return
     const ok = await confirm({
       title: 'Hapus capaian ini?',
       description: `"${t.title}" beserta lampirannya akan dihapus permanen.`,
       confirmLabel: 'Hapus capaian',
       destructive: true,
     })
-    if (!ok) return
+    if (!ok || !canEdit(laneOf(t), t.id)) return
     setBusy(t.id)
     try {
       const res = await fetch(`/api/tasks?id=${t.id}&context=MINGGUAN`, { method: 'DELETE' })
@@ -234,7 +285,7 @@ export function WeeklyTaskBoard({
             </div>
           </div>
           {!data.locked ? (
-            <Button variant="primary" icon="tambah" onClick={() => setDialog({ task: null, lane: wibKey(data.today) })}>
+            <Button variant="primary" icon="tambah" onClick={() => openDialog(frozen.has(wibKey(data.today)) ? WEEKLY_LANE : wibKey(data.today))}>
               Tambah capaian
             </Button>
           ) : (
@@ -253,29 +304,33 @@ export function WeeklyTaskBoard({
       )}
 
       <WeeklyBoard<Card>
-        key={`${data.period.key}:${version}:${boardSignature(cards)}`}
+        key={`${data.period.key}:${version}:${frozenSignature}:${boardSignature(cards)}`}
         days={data.days}
         today={data.today}
         cards={cards}
-        disabled={data.locked}
+        disabled={data.locked || loading}
+        disabledLanes={[...frozen]}
+        renderLaneNote={(lane) => frozen.has(lane) ? (
+          <p className="mk-wt-frozen__note"><Icon name="kunci" size={16} /><span>{FROZEN_NOTE}</span></p>
+        ) : null}
         onMove={move}
-        onAdd={(lane) => setDialog({ task: null, lane })}
+        onAdd={(lane) => openDialog(lane)}
         emptyText="Belum ada capaian."
         renderCard={(t, dragging) => (
           <TaskCard
             task={t}
             dragging={dragging}
-            locked={data.locked}
+            locked={data.locked || frozen.has(t.lane)}
             busy={busy === t.id}
-            onEdit={() => setDialog({ task: t, lane: t.lane })}
+            onEdit={() => openDialog(t.lane, t)}
             onDelete={() => remove(t)}
           />
         )}
       />
 
-      {dialog && (
+      {dialogAllowed && dialog && (
         <TaskDialog
-          key={dialog.task?.id ?? `baru-${dialog.lane}`}
+          key={`${dialog.task?.id ?? `baru-${dialog.lane}`}:${data.period.key}:${frozenSignature}`}
           open
           onOpenChange={(v) => !v && setDialog(null)}
           projectId={projectId}
@@ -284,7 +339,7 @@ export function WeeklyTaskBoard({
           task={dialog.task}
           locked={data.locked}
           onSaved={reload}
-          weekly={{ week: data.period.key, days: data.days, lane: dialog.lane }}
+          weekly={{ week: data.period.key, days: editableDays, lane: dialog.lane }}
         />
       )}
       {confirmEl}

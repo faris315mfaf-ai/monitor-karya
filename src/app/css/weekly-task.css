@@ -1,0 +1,11 @@
+.mk-wb-lane[data-readonly] { background: var(--surface-2); }
+.mk-wb-lane[data-readonly]:focus-visible { outline: var(--space-1) solid var(--focus); }
+.mk-wt-frozen__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  color: var(--ink-2);
+  font: var(--text-footnote);
+}
+.mk-wt-frozen__note > svg { flex-shrink: 0; }

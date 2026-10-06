@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -149,6 +149,7 @@ function Lane({
   onAdd,
   disabled,
   active,
+  note,
 }: {
   lane: LaneDef
   count: number
@@ -156,13 +157,18 @@ function Lane({
   onAdd?: () => void
   disabled: boolean
   active: boolean
+  note?: React.ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: lane.id, disabled })
+  const noteId = useId()
   const weekly = lane.id === WEEKLY_LANE
   return (
     <section
       ref={setNodeRef}
-      aria-label={lane.title}
+      aria-label={disabled ? `${lane.title} · hanya dapat dibaca` : lane.title}
+      aria-describedby={note ? noteId : undefined}
+      data-readonly={disabled || undefined}
+      tabIndex={disabled ? 0 : undefined}
       className={cx(
         'mk-wb-lane',
         weekly ? 'is-weekly' : lane.isToday ? 'is-today' : lane.weekend && 'is-weekend',
@@ -183,6 +189,7 @@ function Lane({
         </span>
         {onAdd && !disabled && <IconButton icon="tambah" label={`Tambah capaian di ${lane.title}`} onClick={onAdd} />}
       </header>
+      {note && <div id={noteId}>{note}</div>}
       <LaneBody count={count}>{children}</LaneBody>
     </section>
   )
@@ -281,6 +288,8 @@ export function WeeklyBoard<T extends BoardCard>({
   onMove,
   onAdd,
   emptyText = 'Belum ada capaian.',
+  disabledLanes = [],
+  renderLaneNote,
 }: {
   /** Tujuh hari Senin..Minggu (ISO, tengah malam WIB). */
   days: string[]
@@ -292,6 +301,9 @@ export function WeeklyBoard<T extends BoardCard>({
   onMove: (moves: BoardMove[], next: T[]) => void
   onAdd?: (lane: string) => void
   emptyText?: string
+  /** Kunci lajur memakai ID hari WIB (YYYY-MM-DD), atau MINGGUAN. */
+  disabledLanes?: readonly string[]
+  renderLaneNote?: (lane: string) => React.ReactNode
 }) {
   const lanes = useMemo(() => laneDefs(days, today), [days, today])
   const [items, setItems] = useState<T[]>(cards)
@@ -319,12 +331,17 @@ export function WeeklyBoard<T extends BoardCard>({
     return items.find((c) => c.id === id)?.lane ?? null
   }
 
+  function laneDisabled(lane: string | null): boolean {
+    return disabled || !lane || disabledLanes.includes(lane)
+  }
+
   function handleDragOver(e: DragOverEvent) {
     const { active, over } = e
     if (!over) return
     const from = laneOf(String(active.id))
     const to = laneOf(String(over.id))
-    if (!from || !to || from === to) return
+    const original = cards.find((card) => card.id === String(active.id))?.lane ?? null
+    if (!from || !to || laneDisabled(original) || laneDisabled(originLane.current) || laneDisabled(from) || laneDisabled(to) || from === to) return
     // Pindah lajur saat melayang, supaya kartu terlihat masuk ke lajur tujuan.
     setItems((prev) => relocate(prev, String(active.id), to, String(over.id)))
   }
@@ -334,7 +351,9 @@ export function WeeklyBoard<T extends BoardCard>({
     setActiveId(null)
     const from = originLane.current
     originLane.current = null
-    if (!over) {
+    const original = cards.find((card) => card.id === String(active.id))?.lane ?? null
+    if (!over || laneDisabled(from) || laneDisabled(original)
+      || laneDisabled(laneOf(String(active.id))) || laneDisabled(laneOf(String(over.id)))) {
       setItems(cards)
       return
     }
@@ -349,15 +368,23 @@ export function WeeklyBoard<T extends BoardCard>({
     onMove(movesFor(dropped.next, [from ?? dropped.lane, dropped.lane]), dropped.next)
   }
 
-  const activeCard = activeId ? (items.find((c) => c.id === activeId) ?? null) : null
+  const candidate = activeId ? (items.find((c) => c.id === activeId) ?? null) : null
+  const activeCard = candidate && !laneDisabled(candidate.lane) ? candidate : null
 
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={(e: DragStartEvent) => {
+        const from = cards.find((card) => card.id === String(e.active.id))?.lane ?? null
+        if (laneDisabled(from)) {
+          setActiveId(null)
+          originLane.current = null
+          setItems(cards)
+          return
+        }
         setActiveId(String(e.active.id))
-        originLane.current = laneOf(String(e.active.id))
+        originLane.current = from
       }}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -370,18 +397,20 @@ export function WeeklyBoard<T extends BoardCard>({
       <div className="mk-wb">
         {lanes.map((lane) => {
           const laneCards = byLane.get(lane.id) ?? []
+          const locked = laneDisabled(lane.id)
           return (
-            <SortableContext key={lane.id} id={lane.id} items={laneCards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext key={lane.id} id={lane.id} items={laneCards.map((c) => c.id)} disabled={locked} strategy={verticalListSortingStrategy}>
               <Lane
                 lane={lane}
                 count={laneCards.length}
-                disabled={disabled}
-                active={activeId !== null}
-                onAdd={onAdd ? () => onAdd(lane.id) : undefined}
+                disabled={locked}
+                active={activeCard !== null}
+                note={renderLaneNote?.(lane.id)}
+                onAdd={onAdd && !locked ? () => onAdd(lane.id) : undefined}
               >
                 {laneCards.length === 0 && <p className="mk-wb-lane__empty">{emptyText}</p>}
                 {laneCards.map((c) => (
-                  <SortableCard key={c.id} id={c.id} disabled={disabled}>
+                  <SortableCard key={c.id} id={c.id} disabled={locked}>
                     {renderCard(c, false)}
                   </SortableCard>
                 ))}

@@ -21,7 +21,7 @@ services:
       target: runner
       args:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-    env_file: ../../.env.production
+    env_file: ${APP_ENV_FILE:-../../.env.production}
     environment:
       NODE_ENV: production
     # Tidak ada "ports:" — hanya Caddy yang menjangkau aplikasi lewat jaringan web.
@@ -44,7 +44,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       target: migrate
-    env_file: ../../.env.production
+    env_file: ${APP_ENV_FILE:-../../.env.production}
     profiles: [migrate]
     tmpfs:
       - /tmp

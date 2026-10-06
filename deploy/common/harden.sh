@@ -21,6 +21,9 @@ PUBKEY="${2:?Kunci publik SSH wajib diisi (isi ~/.ssh/id_ed25519.pub di laptop A
 SSH_PORT="${SSH_PORT:-22}"
 
 [[ $EUID -eq 0 ]] || { echo "Jalankan sebagai root."; exit 1; }
+[[ "$ADMIN_USER" =~ ^[a-z][a-z0-9_-]{0,31}$ && "$ADMIN_USER" != root ]] || { echo "Nama admin tidak sah."; exit 1; }
+[[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$SSH_PORT >= 1 && 10#$SSH_PORT <= 65535)) || { echo "Port SSH tidak sah."; exit 1; }
+[[ "$PUBKEY" != *$'\n'* && "$PUBKEY" != *$'\r'* ]] || { echo "Kunci harus satu baris."; exit 1; }
 [[ "$PUBKEY" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-) ]] || { echo "Kunci publik tidak dikenali."; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
@@ -37,7 +40,7 @@ usermod -aG sudo "$ADMIN_USER"
 install -d -m 700 -o "$ADMIN_USER" -g "$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
 AUTH="/home/$ADMIN_USER/.ssh/authorized_keys"
 touch "$AUTH"
-grep -qxF "$PUBKEY" "$AUTH" || echo "$PUBKEY" >> "$AUTH"
+grep -qxF -- "$PUBKEY" "$AUTH" || echo "$PUBKEY" >> "$AUTH"
 chown "$ADMIN_USER:$ADMIN_USER" "$AUTH"
 chmod 600 "$AUTH"
 # sudo tanpa kata sandi hanya bila Anda mau; bawaan: tetap minta kata sandi.
@@ -47,7 +50,7 @@ if ! passwd -S "$ADMIN_USER" | grep -q " P "; then
 fi
 
 # --- SSH --------------------------------------------------------------------
-cat > /etc/ssh/sshd_config.d/99-hardening.conf <<EOF
+cat > /etc/ssh/sshd_config.d/00-monitor-karya-hardening.conf <<EOF
 Port $SSH_PORT
 PermitRootLogin no
 PasswordAuthentication no
@@ -67,6 +70,11 @@ sshd -t
 systemctl reload ssh
 
 # --- firewall ---------------------------------------------------------------
+# Ubuntu 24.04 memakai socket activation: nonaktifkan socket agar Port sshd
+# berlaku setelah restart; operator tetap memegang sesi SSH yang sekarang.
+systemctl disable --now ssh.socket
+systemctl enable ssh
+systemctl restart ssh
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing

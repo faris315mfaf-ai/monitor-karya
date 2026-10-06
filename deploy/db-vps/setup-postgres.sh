@@ -20,11 +20,14 @@ WG_ADDR="${WG_ADDR:-10.10.0.1}"
 WG_NET="${WG_NET:-10.10.0.0/24}"
 RAM_GB="${RAM_GB:-8}"
 
-ip -4 addr show wg0 | grep -q "$WG_ADDR" || { echo "wg0 dengan $WG_ADDR belum aktif. Pasang WireGuard dulu."; exit 1; }
+[[ "$PG_MAJOR" =~ ^[0-9]{2}$ && "$RAM_GB" =~ ^[1-9][0-9]?$ ]] || { echo "Versi PostgreSQL atau RAM tidak sah."; exit 1; }
+[[ "$WG_ADDR" =~ ^10\.10\.0\.[0-9]{1,3}$ && "$WG_NET" == "10.10.0.0/24" ]] || { echo "Gunakan subnet WireGuard 10.10.0.0/24."; exit 1; }
+ip -4 -o addr show wg0 | awk '{print $4}' | grep -Fxq "$WG_ADDR/24" || { echo "wg0 dengan $WG_ADDR belum aktif. Pasang WireGuard dulu."; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
 install -d /usr/share/postgresql-common/pgdg
 curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+# shellcheck source=/dev/null
 . /etc/os-release
 echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
   > /etc/apt/sources.list.d/pgdg.list

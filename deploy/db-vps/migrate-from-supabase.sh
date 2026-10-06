@@ -15,22 +15,24 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Jalankan sebagai root."; exit 1; }
 DB="${1:?nama database tujuan, mis. monitor_karya}"
+[[ "$DB" =~ ^[a-z][a-z0-9_]{1,40}$ ]] || { echo "Nama database tidak sah."; exit 1; }
 ROLE="${DB}_app"
+umask 077
 : "${SUPABASE_URL:?setel SUPABASE_URL}"
 WORK="$(mktemp -d /var/tmp/supa.XXXX)"
 chmod 700 "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
 echo ">> dump skema public dari Supabase"
-pg_dump "$SUPABASE_URL" --schema=public --no-owner --no-privileges --format=custom \
+PGDATABASE="$SUPABASE_URL" pg_dump --schema=public --no-owner --no-privileges --format=custom \
   --exclude-table-data='public."NotificationLog"' -f "$WORK/public.dump"
 # NotificationLog hanya log kirim; buang datanya agar dump kecil. Hapus baris
 # --exclude-table-data di atas bila Anda ingin membawanya.
 
 echo ">> pulihkan ke $DB sebagai $ROLE"
 sudo -u postgres pg_restore --no-owner --no-privileges --role="$ROLE" \
-  --exit-on-error -d "$DB" "$WORK/public.dump" || {
-  echo "!! pg_restore gagal. Database $DB mungkin terisi sebagian: DROP DATABASE lalu ulangi."; exit 1; }
+  --exit-on-error --single-transaction -d "$DB" < "$WORK/public.dump" || {
+  echo "!! pg_restore gagal. Transaksi pemulihan dibatalkan; periksa diagnostik sebelum mencoba ulang."; exit 1; }
 
 sudo -u postgres psql -d "$DB" -c "ANALYZE;"
 echo ">> hitungan baris (bandingkan dengan Supabase):"
@@ -40,4 +42,4 @@ SELECT relname || ': ' || n_live_tup FROM pg_stat_user_tables ORDER BY relname;"
 echo
 echo "Selesai. Langkah berikutnya (deploy/README.md langkah 7):"
 echo "  - cek _prisma_migrations: SELECT migration_name FROM _prisma_migrations ORDER BY 1;"
-echo "  - jalankan migrasi 0013-0017 lewat deploy.sh (migrate deploy) dari VPS aplikasi"
+echo "  - periksa migrasi tertunda pada commit rilis; jalankan lewat deploy.sh setelah persetujuan operator"

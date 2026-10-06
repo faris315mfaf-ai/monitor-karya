@@ -71,10 +71,10 @@ async function targetEntity(
           select: {
             id: true,
             entityId: true,
+            forwardedAt: true,
             periodStart: true,
             isLocked: true,
             statusHeader: true,
-            forwardedAt: true,
             division: { select: { headUserId: true } },
           },
         },
