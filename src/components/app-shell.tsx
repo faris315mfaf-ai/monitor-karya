@@ -1,10 +1,9 @@
 'use client'
 
 import { AppProvider, useApp, type Branding, type SessionUser } from '@/components/app-provider'
-import { Navbar } from '@/components/navbar'
+import { AppFrame } from '@/components/shell'
 import { SplashScreen } from '@/components/splash-screen'
-import { TabNav } from '@/components/tab-nav'
-import { Footer } from '@/components/footer'
+import { EmptyNote } from '@/components/mk'
 import { DashboardView } from '@/components/views/dashboard-view'
 import { WorkDeskView } from '@/components/views/work-desk-view'
 import { ProjectsView } from '@/components/views/projects-view'
@@ -17,25 +16,20 @@ import { WeeklyInputView } from '@/components/views/weekly-input-view'
 import { InboxView } from '@/components/views/inbox-view'
 import { SystemView } from '@/components/views/system-view'
 import { CompaniesView } from '@/components/views/companies-view'
+import { ApprovalsView } from '@/components/oversight/approvals-view' // [F2-DIREKTUR]
 import { canSeeTab } from '@/lib/rbac'
 
 function MainContent() {
   const { activeTab, user } = useApp()
 
-  // The nav already hides what a role cannot open; this is the backstop for a
-  // stale stored tab. The API enforces the same rules independently.
+  // Nav sudah menyembunyikan modul yang tidak boleh dibuka; ini penahan untuk
+  // tab tersimpan yang kedaluwarsa. API menegakkan aturan yang sama.
   if (!canSeeTab(user.role, activeTab)) {
-    return (
-      <main className="flex-1 px-3 sm:px-4 lg:px-6 py-10 max-w-[1600px] mx-auto w-full">
-        <p className="text-base text-slate-500 dark:text-slate-400 text-center">
-          Modul ini tidak tersedia untuk peran Anda.
-        </p>
-      </main>
-    )
+    return <EmptyNote icon="kunci">Modul ini tidak tersedia untuk peran Anda.</EmptyNote>
   }
 
   return (
-    <main className="flex-1 px-3 sm:px-4 lg:px-6 py-4 lg:pb-6 max-w-[1600px] mx-auto w-full">
+    <div className="mk-app__inner" key={activeTab}>
       {activeTab === 'dashboard' && <DashboardView />}
       {activeTab === 'companies' && <CompaniesView />}
       {activeTab === 'work-desk' && <WorkDeskView />}
@@ -45,10 +39,11 @@ function MainContent() {
       {activeTab === 'projects' && <ProjectsView />}
       {activeTab === 'divisions' && <DivisionsView />}
       {activeTab === 'escalations' && <EscalationsView />}
+      {activeTab === 'approvals' && <ApprovalsView />}
       {activeTab === 'entities' && <EntitiesView />}
       {activeTab === 'audit' && <AuditView />}
       {activeTab === 'system' && <SystemView />}
-    </main>
+    </div>
   )
 }
 
@@ -57,20 +52,9 @@ export function AppShell({ user, branding }: { user: SessionUser; branding?: Bra
     <AppProvider user={user} branding={branding}>
       {/* Layar pembuka sekali per masuk: inisiator (holding) & perusahaan si pengguna. */}
       <SplashScreen />
-      {/* Below lg the tab bar is fixed to the bottom of the viewport, so the
-          page reserves its height — otherwise the footer sits underneath it. */}
-      <div className="min-h-screen flex flex-col pb-14 lg:pb-0">
-        <Navbar />
-        {/* TabNav picks its own layout per breakpoint: an inline bar on lg and
-            up, a fixed bottom bar below that. The wrapper only supplies the
-            desktop gutter, so it must not hide the subtree on small screens —
-            display:none here would take the mobile bottom bar down with it. */}
-        <div className="px-3 sm:px-4 lg:px-6 lg:pt-3 max-w-[1600px] mx-auto w-full">
-          <TabNav />
-        </div>
+      <AppFrame>
         <MainContent />
-        <Footer />
-      </div>
+      </AppFrame>
     </AppProvider>
   )
 }

@@ -1,16 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
-import { LoadingSpinner, EmptyState } from '@/components/loading-states'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import {
+  Button, Card, Chip, EmptyNote, ErrorNote, Hero, Icon, PageHeader, ProgressRing, Skeleton, StatTile,
+  StatusBadge,
+} from '@/components/mk'
 import { DailyStatusBadge, WeeklyHeaderBadge } from '@/components/status-badges'
 import { formatDateLong, formatDateTime, formatTime } from '@/lib/format'
-import {
-  ArrowUpRight, CheckCircle2, Clock, FolderKanban, Inbox, Loader2, Lock, Users,
-} from 'lucide-react'
+import { toastWithUndo } from '@/lib/undo-client' // [F2-URUNGKAN]
 
 type DailyRow = {
   projectId: string
@@ -50,14 +49,48 @@ type Data = {
   weekly: WeeklyRow[]
 }
 
+/** Kerangka memuat seukuran isi asli: header, ringkasan, dua daftar. */
+function InboxSkeleton() {
+  return (
+    <div className="space-y-5" aria-busy="true" aria-label="Memuat penerimaan">
+      <div>
+        <Skeleton h={14} w={220} />
+        <div className="h-2.5" />
+        <Skeleton h={36} w={260} r={12} />
+      </div>
+      <div className="mk-hero">
+        <div className="mk-hero__text">
+          <Skeleton h={22} w={160} r={999} />
+          <Skeleton h={36} w="80%" r={12} />
+          <Skeleton h={18} w="60%" />
+        </div>
+        <Skeleton h={150} w={150} r={999} />
+      </div>
+      {[0, 1].map((i) => (
+        <div key={i} className="mk-card space-y-3">
+          <Skeleton h={20} w={240} />
+          {[0, 1, 2].map((j) => (
+            <Skeleton key={j} h={48} r={10} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type Filter = 'semua' | 'siap' | 'belum'
+
+/**
+ * Penerimaan (Admin PT): laporan harian dari PIC proyek dan capaian mingguan
+ * dari kepala divisi masuk ke sini, lalu diteruskan ke holding sebelum kunci.
+ */
 export function InboxView() {
   const { data, loading, error, reload } = useResource<Data>('/api/inbox')
   const [busy, setBusy] = useState<string | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('semua')
 
-  async function forward(kind: 'daily' | 'weekly', id: string) {
+  async function forward(kind: 'daily' | 'weekly', id: string, name: string) {
     setBusy(id)
-    setMsg(null)
     try {
       const res = await fetch('/api/inbox', {
         method: 'POST',
@@ -65,203 +98,203 @@ export function InboxView() {
         body: JSON.stringify({ kind, id }),
       })
       const json = await res.json().catch(() => ({}))
-      setMsg(res.ok ? 'Diteruskan ke tingkat berikutnya.' : json.error || 'Gagal meneruskan')
-      if (res.ok) reload()
+      if (res.ok) {
+        // [F2-URUNGKAN] penerusan bisa diurungkan sebelum holding memakainya.
+        toastWithUndo(`${name} diteruskan ke holding.`, json.undoToken, reload)
+        reload()
+      } else toast.error(json.error || 'Laporan belum diteruskan. Coba lagi.')
     } catch {
-      setMsg('Tidak dapat menghubungi server.')
+      toast.error('Tidak dapat menghubungi server.')
     } finally {
       setBusy(null)
     }
   }
 
-  if (loading) return <LoadingSpinner className="py-10" />
-  if (error || !data) return <EmptyState title="Gagal memuat penerimaan" description={error ?? undefined} />
+  if (loading && !data) return <InboxSkeleton />
+  if (error || !data) return <ErrorNote message={error ?? 'Data penerimaan belum termuat.'} onRetry={reload} />
 
   const dailyPending = data.daily.filter((d) => d.readyToForward).length
   const dailyMissing = data.daily.filter((d) => !d.submittedAt).length
+  const dailyIn = data.daily.length - dailyMissing
+  const dailyPct = data.daily.length ? Math.round((dailyIn / data.daily.length) * 100) : 0
   const weeklyPending = data.weekly.filter((w) => w.readyToForward).length
+  const toForward = dailyPending + weeklyPending
+
+  const lockText = data.dailyLocked
+    ? `Laporan harian sudah dikunci pukul ${formatTime(data.dailyLockAt)} WIB.`
+    : `Kunci harian ${data.dailyCountdown.hours} jam ${data.dailyCountdown.minutes} menit lagi (${formatTime(data.dailyLockAt)} WIB).`
+
+  const answer =
+    toForward > 0
+      ? `${toForward} laporan siap diteruskan ke holding.`
+      : data.daily.length + data.weekly.length === 0
+        ? 'Belum ada proyek atau divisi yang melapor ke Anda.'
+        : 'Tidak ada laporan yang menunggu diteruskan.'
+
+  const support = [
+    dailyMissing ? `${dailyMissing} laporan harian belum masuk.` : data.daily.length ? 'Semua laporan harian sudah masuk.' : null,
+    lockText,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const dailyShown = data.daily.filter((d) =>
+    filter === 'siap' ? d.readyToForward : filter === 'belum' ? !d.submittedAt : true
+  )
+  const weeklyShown = data.weekly.filter((w) =>
+    filter === 'siap' ? w.readyToForward : filter === 'belum' ? !w.submittedAt : true
+  )
 
   return (
-    <div className="space-y-4 sm:space-y-5 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-            Penerimaan &amp; Penerusan
-          </h1>
-          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
-            {formatDateLong(new Date(data.reportDate))} · Minggu {data.week.isoWeek}/{data.week.isoYear}
-          </p>
-        </div>
-        <div
-          className={`glass rounded-xl px-3 py-2 flex items-center gap-2 ${
-            data.dailyLocked ? 'text-rose-600' : 'text-amber-600'
-          }`}
-        >
-          {data.dailyLocked ? <Lock className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-          <div className="leading-tight">
-            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Kunci harian</div>
-            <div className="text-base font-semibold tabular-nums">
-              {data.dailyLocked
-                ? `Sudah ${formatTime(data.dailyLockAt)} WIB`
-                : `${data.dailyCountdown.hours}j ${data.dailyCountdown.minutes}m lagi`}
-            </div>
-          </div>
-        </div>
+    <div className={loading ? 'space-y-5 opacity-60 pointer-events-none transition-opacity' : 'space-y-5'} aria-busy={loading || undefined}>
+      <PageHeader
+        context={`${formatDateLong(new Date(data.reportDate))} · M${data.week.isoWeek} ${data.week.isoYear}`}
+        title="Penerimaan"
+      />
+
+      <Hero
+        eyebrow={data.dailyLocked ? 'Laporan harian terkunci' : 'Laporan masuk · hari ini'}
+        answer={answer}
+        support={support}
+        art={
+          <ProgressRing
+            value={dailyPct}
+            size={150}
+            status={dailyMissing === 0 ? 'done' : data.dailyLocked ? 'late' : 'accent'}
+            sublabel={`${dailyIn} dari ${data.daily.length} masuk`}
+            ariaLabel={`${dailyIn} dari ${data.daily.length} laporan harian masuk`}
+          />
+        }
+        kpis={
+          <>
+            <StatTile label="Siap diteruskan" value={toForward} tone={toForward > 0 ? 'info' : 'done'} />
+            <StatTile label="Harian belum masuk" value={dailyMissing} tone={dailyMissing > 0 ? 'risk' : 'done'} />
+            <StatTile label="Mingguan disetujui" value={weeklyPending} tone="neutral" />
+          </>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Saring laporan">
+        {(
+          [
+            ['semua', 'Semua', data.daily.length + data.weekly.length],
+            ['siap', 'Siap diteruskan', toForward],
+            ['belum', 'Belum masuk', dailyMissing + data.weekly.filter((w) => !w.submittedAt).length],
+          ] as const
+        ).map(([v, label, count]) => (
+          <Chip key={v} selected={filter === v} count={count} className="mk-wk-tap" onClick={() => setFilter(v)}>
+            {label}
+          </Chip>
+        ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Tile label="Siap diteruskan" value={dailyPending + weeklyPending} tone="blue" />
-        <Tile label="Belum masuk" value={dailyMissing} tone={dailyMissing > 0 ? 'amber' : 'slate'} />
-        <Tile label="Divisi disetujui" value={weeklyPending} tone="violet" />
-      </div>
-
-      {msg && (
-        <div className="glass rounded-lg p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-center gap-2">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-          {msg}
-        </div>
-      )}
-
-      {/* Daily stream from the PICs */}
-      <Card className="glass">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-              <FolderKanban className="h-4 w-4 text-blue-600" />
-            </div>
-            <div>
-              <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-                Laporan Harian dari PIC Proyek
-              </CardTitle>
-              <CardDescription className="text-sm">
-                Teruskan sebelum pukul {formatTime(data.dailyLockAt)} WIB
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {data.daily.length === 0 ? (
-            <EmptyState icon={<Inbox className="h-5 w-5 text-slate-400 dark:text-slate-500" />} title="Tidak ada proyek aktif" />
-          ) : (
-            data.daily.map((d) => (
-              <div key={d.projectId} className="glass rounded-xl p-3 flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-base font-medium text-slate-800 dark:text-slate-100 truncate">{d.name}</div>
-                  <div className="text-[13px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono">{d.code}</span>
-                    {d.picName && <span>· PIC {d.picName}</span>}
-                    {d.submittedAt && <span>· dikirim {formatTime(new Date(d.submittedAt))}</span>}
-                    <span className={d.evidenceCount > 0 ? 'text-emerald-600' : 'text-amber-600'}>
-                      · {d.evidenceCount} bukti
+      {/* Laporan harian dari PIC proyek */}
+      <Card title="Laporan harian dari PIC proyek" subtitle={`Teruskan sebelum pukul ${formatTime(data.dailyLockAt)} WIB`}>
+        {data.daily.length === 0 ? (
+          <EmptyNote icon="proyek">Tidak ada proyek aktif.</EmptyNote>
+        ) : dailyShown.length === 0 ? (
+          <EmptyNote done={filter === 'belum'} icon="cari">
+            {filter === 'belum' ? 'Semua laporan harian sudah masuk.' : 'Tidak ada laporan harian yang siap diteruskan.'}
+          </EmptyNote>
+        ) : (
+          <ul className="mk-inbox-list">
+            {dailyShown.map((d) => (
+              <li key={d.projectId} className="mk-inbox-row">
+                <div className="mk-inbox-row__main">
+                  <div className="mk-inbox-row__title">{d.name}</div>
+                  <div className="mk-inbox-row__meta">
+                    <span className="mk-inbox-code">{d.code}</span>
+                    {d.picName && <span>PIC {d.picName}</span>}
+                    {d.submittedAt && <span>dikirim {formatTime(new Date(d.submittedAt))}</span>}
+                    <span className={d.evidenceCount > 0 ? 'mk-text--done' : 'mk-text--risk'}>
+                      {d.evidenceCount} bukti
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="mk-inbox-row__side">
                   {d.status ? <DailyStatusBadge status={d.status} /> : null}
                   {d.forwardedAt ? (
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 text-[11px] h-5">Diteruskan</Badge>
+                    <StatusBadge status="done" size="sm">
+                      Diteruskan
+                    </StatusBadge>
                   ) : d.readyToForward ? (
                     <Button
                       size="sm"
-                      className="h-7 text-[13px] bg-gradient-to-r from-blue-600 to-blue-500 text-white"
+                      icon="kirim"
+                      className="mk-wk-tap"
                       disabled={busy === d.reportId}
-                      onClick={() => d.reportId && forward('daily', d.reportId)}
+                      aria-busy={busy === d.reportId || undefined}
+                      onClick={() => d.reportId && forward('daily', d.reportId, d.name)}
                     >
-                      {busy === d.reportId ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <ArrowUpRight className="h-3 w-3" />
-                      )}
-                      Teruskan
+                      {busy === d.reportId ? 'Meneruskan…' : 'Teruskan laporan'}
                     </Button>
                   ) : (
-                    <Badge variant="outline" className="text-[11px] h-5 text-amber-700 dark:text-amber-300 border-amber-500/40">
-                      {d.reportId ? 'Draft PIC' : 'Belum masuk'}
-                    </Badge>
+                    <StatusBadge status={d.reportId ? 'info' : 'risk'} size="sm">
+                      {d.reportId ? 'Draf PIC' : 'Belum masuk'}
+                    </StatusBadge>
                   )}
                 </div>
-              </div>
-            ))
-          )}
-        </CardContent>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
-      {/* Weekly stream from the heads of division */}
-      <Card className="glass">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/15 flex items-center justify-center">
-              <Users className="h-4 w-4 text-violet-600" />
-            </div>
-            <div>
-              <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-                Capaian Mingguan dari Kepala Divisi
-              </CardTitle>
-              <CardDescription className="text-sm">
-                Diserahkan paling lambat {formatDateLong(data.week.handoverBy)}, dikunci{' '}
-                {formatDateTime(data.week.lockAt)} WIB
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {data.weekly.length === 0 ? (
-            <EmptyState icon={<Inbox className="h-5 w-5 text-slate-400 dark:text-slate-500" />} title="Tidak ada divisi" />
-          ) : (
-            data.weekly.map((w) => (
-              <div key={w.divisionId} className="glass rounded-xl p-3 flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-base font-medium text-slate-800 dark:text-slate-100 truncate">{w.name}</div>
-                  <div className="text-[13px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-1.5">
+      {/* Capaian mingguan dari kepala divisi */}
+      <Card
+        title="Capaian mingguan dari kepala divisi"
+        subtitle={`Diserahkan paling lambat ${formatDateLong(data.week.handoverBy)}, dikunci ${formatDateTime(data.week.lockAt)} WIB`}
+      >
+        {data.weekly.length === 0 ? (
+          <EmptyNote icon="tim">Tidak ada divisi.</EmptyNote>
+        ) : weeklyShown.length === 0 ? (
+          <EmptyNote done={filter === 'belum'} icon="cari">
+            {filter === 'belum' ? 'Semua divisi sudah menyerahkan capaian.' : 'Tidak ada capaian mingguan yang siap diteruskan.'}
+          </EmptyNote>
+        ) : (
+          <ul className="mk-inbox-list">
+            {weeklyShown.map((w) => (
+              <li key={w.divisionId} className="mk-inbox-row">
+                <div className="mk-inbox-row__main">
+                  <div className="mk-inbox-row__title">{w.name}</div>
+                  <div className="mk-inbox-row__meta">
                     {w.headName && <span>Kadiv {w.headName}</span>}
-                    <span>· {w.itemCount} item</span>
-                    {w.approvedAt && <span>· disetujui</span>}
+                    <span>{w.itemCount} item</span>
+                    {w.approvedAt && (
+                      <span className="mk-text--done inline-flex items-center gap-1">
+                        <Icon name="selesai" size={14} /> disetujui
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="mk-inbox-row__side">
                   {w.statusHeader ? <WeeklyHeaderBadge status={w.statusHeader} /> : null}
                   {w.forwardedAt ? (
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 text-[11px] h-5">Diteruskan</Badge>
+                    <StatusBadge status="done" size="sm">
+                      Diteruskan
+                    </StatusBadge>
                   ) : w.readyToForward ? (
                     <Button
                       size="sm"
-                      className="h-7 text-[13px] bg-gradient-to-r from-violet-600 to-violet-500 text-white"
+                      icon="kirim"
+                      className="mk-wk-tap"
                       disabled={busy === w.reportId}
-                      onClick={() => w.reportId && forward('weekly', w.reportId)}
+                      aria-busy={busy === w.reportId || undefined}
+                      onClick={() => w.reportId && forward('weekly', w.reportId, w.name)}
                     >
-                      {busy === w.reportId ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <ArrowUpRight className="h-3 w-3" />
-                      )}
-                      Teruskan
+                      {busy === w.reportId ? 'Meneruskan…' : 'Teruskan capaian'}
                     </Button>
                   ) : (
-                    <Badge variant="outline" className="text-[11px] h-5 text-amber-700 dark:text-amber-300 border-amber-500/40">
+                    <StatusBadge status="risk" size="sm">
                       Menunggu kadiv
-                    </Badge>
+                    </StatusBadge>
                   )}
                 </div>
-              </div>
-            ))
-          )}
-        </CardContent>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
-    </div>
-  )
-}
-
-function Tile({ label, value, tone }: { label: string; value: number; tone: string }) {
-  const colors: Record<string, string> = {
-    blue: 'text-blue-600',
-    amber: 'text-amber-600',
-    violet: 'text-violet-600',
-    slate: 'text-slate-400 dark:text-slate-500',
-  }
-  return (
-    <div className="glass rounded-xl p-3">
-      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 leading-tight">{label}</div>
-      <div className={`text-2xl font-bold ${colors[tone] ?? 'text-slate-700 dark:text-slate-200'}`}>{value}</div>
     </div>
   )
 }

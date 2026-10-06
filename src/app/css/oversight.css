@@ -1,0 +1,119 @@
+/*
+ * [F2-DIREKTUR] Direktur & Manajemen: palet pencarian ⌘K, tombol cari di header,
+ * percakapan tanggapan laporan mingguan, kontak kepala divisi, kehadiran bertumpuk.
+ * Nilai hanya dari design-system/tokens.css.
+ */
+
+/* ---------- Tombol cari di header (membuka palet) ---------- */
+.mk-searchbtn {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: var(--touch-min); padding: 0 var(--space-3);
+  border: 0; border-radius: var(--radius-md); background: var(--fill-1); color: var(--ink-2);
+  font: var(--text-callout); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.mk-searchbtn:hover { background: var(--fill-2); }
+.mk-searchbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-searchbtn__label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-searchbtn .mk-search__kbd { margin-left: var(--space-2); }
+/* Di bawah 1024 tombol cari sudah ada di pojok kanan atas kerangka (shell.tsx), jadi tidak dobel. */
+@media (width < 1024px) { .mk-searchbtn { display: none; } }
+
+/* ---------- Palet pencarian ---------- */
+.mk-cmdk__scrim {
+  position: fixed; inset: 0; z-index: var(--z-scrim); background: var(--scrim);
+}
+.mk-cmdk {
+  position: fixed; z-index: var(--z-sheet);
+  top: max(var(--space-12), 10vh); left: 50%; transform: translateX(-50%);
+  width: min(40rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(70vh, 40rem);
+  display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-xl); background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mk-cmdk[data-state="open"] { animation: mk-cmdk-in var(--dur-base) var(--ease-spring); }
+  @keyframes mk-cmdk-in { from { opacity: 0; transform: translateX(-50%) scale(0.98); } }
+}
+@media (width < 600px) {
+  .mk-cmdk { top: var(--space-4); max-height: calc(100dvh - 2 * var(--space-4)); }
+}
+.mk-cmdk__field {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); color: var(--ink-2);
+}
+.mk-cmdk__field input {
+  flex: 1 1 auto; min-width: 0; min-height: var(--touch-min);
+  border: 0; outline: 0; background: transparent; color: var(--ink);
+  font: var(--text-body-lg);
+}
+.mk-cmdk__field input::placeholder { color: var(--ink-2); }
+.mk-cmdk__list { overflow-y: auto; padding: var(--space-2); }
+.mk-cmdk__group { padding: var(--space-3) var(--space-3) var(--space-1); color: var(--ink-2); font: var(--text-footnote); font-weight: 600; }
+.mk-cmdk__item {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%;
+  min-height: var(--touch-min); padding: var(--space-2) var(--space-3);
+  border: 0; border-radius: var(--radius-md); background: transparent; color: var(--ink);
+  text-align: left; font: var(--text-body); cursor: pointer;
+}
+.mk-cmdk__item[aria-selected="true"] { background: var(--accent-soft); }
+.mk-cmdk__item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.mk-cmdk__icon {
+  display: grid; place-items: center; flex: none; width: var(--space-8); height: var(--space-8);
+  border-radius: var(--radius-sm); background: var(--fill-1); color: var(--ink-2);
+}
+.mk-cmdk__text { min-width: 0; flex: 1 1 auto; }
+.mk-cmdk__title { display: block; font: var(--text-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cmdk__sub { display: block; font: var(--text-footnote); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-cmdk__note { padding: var(--space-6) var(--space-4); color: var(--ink-2); font: var(--text-callout); text-align: center; }
+.mk-cmdk__foot {
+  display: flex; gap: var(--space-4); flex-wrap: wrap; padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--line); color: var(--ink-2); font: var(--text-caption);
+}
+@media (hover: none) { .mk-cmdk__foot { display: none; } }
+.mk-cmdk__contact { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
+
+/* ---------- Tautan kontak (Hubungi kepala divisi, orang di palet) ---------- */
+.mk-contact {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: var(--touch-min); padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md); background: var(--fill-1); color: var(--ink); text-decoration: none;
+}
+.mk-contact:hover { background: var(--fill-2); }
+.mk-contact:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-contact__label { font: var(--text-footnote); color: var(--ink-2); }
+.mk-contact__value { font: var(--text-body); font-weight: 600; overflow-wrap: anywhere; }
+
+/* ---------- Percakapan tanggapan laporan mingguan ---------- */
+.mk-thread { display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-thread__item { display: flex; flex-direction: column; gap: var(--space-1); max-width: 92%; padding: var(--space-3); border-radius: var(--radius-lg); background: var(--fill-1); }
+.mk-thread__item.is-mine { align-self: flex-end; background: var(--accent-soft); }
+.mk-thread__meta { font: var(--text-caption); color: var(--ink-2); }
+.mk-thread__body { font: var(--text-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- Kehadiran bertumpuk (Hadir / Terlambat / Izin-cuti) ---------- */
+.mk-attbar { display: flex; height: var(--space-3); width: 100%; overflow: hidden; border-radius: var(--radius-full); background: var(--surface-2); }
+.mk-attbar > span { height: 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  .mk-attbar > span { transition: width var(--dur-data) var(--ease-standard); }
+}
+
+/* ---------- Formulir persetujuan ---------- */
+.mk-form-grid { display: grid; gap: var(--space-4); }
+.mk-form-row { display: grid; gap: var(--space-2); }
+.mk-form-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+@media (width < 600px) { .mk-form-row--2 { grid-template-columns: minmax(0, 1fr); } }
+.mk-field-hint { font: var(--text-footnote); color: var(--ink-2); }
+.mk-native-select, .mk-native-input {
+  width: 100%; min-height: var(--touch-min); padding: 0 var(--space-3);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--ink); font: var(--text-body);
+}
+.mk-native-select:focus-visible, .mk-native-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* ---------- Footer Sheet proyek pengawas ---------- */
+/* "Kirim catatan ke PIC" + "Tandai sudah ditinjau" tidak muat sebaris di Sheet 440:
+   keduanya turun ke baris kedua dan melebar penuh, bukan terpotong. */
+.mk-ovfoot { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.mk-ovfoot > .mk-btn { flex: 1 1 auto; }

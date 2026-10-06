@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { ROLE_CAPABILITIES, can } from '@/lib/rbac'
+import { serverError } from '@/lib/api-error'
+import { reminderMatrix, technicalStatus } from '@/lib/system-status'
 import {
   DAILY_CUTOFF_LABEL,
   dailyCountdown,
@@ -14,13 +16,25 @@ import {
 /**
  * The system administrator's console: who has access, whether the locking and
  * notification machinery is behaving, and how much data is in the system.
+ *
+ * [F2-GRUP] Ditambah `technical` (antrean buka kunci, permintaan akses, proses
+ * otomatis terakhir, kesehatan akun) dan `reminders` (sakelar per PT) untuk
+ * tab Sistem & akses Tim TI / Super Admin (07-ti.md).
  */
 export async function GET() {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
   if (!can(user.role, 'users:manage')) {
-    return NextResponse.json({ error: 'Hanya Pengelola Sistem IT' }, { status: 403 })
+    return NextResponse.json({ error: 'Konsol sistem hanya untuk Tim TI dan Super Admin' }, { status: 403 })
   }
+  try {
+    return NextResponse.json(await consoleData())
+  } catch (err) {
+    return serverError(err, 'Konsol sistem belum termuat. Coba lagi.', 'system GET')
+  }
+}
+
+async function consoleData() {
 
   const today = startOfWibDay(new Date())
   const deadlines = weeklyDeadlines(new Date())
@@ -35,6 +49,8 @@ export async function GET() {
     lockedToday,
     pendingUnlocks,
     lastAudit,
+    technical,
+    reminders,
   ] = await Promise.all([
     db.user.groupBy({ by: ['role'], _count: { _all: true }, where: { isActive: true } }),
     db.user.count({ where: { isActive: false } }),
@@ -57,6 +73,8 @@ export async function GET() {
       orderBy: { at: 'desc' },
       include: { actor: { select: { name: true, role: true } } },
     }),
+    technicalStatus(),
+    reminderMatrix(),
   ])
 
   const [entities, projects, divisions, dailyReports, weeklyReports, evidence, auditLogs] = totals
@@ -76,7 +94,9 @@ export async function GET() {
     take: 25,
   })
 
-  return NextResponse.json({
+  return {
+    technical,
+    reminders,
     access: {
       byRole: usersByRole
         .map((r) => ({
@@ -112,5 +132,5 @@ export async function GET() {
       actorRole: a.actor?.role ?? null,
       targetType: a.targetType,
     })),
-  })
+  }
 }

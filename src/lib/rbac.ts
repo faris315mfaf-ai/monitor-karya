@@ -53,7 +53,12 @@ const ALL_CAPABILITIES: Capability[] = [
 export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Reports project progress every working day, with obstacles and evidence;
   // may propose a project of their own (approved by Admin PT, then Direktur).
-  PIC_PROYEK: ['daily:input', 'escalation:raise', 'project:propose'],
+  PIC_PROYEK: [
+    'daily:input',
+    'escalation:raise',
+    'project:propose',
+    'unlock:request', // [F1-A] hanya laporan harian proyeknya sendiri (dicek di /api/unlock-requests)
+  ],
 
   // Hands the division's weekly achievement to Admin PT by Thursday and signs
   // it off before it locks.
@@ -117,12 +122,15 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
  * Tabs each role sees, in order. The first entry is that role's landing tab.
  */
 export const ROLE_TABS: Record<string, NavTabId[]> = {
-  PIC_PROYEK: ['dashboard', 'daily-input', 'projects'],
-  KEPALA_DIVISI: ['dashboard', 'weekly-input', 'divisions'],
+  // Meja kerja (5 Okt 2026): tempat mengerjakan hari ini — tugas & laporan (PIC),
+  // capaian minggu berjalan & serah terima (Kepala Divisi).
+  PIC_PROYEK: ['dashboard', 'work-desk', 'daily-input', 'projects'],
+  KEPALA_DIVISI: ['dashboard', 'work-desk', 'weekly-input', 'divisions'],
   // Sejak 8 Sep 2026 isian mingguan divisi untuk Admin PT ada di Modul Divisi
   // (pilih entitas & divisi), jadi tab Capaian Mingguan tidak lagi dobel.
   ADMIN_PT: ['dashboard', 'work-desk', 'inbox', 'daily-input', 'projects', 'divisions', 'escalations'],
-  DIREKTUR_ENTITAS: ['dashboard', 'projects', 'divisions', 'escalations', 'entities'],
+  // [F2-DIREKTUR] + Persetujuan (materi/anggaran/cuti, usulan tenggat, pengajuan proyek).
+  DIREKTUR_ENTITAS: ['dashboard', 'projects', 'divisions', 'escalations', 'approvals', 'entities'],
   DIREKTUR_SDM_GA: ['dashboard', 'projects', 'divisions', 'escalations', 'entities', 'audit'],
   TI: [
     'dashboard',
@@ -151,11 +159,26 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
     'audit',
     'system',
   ],
-  MANAJEMEN: ['dashboard', 'escalations', 'projects', 'divisions', 'entities', 'audit'],
+  MANAJEMEN: ['dashboard', 'escalations', 'projects', 'divisions', 'approvals', 'entities', 'audit'], // [F2-DIREKTUR] + Persetujuan
   AUDITOR: ['dashboard', 'projects', 'divisions', 'entities', 'audit'],
 }
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']
+
+/**
+ * [F2-DIREKTUR] Tab utama di tablet & ponsel (01-manajemen.md, 02-direktur.md),
+ * urut sesuai spesifikasi; tab peran lainnya pindah ke "Lainnya". Peran tanpa
+ * entri memakai urutan bawaan kerangka (src/components/shell.tsx).
+ */
+export const ROLE_COMPACT_TABS: Record<string, NavTabId[]> = {
+  DIREKTUR_ENTITAS: ['dashboard', 'projects', 'escalations', 'divisions'],
+  MANAJEMEN: ['dashboard', 'projects', 'approvals', 'divisions'],
+}
+
+export function compactTabsFor(role: string): NavTabId[] | null {
+  const list = ROLE_COMPACT_TABS[role]
+  return list ? list.filter((t) => canSeeTab(role, t)) : null
+}
 
 /**
  * Rantai persetujuan proyek menurut peran pengaju (11 Sep 2026): tiap pengaju

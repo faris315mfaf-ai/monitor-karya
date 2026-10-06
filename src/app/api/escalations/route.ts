@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { ageDays } from '@/lib/wib'
 import { Prisma } from '@prisma/client'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 // GET /api/escalations - list escalations with filters
 export async function GET(req: NextRequest) {
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items, total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Eskalasi belum termuat. Coba lagi.', 'escalations GET')
   }
 }

@@ -74,6 +74,9 @@ model Division {
   updatedAt      DateTime @updatedAt
 
   weeklyReports WeeklyDivisionReport[]
+  // [P2-B] anggota divisi — lihat penjelasan di wilayah [P2-B]
+  members       User[]    @relation("DivisionMembers")
+  projects      Project[] @relation("DivisionProjects")
 
   @@unique([entityId, name])
 }
@@ -110,6 +113,16 @@ model Project {
   approvals       ProjectApproval[]
   progressReports ProjectProgressReport[]
   relatedEntities ProjectEntity[]
+  outputs         Output[]
+  // [P2-A] relasi tahapan / usulan tenggat ditambahkan di sini
+  notes             ProjectNote[]
+  stages            ProjectStage[]
+  deadlineProposals DeadlineProposal[]
+  // [P2-B] divisi pelaksana proyek (nullable) — lihat penjelasan di wilayah [P2-B]
+  divisionId        String?
+  division          Division? @relation("DivisionProjects", fields: [divisionId], references: [id], onDelete: SetNull)
+
+  @@index([divisionId])
 }
 
 /// PT-PT lain yang berkaitan dengan sebuah proyek (11 Sep 2026) — selain PT
@@ -253,6 +266,8 @@ model User {
   isActive     Boolean  @default(true)
   avatarColor  String?
   lastLoginAt  DateTime?
+  /// [F1-C] Akun yang dibuat/disetel ulang admin wajib mengganti kata sandi saat masuk berikutnya.
+  mustChangePassword Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -276,6 +291,23 @@ model User {
   unlockRequests         UnlockRequest[]
   unlockApproved         UnlockRequest[] @relation("UnlockApprover")
   unlockExecuted         UnlockRequest[] @relation("UnlockExecutor")
+  outputsOwned           Output[] @relation("OutputOwner")
+  outputsReviewed        Output[] @relation("OutputReviewer")
+  // [P2-A] relasi catatan proyek / usulan tenggat
+  projectNotes           ProjectNote[] @relation("ProjectNoteAuthor")
+  deadlinesProposed      DeadlineProposal[] @relation("DeadlineProposer")
+  deadlinesDecided       DeadlineProposal[] @relation("DeadlineDecider")
+  // [P2-B] relasi anggota divisi / kehadiran ditambahkan di sini
+  divisionId             String?
+  division               Division?  @relation("DivisionMembers", fields: [divisionId], references: [id], onDelete: SetNull)
+  attendances            Attendance[] @relation("AttendanceUser")
+  attendanceRecorded     Attendance[] @relation("AttendanceRecorder")
+  @@index([divisionId])
+  // [P2-C] relasi permintaan akses / aturan pengingat ditambahkan di sini
+  accessRequested        AccessRequest[] @relation("AccessRequester")
+  accessDecided          AccessRequest[] @relation("AccessDecider")
+  accessTargeted         AccessRequest[] @relation("AccessTarget")
+  reminderRulesUpdated   ReminderRule[]  @relation("ReminderRuleEditor")
 }
 
 // ============================================================
@@ -606,4 +638,410 @@ model Subtask {
 
   @@index([taskId])
   @@index([weeklyItemId])
+}
+
+// ====================================================================
+// Output proyek (6 Okt 2026) — hasil kerja PIC yang direview kepala
+// divisi (05-pic-proyek.md, 03-kepala-divisi.md). Bukti memakai tabel
+// Evidence dengan targetType 'OUTPUT'. Dipakai bersama P2-A (PIC) & P2-B
+// (review kepala divisi); jangan diubah tanpa koordinasi.
+// ====================================================================
+model Output {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  /// DIKERJAKAN | MENUNGGU_REVIEW | PERLU_REVISI | DITERIMA
+  status       String    @default("DIKERJAKAN")
+  dueDate      DateTime?
+  ownerId      String
+  owner        User      @relation("OutputOwner", fields: [ownerId], references: [id])
+  reviewerId   String?
+  reviewer     User?     @relation("OutputReviewer", fields: [reviewerId], references: [id])
+  revisionNote String?
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  // [F1-D] riwayat catatan revisi per putaran
+  revisions    OutputRevision[]
+
+  @@index([projectId, status])
+  @@index([ownerId])
+}
+
+// ==== [P2-A] PIC proyek: model baru di bawah baris ini ====
+
+/// Catatan kepala divisi (6 Okt 2026): percakapan PIC ↔ kepala divisi per
+/// proyek (05-pic-proyek.md). `readAt` diisi saat pihak lain membacanya.
+model ProjectNote {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation("ProjectNoteAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime  @default(now())
+  /// Kolom lama (sebelum 0019): terisi = dianggap dibaca semua pihak. Catatan
+  /// baru tidak lagi mengisinya; status baca per akun ada di NoteRead [F1-D].
+  readAt    DateTime?
+  // [F1-D] tanda baca per akun
+  reads     NoteRead[]
+
+  @@index([projectId, createdAt])
+  @@index([authorId])
+}
+
+/// Tahapan proyek bertanggal (6 Okt 2026), menggantikan 4 fase tetap di layar PIC.
+model ProjectStage {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int       @default(0)
+  startDate DateTime?
+  dueDate   DateTime?
+  /// BELUM_MULAI | BERJALAN | TERTAHAN | SELESAI
+  status    String    @default("BELUM_MULAI")
+  note      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([projectId, position])
+}
+
+/// Usulan geser tenggat proyek (6 Okt 2026): PIC mengajukan, Direktur entitas
+/// atau Manajemen memutuskan. Disetujui → Project.targetEndDate ikut berubah.
+model DeadlineProposal {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  previousDate DateTime? // tenggat saat diajukan, untuk riwayat
+  proposedDate DateTime
+  reason       String
+  /// DIAJUKAN | DISETUJUI | DITOLAK
+  status       String    @default("DIAJUKAN")
+  proposedById String
+  proposedBy   User      @relation("DeadlineProposer", fields: [proposedById], references: [id])
+  decidedById  String?
+  decidedBy    User?     @relation("DeadlineDecider", fields: [decidedById], references: [id])
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime  @default(now())
+
+  @@index([projectId, status])
+  @@index([proposedById])
+}
+
+// ==== [P2-B] Kepala divisi: model baru di bawah baris ini ====
+
+// Keanggotaan divisi (6 Okt 2026, 03-kepala-divisi.md) — keputusan:
+// - Orang → divisi memakai kolom `User.divisionId` (nullable, satu orang satu
+//   divisi). Kepala divisi tetap lewat `Division.headUserId`; ia tidak perlu
+//   mengisi `divisionId`-nya sendiri. Kolom nullable karena data lama tidak
+//   bisa dipetakan otomatis; Admin PT / kepala divisi mengisinya lewat
+//   PUT /api/kadiv/members.
+// - Proyek → divisi memakai kolom `Project.divisionId` (nullable, satu proyek
+//   satu divisi pelaksana). Dibaca juga oleh ringkasan Direktur/Manajemen
+//   ([P2-D], /api/ringkasan). Bila kosong, proyek dianggap milik divisi tempat
+//   PIC-nya menjadi anggota (`User.divisionId`), lalu divisi yang dipimpin
+//   PIC-nya — urutan yang sama di src/lib/kadiv.ts dan /api/ringkasan.
+// - Tim kepala divisi = anggota (`User.divisionId`) ∪ PIC proyek divisi.
+
+/// Kehadiran harian anggota (6 Okt 2026). Satu baris per orang per hari WIB;
+/// hari tanpa baris dianggap HADIR (aplikasi ini bukan mesin absensi). Orang
+/// berstatus CUTI/SAKIT/IZIN tidak dihitung di penyebut laporan harian tim.
+model Attendance {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation("AttendanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  /// Tengah malam WIB (sama dengan DailyProjectReport.reportDate).
+  date         DateTime
+  /// HADIR | TERLAMBAT | CUTI | SAKIT | IZIN  ([F2-DIREKTUR] TERLAMBAT dihitung hadir)
+  status       String
+  note         String?
+  recordedById String?
+  recordedBy   User?    @relation("AttendanceRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([recordedById])
+}
+
+// ==== [P2-C] Admin PT: model baru di bawah baris ini ====
+
+/// Permintaan akses (6 Okt 2026, 04-admin-pt.md): perubahan peran/akses selalu
+/// lewat permintaan yang disetujui. Admin PT memutuskan untuk PT-nya sendiri
+/// (posisi ADMIN_PT/KEPALA_DIVISI/PIC_PROYEK), Super Admin & TI untuk seluruh
+/// grup. Persetujuan menerapkan perubahan lewat aturan meja akun yang sama
+/// (src/lib/account-desk.ts) dan tercatat di AuditLog.
+model AccessRequest {
+  id            String    @id @default(cuid())
+  /// AKUN_BARU | AKSES_SEMENTARA | PINDAH_PERAN
+  type          String
+  /// JSON. AKUN_BARU: { name, username?, email?, role, title?, divisionId?, projectId? }
+  ///       AKSES_SEMENTARA: { userId, role?, days }
+  ///       PINDAH_PERAN: { userId, role, divisionId?, projectId? }
+  payload       String
+  reason        String?
+  /// PT tempat perubahan berlaku (null = tingkat grup). Tanpa relasi Prisma
+  /// supaya model Entity tidak disentuh; diindeks untuk saringan per PT.
+  entityId      String?
+  requestedById String?
+  requestedBy   User?     @relation("AccessRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  /// Akun yang diubah (PINDAH_PERAN/AKSES_SEMENTARA) atau dibuat (AKUN_BARU, setelah disetujui).
+  targetUserId  String?
+  targetUser    User?     @relation("AccessTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  /// DIAJUKAN | DISETUJUI | DITOLAK
+  status        String    @default("DIAJUKAN")
+  decidedById   String?
+  decidedBy     User?     @relation("AccessDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt     DateTime?
+  decisionNote  String?
+  /// AKSES_SEMENTARA: kapan akses dicabut kembali.
+  expiresAt     DateTime?
+  /// JSON keadaan sebelum diterapkan, untuk mencabut akses sementara.
+  appliedData   String?
+  revertedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([entityId, status])
+  @@index([requestedById])
+  @@index([targetUserId])
+  @@index([status, expiresAt])
+}
+
+/// Pengingat otomatis per PT (6 Okt 2026). Baris yang belum ada = nilai bawaan
+/// (lihat src/lib/reminder-rules.ts). Cron /api/cron/reminder-rules membaca
+/// tabel ini; `lastRunAt` mencegah satu aturan berjalan dua kali sehari.
+model ReminderRule {
+  id          String    @id @default(cuid())
+  entityId    String
+  /// HARIAN | MINGGUAN | ESKALASI_KADIV | RINGKASAN_MANAJEMEN
+  kind        String
+  enabled     Boolean   @default(true)
+  /// "HH:MM" WIB
+  time        String?
+  /// 1 = Senin … 7 = Minggu; null = setiap hari kerja
+  weekday     Int?
+  /// JSON, mis. { "days": 2 } untuk eskalasi
+  params      String?
+  lastRunAt   DateTime?
+  updatedById String?
+  updatedBy   User?     @relation("ReminderRuleEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([entityId, kind])
+  @@index([updatedById])
+}
+
+// ==== [P2-D] Direktur & Manajemen: model baru di bawah baris ini ====
+
+/// Tanda "Sudah dibaca" laporan mingguan divisi oleh pengawas (Direktur,
+/// Manajemen) — lencana di "Laporan mingguan divisi" (02-direktur.md).
+/// Sengaja tanpa relasi Prisma agar model WeeklyDivisionReport/User (milik area
+/// lain) tidak berubah; cakupan dan keberadaan laporan dijaga di API.
+model WeeklyReportRead {
+  id             String   @id @default(cuid())
+  weeklyReportId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  @@unique([weeklyReportId, userId])
+  @@index([userId])
+}
+
+// ==== [F1-C] Keamanan akun: model/kolom baru di bawah baris ini ====
+// User.mustChangePassword (kolom di model User, ditandai [F1-C]) — migrasi 0018_auth_password.
+
+// ==== [F1-D] Catatan & utang teknis: model baru di bawah baris ini ====
+
+/// Tanda baca catatan proyek per akun (migrasi 0019). Menggantikan
+/// ProjectNote.readAt tunggal, sehingga dalam percakapan tiga pihak (PIC,
+/// kepala divisi, Admin PT) setiap pihak punya status belum dibaca sendiri.
+/// Tanpa relasi ke User agar model User tidak berubah; akun dijaga di API.
+model NoteRead {
+  id     String      @id @default(cuid())
+  noteId String
+  note   ProjectNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId String
+  readAt DateTime    @default(now())
+
+  @@unique([noteId, userId])
+  @@index([userId])
+}
+
+/// Riwayat catatan revisi output (migrasi 0019). Satu baris per "Minta
+/// revisi"; Output.revisionNote tetap menyimpan catatan yang berlaku. Bila
+/// permintaan revisi diurungkan, barisnya ditandai `undoneAt` dan catatan
+/// putaran sebelumnya dipulihkan ke Output.revisionNote.
+model OutputRevision {
+  id         String    @id @default(cuid())
+  outputId   String
+  output     Output    @relation(fields: [outputId], references: [id], onDelete: Cascade)
+  note       String
+  reviewerId String?
+  createdAt  DateTime  @default(now())
+  undoneAt   DateTime?
+
+  @@index([outputId, createdAt])
+}
+
+// ==== [F2-KADIV] Kepala divisi: model baru di bawah baris ini ====
+
+/// Ringkasan laporan mingguan kepala divisi untuk Direktur (migrasi 0021,
+/// 03-kepala-divisi.md §8). Satu baris per divisi per minggu ISO. Angka
+/// (output diterima, proyek sesuai jadwal, kendala terbuka, review tersisa)
+/// adalah potret saat disimpan/dikirim; `points` = 3 poin yang bisa disunting.
+/// DRAF → TERKIRIM ("Kirim ke Direktur"). `weeklyReportId` diisi bila baris
+/// WeeklyDivisionReport minggu itu sudah ada. Sengaja tanpa relasi Prisma agar
+/// model Division/WeeklyDivisionReport/User (milik area lain) tidak berubah;
+/// cakupan dijaga di /api/kadiv/weekly-summary dan dibaca Direktur lewat
+/// src/lib/kadiv.ts → readDivisionSummaries.
+model WeeklyDivisionSummary {
+  id              String    @id @default(cuid())
+  divisionId      String
+  isoYear         Int
+  isoWeek         Int
+  weeklyReportId  String?
+  /// DRAF | TERKIRIM
+  status          String    @default("DRAF")
+  points          String[]  @default([])
+  outputsAccepted Int       @default(0)
+  outputsTarget   Int       @default(0)
+  projectsOnTrack Int       @default(0)
+  projectsTotal   Int       @default(0)
+  openObstacles   Int       @default(0)
+  pendingReview   Int       @default(0)
+  sentAt          DateTime?
+  sentById        String?
+  updatedById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([divisionId, isoYear, isoWeek])
+  @@index([weeklyReportId])
+}
+
+/// Tanda "sudah dibaca" kepala divisi atas laporan harian anggota (migrasi
+/// 0021). Laporan harian tetap dikirim ke Admin PT; kepala divisi hanya
+/// melihat dan menandai sudah dibaca. Tanpa relasi Prisma (lihat di atas).
+model DailyReportRead {
+  id            String   @id @default(cuid())
+  dailyReportId String
+  userId        String
+  readAt        DateTime @default(now())
+
+  @@unique([dailyReportId, userId])
+  @@index([userId])
+}
+
+// ==== [F2-ADMIN] Admin PT: model baru di bawah baris ini ====
+
+// ==== [F2-DIREKTUR] Direktur & Manajemen: model baru di bawah baris ini ====
+// Migrasi 0023_oversight_more. Pola sama dengan WeeklyReportRead: tanpa relasi
+// Prisma agar model milik area lain (User, Project, WeeklyDivisionReport) tidak
+// berubah; keberadaan & cakupan baris induk dijaga di API.
+
+/// Tanggapan atas laporan mingguan divisi ("Beri tanggapan", 02-direktur.md).
+/// Ditulis pengawas (Direktur entitas, Manajemen, Direksi holding, Super Admin)
+/// dan dibalas kepala divisi; `readAt` = kapan kepala divisi membacanya.
+model WeeklyReportComment {
+  id             String    @id @default(cuid())
+  weeklyReportId String
+  authorId       String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([weeklyReportId, createdAt])
+  @@index([authorId])
+}
+
+/// "Tandai sudah ditinjau" pada detail proyek (01-manajemen.md, 02-direktur.md).
+/// Satu baris per tinjauan; urungkan = hapus baris milik peninjau.
+model ProjectReview {
+  id         String   @id @default(cuid())
+  projectId  String
+  reviewerId String
+  note       String?
+  reviewedAt DateTime @default(now())
+
+  @@index([projectId, reviewedAt])
+  @@index([reviewerId])
+}
+
+/// Permintaan persetujuan materi, anggaran, dan cuti (01-manajemen.md "Persetujuan
+/// menunggu", 02-direktur.md "Eskalasi dari kepala divisi"). Diajukan kepala
+/// divisi atau PIC; diputuskan Direktur entitas di PT-nya, atau Manajemen /
+/// Direksi holding / Super Admin / TI untuk seluruh grup.
+model ApprovalRequest {
+  id            String    @id @default(cuid())
+  /// MATERI | ANGGARAN | CUTI
+  type          String
+  title         String
+  description   String?
+  /// Rupiah, opsional (wajib untuk ANGGARAN).
+  amount        BigInt?
+  entityId      String
+  divisionId    String?
+  projectId     String?
+  requestedById String
+  /// CUTI: rentang tanggal (tengah malam WIB).
+  startDate     DateTime?
+  endDate       DateTime?
+  /// DIAJUKAN | DISETUJUI | DITOLAK | DITARIK
+  status        String    @default("DIAJUKAN")
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  /// JSON perubahan yang diterapkan saat disetujui (mis. tanggal Attendance CUTI
+  /// yang dibuat), supaya "Urungkan" bisa mengembalikannya.
+  appliedData   String?
+  /// Berkas pendukung di Supabase Storage (bucket evidence, prefix APPROVAL_REQUEST/).
+  fileKey       String?
+  fileName      String?
+  fileMime      String?
+  fileSize      Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([entityId, status])
+  @@index([requestedById])
+  @@index([decidedById])
+  @@index([projectId])
+  @@index([divisionId])
+}
+
+// ==== [F2-GRUP] Peran grup (SDM GA, TI, Auditor, Super Admin): model baru di bawah baris ini ====
+
+// ==== [F2-URUNGKAN] Riwayat & pembatalan: model baru di bawah baris ini ====
+
+/// Tiket "Urungkan" untuk tindakan yang bisa dibalik (migrasi 0025): keputusan
+/// pengajuan proyek, tinjau/putuskan/tutup eskalasi, ajukan ulang & arsip
+/// proyek, dan penerusan laporan di Penerimaan. Berlaku 15 menit, hanya untuk
+/// pelaku yang sama, sekali pakai. `snapshot` = keadaan persis sebelum
+/// tindakan (JSON), `stamp` = sidik keadaan sesudahnya (JSON); urungkan
+/// ditolak bila keadaan sekarang tidak lagi sama dengan `stamp`.
+/// Tanpa relasi ke User agar model User tidak berubah; akun dijaga di API.
+model UndoToken {
+  id         String    @id @default(cuid())
+  action     String    // APPROVE_PROJECT | REJECT_PROJECT | ... (nama aksi AuditLog asal)
+  targetType String    // PROJECT | ESCALATION | DAILY_REPORT | WEEKLY_REPORT
+  targetId   String
+  entityId   String?
+  actorId    String
+  snapshot   String
+  stamp      String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
 }

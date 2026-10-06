@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser, isGlobalRole } from '@/lib/auth'
+import { requireApiUser } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
+import { serverError } from '@/lib/api-error'
 
 /**
  * GET /api/notifications — paginated notification logs.
  *
  *   ?inbox=1  — the signed-in user's own in-app messages (8 Sep 2026): the
  *               latest 30 plus how many are still unread, for the bell.
- *   otherwise — the delivery log; personal unless the role covers the group.
+ *   otherwise — the account's own delivery log (all channels), paginated.
+ *
+ * F1-C (6 Okt 2026): kedua cabang hanya mengembalikan notifikasi milik akun
+ * itu sendiri. Cabang lama yang membuka seluruh log grup untuk peran global
+ * dihapus — pemantauan pengiriman lintas akun ada di /api/system (TI).
  *
  * PATCH { ids?: string[], all?: true } — mark the user's own messages as read.
  */
@@ -50,20 +55,18 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
-    const status = sp.get('status') || undefined
-    const channel = sp.get('channel') || undefined
-    const template = sp.get('template') || undefined
+    const page = Math.min(1000, Math.max(1, parseInt(sp.get('page') || '1', 10) || 1))
+    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10) || 50))
+    const status = sp.get('status')?.slice(0, 32) || undefined
+    const channel = sp.get('channel')?.slice(0, 32) || undefined
+    const template = sp.get('template')?.slice(0, 64) || undefined
 
-    // Notification history is personal unless the role covers the whole group.
-    const ownOnly = !isGlobalRole(user.role)
-
+    // Selalu milik akun sendiri, apa pun perannya.
     const where: Prisma.NotificationLogWhereInput = {
+      userId: user.id,
       ...(status ? { status } : {}),
       ...(channel ? { channel } : {}),
       ...(template ? { template } : {}),
-      ...(ownOnly ? { AND: [{ userId: user.id }] } : {}),
     }
 
     const [items, total] = await Promise.all([
@@ -81,8 +84,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items, total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return serverError(err, 'Notifikasi belum termuat. Coba lagi.', 'notifications GET')
   }
 }
 

@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic'
 export default async function Home() {
   const user = await getSessionUser()
   if (!user) redirect('/login')
+  // F1-C: akun buatan/setelan ulang admin mengganti kata sandi dulu.
+  if (user.mustChangePassword) redirect('/login/ganti-sandi')
 
   // Logo holding & perusahaan hanya hiasan: gagal memuatnya tidak boleh
   // menahan seluruh aplikasi.

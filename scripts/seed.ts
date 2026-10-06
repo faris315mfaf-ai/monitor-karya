@@ -1,4 +1,6 @@
 import { db } from '../src/lib/db'
+import { hashPassword } from '../src/lib/password'
+import { resolveSeedPassword } from '../src/lib/password-policy'
 
 // Helper functions
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -14,6 +16,8 @@ function isoWeek(date: Date) {
 }
 
 async function main() {
+  // Diperiksa sebelum data dihapus: SEED_PASSWORD lemah menghentikan seed sejak awal.
+  const seedPw = resolveSeedPassword(process.env.SEED_PASSWORD)
   console.log('🌱 Seeding business monitoring database...')
 
   // Clean up existing data
@@ -654,7 +658,8 @@ async function main() {
       data: {
         userId: u.id,
         channel,
-        recipient: channel === 'EMAIL' ? u.email : u.phone || '+6281234567890',
+        // F1-C: recipient selalu email akun, apa pun kanalnya.
+        recipient: u.email,
         template,
         payload: JSON.stringify({ template, entityId: u.scopeEntityId }),
         status,
@@ -687,12 +692,23 @@ async function main() {
     })
   }
 
+  // ============================================================
+  // KATA SANDI (F1-C, 6 Okt 2026): tanpa "1234" bawaan. SEED_PASSWORD wajib
+  // >= 8 karakter, atau kosong = dibuat acak lalu dicetak sekali di bawah.
+  // ============================================================
+  await db.user.updateMany({ data: { passwordHash: await hashPassword(seedPw.password) } })
+
   console.log('\n✅ Seed completed successfully!')
   console.log(`  - ${pts.length} PT entities in hierarchy`)
   console.log(`  - ${allDivisions.length} divisions`)
   console.log(`  - ${allProjects.length} active projects`)
   console.log(`  - ${dailyCount} daily project reports`)
   console.log(`  - ${weeklyCount} weekly division reports`)
+  console.log(
+    seedPw.generated
+      ? `  - kata sandi semua akun (acak, SEED_PASSWORD kosong): ${seedPw.password}`
+      : '  - kata sandi semua akun = SEED_PASSWORD'
+  )
 }
 
 main()

@@ -53,7 +53,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items, total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // Pesan galat mentah (Prisma, koneksi) tidak dikirim ke klien.
+    console.error('[weekly-reports] gagal memuat', err instanceof Error ? err.message : err)
+    return NextResponse.json({ error: 'Arsip laporan mingguan belum termuat. Coba lagi.' }, { status: 500 })
   }
 }

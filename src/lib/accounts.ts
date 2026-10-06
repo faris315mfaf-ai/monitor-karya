@@ -60,12 +60,26 @@ export type CompaniesData = {
   manageableRoles?: string[]
 }
 
-/** Kata sandi awal yang diusulkan saat Super Admin membuat akun baru. */
-export const DEFAULT_PASSWORD = '1234'
+/** F1-C: sama dengan MIN_PASSWORD_LENGTH di src/lib/password-policy.ts (berkas itu khusus server). */
+export const MIN_PASSWORD_LENGTH = 8
 
-export const field = 'bg-white/80 dark:bg-slate-900/60 h-11 text-base'
+/**
+ * Kata sandi awal yang diusulkan saat pemegang meja membuat akun baru (F1-C,
+ * 6 Okt 2026): acak 12 karakter per muatan halaman, bukan lagi "1234".
+ * Pemilik akun wajib menggantinya saat masuk pertama (mustChangePassword).
+ */
+export const DEFAULT_PASSWORD = randomInitialPassword()
+
+function randomInitialPassword(): string {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = new Uint32Array(12)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
+}
+
+export const field = 'bg-white/80 h-11 text-base'
 export const selectClass =
-  'h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-3 text-base text-slate-800 dark:text-slate-100 disabled:opacity-70'
+  'h-11 w-full rounded-md border border-slate-200 bg-white/80 px-3 text-base text-slate-800 disabled:opacity-70'
 
 // `sm:max-w-none` mengalahkan `sm:max-w-lg` bawaan DialogContent — tanpa itu
 // lembar ini tertahan 512 px di desktop.

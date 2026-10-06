@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { can } from '@/lib/rbac'
+import { escalationSnap, issueUndo, type UndoAction } from '@/lib/undo' // [F2-URUNGKAN]
 
 /**
  * Acting on escalations, as opposed to listing them.
@@ -18,6 +19,20 @@ import { can } from '@/lib/rbac'
 
 const NEEDED = new Set(['KEPUTUSAN', 'ANGGARAN', 'DUKUNGAN_LINTAS_FUNGSI'])
 
+/** [F2-URUNGKAN] Tiket urungkan untuk tinjau/putuskan/tutup: keadaan sebelum + sidik sesudah. */
+type EscRow = { id: string; entityId: string; status: string; decidedById: string | null; decidedAt: Date | null; decisionText: string | null; updatedAt: Date }
+function undoFor(action: UndoAction, actorId: string, before: EscRow, after: EscRow) {
+  return issueUndo({
+    action,
+    targetType: 'ESCALATION',
+    targetId: before.id,
+    entityId: before.entityId,
+    actorId,
+    snapshot: escalationSnap(before),
+    stamp: { status: after.status, updatedAt: after.updatedAt.toISOString() },
+  })
+}
+
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
@@ -30,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
-  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, 4000) : '')
 
   // ---------------------------------------------------------------- raise
   if (action === 'raise') {
@@ -174,7 +189,8 @@ export async function POST(req: NextRequest) {
         afterData: JSON.stringify({ status: updated.status }),
       },
     })
-    return NextResponse.json({ ok: true, escalation: updated })
+    const undoToken = await undoFor('REVIEW_ESCALATION', user.id, escalation, updated)
+    return NextResponse.json({ ok: true, escalation: updated, undoToken })
   }
 
   if (action === 'decide') {
@@ -211,7 +227,8 @@ export async function POST(req: NextRequest) {
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       },
     })
-    return NextResponse.json({ ok: true, escalation: updated })
+    const undoToken = await undoFor('DECIDE_ESCALATION', user.id, escalation, updated)
+    return NextResponse.json({ ok: true, escalation: updated, undoToken })
   }
 
   if (action === 'close') {
@@ -240,7 +257,8 @@ export async function POST(req: NextRequest) {
         afterData: JSON.stringify({ status: updated.status }),
       },
     })
-    return NextResponse.json({ ok: true, escalation: updated })
+    const undoToken = await undoFor('CLOSE_ESCALATION', user.id, escalation, updated)
+    return NextResponse.json({ ok: true, escalation: updated, undoToken })
   }
 
   return NextResponse.json({ error: 'Aksi tidak dikenali' }, { status: 400 })

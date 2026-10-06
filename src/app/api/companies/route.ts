@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { can, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
 import { createAccount, isValidEmail, parseLogo, readPosition, slugify, uniqueEntityCode, type PositionInput } from '@/lib/companies'
+import { clientErrorMessage } from '@/lib/api-error'
 
 /**
  * Perusahaan & akun — meja Super Admin (10 Sep 2026); sejak 5 Okt 2026 Admin PT
@@ -119,7 +120,7 @@ export async function GET() {
 }
 
 function readIdentity(body: Record<string, unknown>) {
-  const s = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+  const s = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, 500) : '')
   const email = s('email')
   if (email && !isValidEmail(email)) return { error: 'Email perusahaan tidak valid.' }
   const website = s('website')
@@ -217,8 +218,7 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Gagal menambah perusahaan'
-    return NextResponse.json({ error: msg }, { status: 422 })
+    return NextResponse.json({ error: clientErrorMessage(err, 'Gagal menambah perusahaan. Coba lagi.', 'companies POST') }, { status: 422 })
   }
 }
 

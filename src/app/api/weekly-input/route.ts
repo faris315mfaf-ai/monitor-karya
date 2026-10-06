@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
-  WEEKLY_LOCK_LABEL,
   dayInPeriod,
   daysOfWeek,
   isoWeekOf,
@@ -15,9 +15,11 @@ import {
   validateWeeklyItem,
   weekPeriodOf,
   weeklyDeadlines,
+  weeklyWriteBlock,
   type Period,
 } from '@/lib/lock'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * The weekly division desk — since 8 Sep 2026 a board of the week's
@@ -35,7 +37,16 @@ import { removeEvidence, storageConfigured } from '@/lib/storage'
  *
  * A head of division sees the division they lead; an Admin PT sees every
  * division of their entity, since they compile the bundle that goes upward.
- * Only the running week can be written to; earlier weeks are read back as-is.
+ * Only the running week can be written to, until Friday 17.00 WIB; earlier
+ * weeks are read back as-is. Two exceptions and one extra rule (6 Okt 2026):
+ *   - an executed unlock request (activeUnlockFor) re-opens that one report,
+ *     even for a past week, until its `unlockUntil`;
+ *   - a report Admin PT has forwarded to the holding is frozen (409) unless
+ *     such an unlock is active. Corrections made during that unlock keep the
+ *     report's status — it is not pulled back to draft nor re-submitted.
+ *   - "approve" only applies to a report waiting for approval
+ *     (MENUNGGU_PERSETUJUAN); "submit" only to a draft.
+ * See weeklyWriteBlock() in src/lib/lock.ts for the order of the checks.
  */
 
 const WEEKS_SHOWN = 8
@@ -72,27 +83,57 @@ async function visibleDivisions(user: SessionUser, entityId: string | null) {
   return db.division.findMany({ where: { entityId, isActive: true }, include, orderBy: { name: 'asc' } })
 }
 
-async function ensureReport(divisionId: string, entityId: string) {
+/** Laporan divisi untuk satu minggu; dibuat (DRAFT) bila belum ada. */
+async function createReport(divisionId: string, entityId: string, period: Period) {
+  const { isoYear, isoWeek } = isoWeekOf(period.start)
+  const { periodStart, periodEnd } = weeklyDeadlines(period.start)
+  const where = { divisionId_isoYear_isoWeek: { divisionId, isoYear, isoWeek } }
+  try {
+    return await db.weeklyDivisionReport.create({
+      data: { divisionId, entityId, isoYear, isoWeek, periodStart, periodEnd, statusHeader: 'DRAFT' },
+    })
+  } catch (err) {
+    // Dua penulisan pertama yang bersamaan: yang kalah membaca baris pemenang.
+    const row = await db.weeklyDivisionReport.findUnique({ where })
+    if (row) return row
+    throw err
+  }
+}
+
+type WritableReport = NonNullable<Awaited<ReturnType<typeof db.weeklyDivisionReport.findUnique>>>
+
+/**
+ * Laporan minggu `weekKey` (bawaan: minggu berjalan) yang boleh ditulis,
+ * atau 409 yang menjelaskan kuncinya. Baris baru hanya dibuat untuk minggu
+ * berjalan yang masih terbuka; minggu lain tidak pernah dibuatkan baris.
+ */
+async function openReport(
+  division: { id: string; entityId: string },
+  weekKey: unknown
+): Promise<{ period: Period; report: WritableReport; unlocked: boolean } | { error: NextResponse }> {
   const now = new Date()
-  const { isoYear, isoWeek } = isoWeekOf(now)
-  const { periodStart, periodEnd } = weeklyDeadlines(now)
-
+  let period = weekPeriodOf(now)
+  if (typeof weekKey === 'string' && weekKey) {
+    const parsed = parseWeekKey(weekKey)
+    if (!parsed) return { error: NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 }) }
+    period = parsed
+  }
+  const { isoYear, isoWeek } = isoWeekOf(period.start)
   const existing = await db.weeklyDivisionReport.findUnique({
-    where: { divisionId_isoYear_isoWeek: { divisionId, isoYear, isoWeek } },
+    where: { divisionId_isoYear_isoWeek: { divisionId: division.id, isoYear, isoWeek } },
   })
-  if (existing) return existing
-
-  return db.weeklyDivisionReport.create({
-    data: {
-      divisionId,
-      entityId,
-      isoYear,
-      isoWeek,
-      periodStart,
-      periodEnd,
-      statusHeader: 'DRAFT',
-    },
-  })
+  const unlocked = existing ? Boolean(await activeUnlockFor('WEEKLY_REPORT', existing.id, now)) : false
+  const block = weeklyWriteBlock({ period, report: existing, unlocked, now })
+  if (block) {
+    return {
+      error: NextResponse.json(
+        { error: block.message, locked: true, frozen: block.reason === 'FORWARDED', reason: block.reason },
+        { status: 409 }
+      ),
+    }
+  }
+  const report = existing ?? (await createReport(division.id, division.entityId, period))
+  return { period, report, unlocked }
 }
 
 const ITEM_INCLUDE = {
@@ -130,6 +171,23 @@ export async function GET(req: NextRequest) {
     },
   })
   const byDivision = new Map(reports.map((r) => [r.divisionId, r]))
+
+  // Buka kunci yang sedang berlaku per laporan (sama dengan activeUnlockFor,
+  // sekali kueri untuk semua divisi).
+  const now = new Date()
+  const unlocks = reports.length
+    ? await db.unlockRequest.findMany({
+        where: {
+          targetType: 'WEEKLY_REPORT',
+          targetId: { in: reports.map((r) => r.id) },
+          status: 'DIEKSEKUSI',
+          reLockedAt: null,
+          unlockUntil: { gt: now },
+        },
+        select: { targetId: true, unlockUntil: true },
+      })
+    : []
+  const unlockOf = new Map(unlocks.map((u) => [u.targetId, u.unlockUntil]))
 
   // Evidence lives in its own table keyed by target id, so fetch it in one go
   // and hang it off each item.
@@ -189,11 +247,18 @@ export async function GET(req: NextRequest) {
     canRemind: can(user.role, 'notify:remind'),
     divisions: divisions.map((d) => {
       const report = byDivision.get(d.id) ?? null
+      const unlockUntil = report ? (unlockOf.get(report.id) ?? null) : null
+      const block = weeklyWriteBlock({ period, report, unlocked: Boolean(unlockUntil), now })
       return {
         id: d.id,
         name: d.name,
         type: d.divisionType.name,
         headName: d.headUser?.name ?? null,
+        // Boleh ditulis sekarang? Bila tidak, alasannya dalam satu kalimat.
+        writable: !block,
+        lockReason: block?.message ?? null,
+        frozen: block?.reason === 'FORWARDED',
+        unlockUntil,
         report: report
           ? {
               id: report.id,
@@ -239,31 +304,13 @@ async function assertOwnsDivision(user: SessionUser, divisionId: string) {
   return { division }
 }
 
-/** Only the running week is writable; the 409 to send otherwise. */
-function assertCurrentWeek(weekKey: unknown): { period: Period } | { error: NextResponse } {
-  const current = weekPeriodOf(new Date())
-  if (typeof weekKey === 'string' && weekKey && weekKey !== current.key) {
-    return {
-      error: NextResponse.json(
-        { error: 'Hanya minggu berjalan yang bisa diisi. Minggu lain hanya dibaca.', locked: true },
-        { status: 409 }
-      ),
-    }
-  }
-  if (isWeeklyLocked(current.start)) {
-    return {
-      error: NextResponse.json(
-        { error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}). Ajukan permohonan buka kunci.`, locked: true },
-        { status: 409 }
-      ),
-    }
-  }
-  return { period: current }
-}
-
-/** Editing after a hand-over pulls the report back to draft. */
-async function backToDraft(report: { id: string; statusHeader: string }) {
-  if (report.statusHeader === 'DRAFT') return
+/**
+ * Editing after a hand-over pulls the report back to draft. A forwarded report
+ * can only be edited under an executed unlock; that correction was approved
+ * through the unlock flow, so the report keeps its status (and stays forwarded).
+ */
+async function backToDraft(report: { id: string; statusHeader: string; forwardedAt?: Date | null }) {
+  if (report.statusHeader === 'DRAFT' || report.forwardedAt) return
   await db.weeklyDivisionReport.update({
     where: { id: report.id },
     data: { statusHeader: 'DRAFT', submittedAt: null, submittedById: null, approvedAt: null, approvedById: null },
@@ -290,13 +337,9 @@ export async function PUT(req: NextRequest) {
   if (guard.error) return guard.error
   const division = guard.division!
 
-  const week = assertCurrentWeek(body.week)
+  const week = await openReport(division, body.week)
   if ('error' in week) return week.error
-
-  const report = await ensureReport(division.id, division.entityId)
-  if (report.isLocked || report.statusHeader === 'TERKUNCI') {
-    return NextResponse.json({ error: 'Laporan minggu ini sudah dikunci', locked: true }, { status: 409 })
-  }
+  const report = week.report
 
   const existing = itemId
     ? await db.weeklyReportItem.findFirst({ where: { id: itemId, weeklyReportId: report.id } })
@@ -318,7 +361,8 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : '')
+  // Batas panjang per kolom (6 Okt 2026): teks bebas tidak boleh tak terbatas.
+  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).slice(0, 4000) : '')
   const payload = {
     workItem: str('workItem'),
     targetOutput: str('targetOutput'),
@@ -413,7 +457,12 @@ export async function PUT(req: NextRequest) {
       beforeData: existing
         ? JSON.stringify({ status: existing.status, progressPct: existing.progressPct, workDate: existing.workDate })
         : null,
-      afterData: JSON.stringify({ status: item.status, progressPct: item.progressPct, workDate: item.workDate }),
+      afterData: JSON.stringify({
+        status: item.status,
+        progressPct: item.progressPct,
+        workDate: item.workDate,
+        ...(week.unlocked ? { unlocked: true, week: week.period.key } : {}),
+      }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       userAgent: req.headers.get('user-agent') || null,
     },
@@ -447,13 +496,9 @@ export async function PATCH(req: NextRequest) {
   if (guard.error) return guard.error
   const division = guard.division!
 
-  const week = assertCurrentWeek(body.week)
+  const week = await openReport(division, body.week)
   if ('error' in week) return week.error
-
-  const report = await ensureReport(division.id, division.entityId)
-  if (report.isLocked || report.statusHeader === 'TERKUNCI') {
-    return NextResponse.json({ error: 'Laporan minggu ini sudah dikunci', locked: true }, { status: 409 })
-  }
+  const report = week.report
 
   const moves = Array.isArray(body.moves)
     ? (body.moves as unknown[])
@@ -516,7 +561,9 @@ export async function DELETE(req: NextRequest) {
   const existing = await db.weeklyReportItem.findUnique({
     where: { id: itemId },
     include: {
-      weeklyReport: { select: { id: true, divisionId: true, periodStart: true, statusHeader: true, isLocked: true } },
+      weeklyReport: {
+        select: { id: true, divisionId: true, periodStart: true, statusHeader: true, isLocked: true, forwardedAt: true },
+      },
     },
   })
   if (!existing) return NextResponse.json({ error: 'Item tidak ditemukan' }, { status: 404 })
@@ -525,8 +572,13 @@ export async function DELETE(req: NextRequest) {
   if (guard.error) return guard.error
 
   const report = existing.weeklyReport
-  if (report.isLocked || report.statusHeader === 'TERKUNCI' || isWeeklyLocked(report.periodStart)) {
-    return NextResponse.json({ error: 'Minggu ini sudah dikunci; item tidak dapat dihapus.', locked: true }, { status: 409 })
+  const unlocked = Boolean(await activeUnlockFor('WEEKLY_REPORT', report.id))
+  const block = weeklyWriteBlock({ period: weekPeriodOf(report.periodStart), report, unlocked })
+  if (block) {
+    return NextResponse.json(
+      { error: block.message, locked: true, frozen: block.reason === 'FORWARDED', reason: block.reason },
+      { status: 409 }
+    )
   }
   const raised = await db.escalation.count({ where: { sourceType: 'WEEKLY_ITEM', sourceId: itemId } })
   if (raised > 0) {
@@ -589,10 +641,42 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const division = guard.division!
 
-  const week = assertCurrentWeek(body.week)
+  const week = await openReport(division, body.week)
   if ('error' in week) return week.error
+  const report = week.report
 
-  const report = await ensureReport(division.id, division.entityId)
+  // Alur status: DRAFT --serah--> MENUNGGU_PERSETUJUAN --setujui--> DISETUJUI
+  // --(Admin PT meneruskan)--> diteruskan. Diperiksa sebelum validasi item.
+  if (report.forwardedAt) {
+    // Hanya terjangkau saat buka kunci berlaku: koreksi tersimpan langsung.
+    return NextResponse.json(
+      { error: 'Laporan ini sudah diteruskan ke holding. Koreksi selama buka kunci tersimpan langsung tanpa diserahkan ulang.' },
+      { status: 409 }
+    )
+  }
+  if (action === 'approve' && report.statusHeader !== 'MENUNGGU_PERSETUJUAN') {
+    return report.statusHeader === 'DRAFT'
+      ? NextResponse.json(
+          { error: 'Laporan masih draf. Serahkan laporan dulu; kepala divisi menyetujui laporan yang menunggu persetujuan.' },
+          { status: 422 }
+        )
+      : NextResponse.json(
+          { error: report.statusHeader === 'DISETUJUI' ? 'Laporan ini sudah disetujui.' : 'Laporan ini tidak sedang menunggu persetujuan.' },
+          { status: 409 }
+        )
+  }
+  if (action === 'submit' && report.statusHeader !== 'DRAFT') {
+    return NextResponse.json(
+      {
+        error:
+          report.statusHeader === 'MENUNGGU_PERSETUJUAN'
+            ? 'Laporan ini sudah diserahkan dan menunggu persetujuan kepala divisi.'
+            : 'Laporan ini sudah disetujui. Ubah salah satu item bila perlu menyerahkan ulang.',
+      },
+      { status: 409 }
+    )
+  }
+
   const items = await db.weeklyReportItem.findMany({ where: { weeklyReportId: report.id } })
 
   if (items.length === 0) {
@@ -616,25 +700,36 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
-  const updated =
-    action === 'submit'
-      ? await db.weeklyDivisionReport.update({
-          where: { id: report.id },
-          data: { statusHeader: 'MENUNGGU_PERSETUJUAN', submittedById: user.id, submittedAt: now },
-        })
-      : await db.weeklyDivisionReport.update({
-          where: { id: report.id },
-          data: {
-            statusHeader: 'DISETUJUI',
-            approvedById: user.id,
-            approvedAt: now,
-            // A genuine digest of what was approved and when, so the label is honest.
-            approvalHash: `sha256:${createHash('sha256')
-              .update(`${report.id}:${user.id}:${now.toISOString()}:${items.map((i) => i.id).sort().join(',')}`)
-              .digest('hex')
-              .slice(0, 32)}`,
-          },
-        })
+  // Bersyarat pada status yang tadi dibaca: suntingan bersamaan yang menarik
+  // laporan kembali ke draf membuat persetujuan ini gagal, bukan tertimpa.
+  const where = { id: report.id, statusHeader: report.statusHeader }
+  let updated: { statusHeader: string }
+  try {
+    updated =
+      action === 'submit'
+        ? await db.weeklyDivisionReport.update({
+            where,
+            data: { statusHeader: 'MENUNGGU_PERSETUJUAN', submittedById: user.id, submittedAt: now },
+          })
+        : await db.weeklyDivisionReport.update({
+            where,
+            data: {
+              statusHeader: 'DISETUJUI',
+              approvedById: user.id,
+              approvedAt: now,
+              // A genuine digest of what was approved and when, so the label is honest.
+              approvalHash: `sha256:${createHash('sha256')
+                .update(`${report.id}:${user.id}:${now.toISOString()}:${items.map((i) => i.id).sort().join(',')}`)
+                .digest('hex')
+                .slice(0, 32)}`,
+            },
+          })
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      return NextResponse.json({ error: 'Status laporan sudah berubah. Muat ulang lalu coba lagi.' }, { status: 409 })
+    }
+    throw err
+  }
 
   await db.auditLog.create({
     data: {
@@ -643,7 +738,12 @@ export async function POST(req: NextRequest) {
       targetType: 'WEEKLY_REPORT',
       targetId: report.id,
       beforeData: JSON.stringify({ statusHeader: report.statusHeader }),
-      afterData: JSON.stringify({ statusHeader: updated.statusHeader, items: items.length }),
+      afterData: JSON.stringify({
+        statusHeader: updated.statusHeader,
+        items: items.length,
+        week: week.period.key,
+        ...(week.unlocked ? { unlocked: true } : {}),
+      }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       userAgent: req.headers.get('user-agent') || null,
     },

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { serverError } from '@/lib/api-error'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, isGlobalRole, scopePathPrefix } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
@@ -14,6 +15,7 @@ export async function GET(
     const unscoped = refuseUnscoped(user)
     if (unscoped) return unscoped
     const { id } = await params
+    if (!id || id.length > 64) return NextResponse.json({ error: 'Entitas tidak ditemukan' }, { status: 404 })
 
     const entity = await db.entity.findUnique({ where: { id } })
     if (!entity) {
@@ -127,7 +129,7 @@ export async function GET(
         : {}),
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F2-GRUP] galat tak terduga tidak membawa pesan mentah ke klien.
+    return serverError(err, 'Data entitas belum termuat. Coba lagi.', 'entities/[id] GET')
   }
 }
