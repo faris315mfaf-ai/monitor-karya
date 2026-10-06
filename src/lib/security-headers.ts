@@ -8,15 +8,50 @@
 
 const isProd = process.env.NODE_ENV === 'production'
 
-/** Origin Supabase Storage: gambar bukti dibuka lewat URL bertanda tangan. */
-function supabaseOrigin(): string | null {
-  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!raw) return null
+/** Only literal HTTP(S) hosts may enter a CSP source list. */
+function safeStorageUrl(raw: string): URL | null {
   try {
-    return new URL(raw).origin
+    // URL parsing strips controls; reject them first rather than silently repair.
+    if (/[\s\x00-\x1f\x7f]/.test(raw)) return null
+    const url = new URL(raw)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+        !/^(?:[a-z0-9.-]+|\[[a-f0-9:]+\])$/i.test(url.hostname)) return null
+    return url
   } catch {
     return null
   }
+}
+
+/**
+ * Origin of the selected storage driver, never a wildcard or a credential.
+ * Keep S3 validation/addressing aligned with storage-s3.configuration/objectUrl.
+ * This module also loads in next.config/proxy, so importing the server-only
+ * signer is not safe. Differential tests compare this origin to signed URLs.
+ */
+function storageOrigin(): string | null {
+  const driver = process.env.STORAGE_DRIVER ?? 'supabase'
+  if (driver === 'supabase') {
+    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+    return raw ? safeStorageUrl(raw)?.origin ?? null : null
+  }
+  if (driver !== 's3') return null
+
+  const region = process.env.S3_REGION || 'us-east-1'
+  const bucket = process.env.S3_BUCKET
+  const accessKey = process.env.S3_ACCESS_KEY_ID
+  const pathStyle = process.env.S3_FORCE_PATH_STYLE ?? 'false'
+  if (!bucket || !accessKey || !process.env.S3_SECRET_ACCESS_KEY ||
+      !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) || bucket.includes('..') ||
+      !/^[a-z0-9-]+$/.test(region) || !['true', 'false'].includes(pathStyle) ||
+      /[\s/,]/.test(accessKey)) return null
+
+  const url = safeStorageUrl(process.env.S3_ENDPOINT || `https://s3.${region}.amazonaws.com`)
+  if (!url || url.pathname !== '/' || url.search || url.hash) return null
+  if (pathStyle === 'false') {
+    if (url.hostname.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)) return null
+    url.hostname = `${bucket}.${url.hostname}`
+  }
+  return url.origin
 }
 
 /** Nonce acak per permintaan (base64, 128 bit). */
@@ -40,7 +75,7 @@ export function createNonce(): string {
  */
 export function buildCsp(nonce: string, opts: { dev?: boolean } = {}): string {
   const dev = opts.dev ?? !isProd
-  const storage = supabaseOrigin()
+  const storage = storageOrigin()
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
     'script-src': ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])],
