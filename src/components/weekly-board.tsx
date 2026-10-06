@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -24,8 +24,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { DAY_LABELS_ID, DAY_SHORT_ID } from '@/lib/constants'
-import { cn } from '@/lib/utils'
-import { CalendarRange, GripVertical, Plus } from 'lucide-react'
+import { Icon, IconButton, cx } from '@/components/mk'
 
 /**
  * Papan mingguan (8 Sep 2026): tujuh lajur hari (Senin–Minggu) ditambah satu
@@ -159,54 +158,92 @@ function Lane({
   active: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: lane.id, disabled })
+  const weekly = lane.id === WEEKLY_LANE
   return (
     <section
       ref={setNodeRef}
       aria-label={lane.title}
-      className={cn(
-        'rounded-2xl border p-2.5 flex flex-col gap-2 min-h-[120px] transition-colors',
-        lane.id === WEEKLY_LANE
-          ? 'border-violet-500/30 bg-violet-500/5'
-          : lane.isToday
-            ? 'border-blue-500/40 bg-blue-500/5'
-            : lane.weekend
-              ? 'border-white/40 dark:border-white/5 bg-slate-500/5'
-              : 'border-white/50 dark:border-white/10 bg-white/40 dark:bg-slate-900/30',
-        isOver && active && 'ring-2 ring-blue-500/50 bg-blue-500/10'
+      className={cx(
+        'mk-wb-lane',
+        weekly ? 'is-weekly' : lane.isToday ? 'is-today' : lane.weekend && 'is-weekend',
+        isOver && active && 'is-over'
       )}
     >
-      <header className="flex items-center gap-2">
+      <header className="mk-wb-lane__head">
         <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              'text-sm font-semibold',
-              lane.id === WEEKLY_LANE
-                ? 'text-violet-700 dark:text-violet-300'
-                : lane.isToday
-                  ? 'text-blue-700 dark:text-blue-300'
-                  : 'text-slate-700 dark:text-slate-200'
-            )}
-          >
-            {lane.id === WEEKLY_LANE && <CalendarRange className="inline h-4 w-4 -mt-0.5 mr-1" />}
-            {lane.title}
-            {lane.isToday && <span className="ml-1.5 text-[11px] font-semibold uppercase tracking-wide">hari ini</span>}
+          <div className="mk-wb-lane__title">
+            {weekly && <Icon name="kalender" size={16} />}
+            <span>{lane.title}</span>
+            {lane.isToday && <span className="mk-wb-lane__today">Hari ini</span>}
           </div>
-          {lane.hint && <div className="text-[11px] text-slate-500 dark:text-slate-400">{lane.hint}</div>}
+          {lane.hint && <div className="mk-wb-lane__hint">{lane.hint}</div>}
         </div>
-        <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{count}</span>
-        {onAdd && !disabled && (
-          <button
-            type="button"
-            onClick={onAdd}
-            aria-label={`Tambah di ${lane.title}`}
-            className="h-9 w-9 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-300 hover:bg-blue-500/10"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
+        <span className="mk-wb-lane__count" aria-label={`${count} kartu`}>
+          {count}
+        </span>
+        {onAdd && !disabled && <IconButton icon="tambah" label={`Tambah capaian di ${lane.title}`} onClick={onAdd} />}
       </header>
-      <div className="flex flex-col gap-2 flex-1">{children}</div>
+      <LaneBody count={count}>{children}</LaneBody>
     </section>
+  )
+}
+
+/** Kartu yang terlihat sekaligus per lajur; sisanya digulir di dalam lajur. */
+const VISIBLE_CARDS = 3
+
+/**
+ * Isi lajur: tinggi dibatasi setinggi {@link VISIBLE_CARDS} kartu pertama
+ * (diukur, karena tinggi kartu berbeda-beda), lebihnya digulir di dalam lajur
+ * supaya papan tidak memanjang. Kartu yang dibuka detailnya ikut terukur ulang.
+ */
+function LaneBody({ count, children }: { count: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [maxH, setMaxH] = useState<number | null>(null)
+  const [atEnd, setAtEnd] = useState(false)
+  const scrolls = count > VISIBLE_CARDS
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !scrolls) {
+      setMaxH(null)
+      return
+    }
+    const measure = () => {
+      const kids = Array.from(el.children) as HTMLElement[]
+      const last = kids[VISIBLE_CARDS - 1]
+      if (!last || !kids[0]) return
+      // Bawah kartu ke-3 ditambah sedikit intipan kartu ke-4 sebagai tanda masih ada lagi.
+      const h = last.offsetTop + last.offsetHeight - kids[0].offsetTop + 28
+      setMaxH(h)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    Array.from(el.children).forEach((k) => ro.observe(k))
+    return () => ro.disconnect()
+  }, [scrolls, count])
+
+  return (
+    <>
+      <div
+        ref={ref}
+        className={cx('mk-wb-lane__body', scrolls && 'is-scroll', scrolls && atEnd && 'is-end')}
+        style={scrolls && maxH ? { maxHeight: maxH } : undefined}
+        tabIndex={scrolls ? 0 : undefined}
+        role={scrolls ? 'region' : undefined}
+        aria-label={scrolls ? `${count} kartu, gulir untuk melihat semua` : undefined}
+        onScroll={(e) => {
+          const t = e.currentTarget
+          setAtEnd(t.scrollTop + t.clientHeight >= t.scrollHeight - 4)
+        }}
+      >
+        {children}
+      </div>
+      {scrolls && !atEnd && (
+        <div className="mk-wb-lane__more" aria-hidden>
+          +{count - VISIBLE_CARDS} kartu lagi · gulir
+        </div>
+      )}
+    </>
   )
 }
 
@@ -217,7 +254,7 @@ function SortableCard({ id, disabled, children }: { id: string; disabled: boolea
   })
   const style = { transform: CSS.Translate.toString(transform), transition }
   return (
-    <div ref={setNodeRef} style={style} className={cn('relative', isDragging && 'opacity-40')}>
+    <div ref={setNodeRef} style={style} className={cx('mk-wb-sortable', !disabled && 'has-grip', isDragging && 'is-dragging')}>
       {!disabled && (
         <button
           ref={setActivatorNodeRef}
@@ -225,12 +262,12 @@ function SortableCard({ id, disabled, children }: { id: string; disabled: boolea
           {...attributes}
           {...listeners}
           aria-label="Seret untuk memindahkan"
-          className="absolute left-0 top-1/2 -translate-y-1/2 h-11 w-6 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-grab active:cursor-grabbing touch-none"
+          className="mk-wb-grip"
         >
-          <GripVertical className="h-4 w-4" />
+          <Icon name="lainnya" size={18} strokeWidth={2.4} style={{ transform: 'rotate(90deg)' }} />
         </button>
       )}
-      <div className={cn(!disabled && 'pl-5')}>{children}</div>
+      <div className="mk-wb-sortable__body">{children}</div>
     </div>
   )
 }
@@ -330,7 +367,7 @@ export function WeeklyBoard<T extends BoardCard>({
         setItems(cards)
       }}
     >
-      <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mk-wb">
         {lanes.map((lane) => {
           const laneCards = byLane.get(lane.id) ?? []
           return (
@@ -342,7 +379,7 @@ export function WeeklyBoard<T extends BoardCard>({
                 active={activeId !== null}
                 onAdd={onAdd ? () => onAdd(lane.id) : undefined}
               >
-                {laneCards.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500 px-1 py-2">{emptyText}</p>}
+                {laneCards.length === 0 && <p className="mk-wb-lane__empty">{emptyText}</p>}
                 {laneCards.map((c) => (
                   <SortableCard key={c.id} id={c.id} disabled={disabled}>
                     {renderCard(c, false)}
@@ -353,7 +390,7 @@ export function WeeklyBoard<T extends BoardCard>({
           )
         })}
       </div>
-      <DragOverlay>{activeCard ? <div className="rotate-1 shadow-2xl">{renderCard(activeCard, true)}</div> : null}</DragOverlay>
+      <DragOverlay>{activeCard ? <div className="mk-wb-overlay">{renderCard(activeCard, true)}</div> : null}</DragOverlay>
     </DndContext>
   )
 }

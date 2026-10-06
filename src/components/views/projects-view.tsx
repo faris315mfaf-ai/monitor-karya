@@ -1,27 +1,22 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 import { useApp } from '@/components/app-provider'
 import { useResource } from '@/hooks/use-resource'
-import { LoadingSpinner, EmptyState, ErrorState } from '@/components/loading-states'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DailyStatusBadge } from '@/components/status-badges'
-import { PROJECT_PHASE_LABELS, PROJECT_LIFECYCLE_LABELS, PROJECT_APPROVER_LABELS } from '@/lib/constants'
-import { can } from '@/lib/rbac'
-import { formatDate, formatDateTime } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { NotificationButton } from '@/components/shell'
 import {
-  AlertTriangle, ArrowRight, Building2, Calendar, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, FolderKanban,
-  Filter, Link2, Loader2, Pencil, Plus, RotateCcw, Search, ShieldOff, Target, ThumbsDown, ThumbsUp, Trash2, User, X, XCircle,
-} from 'lucide-react'
+  ApprovalItem, Button, Card, Chip, EmptyNote, ErrorNote, FlowDiagram, Hero, IconButton, PageHeader, ProgressRing,
+  ProjectRow, SearchField, SegmentedControl, Sheet, Skeleton, StatusBadge, Timeline,
+  type FlowStep, type Status,
+} from '@/components/mk'
+import { Field, InfoLine, SectionTitle, SwitchRow, selectCls, useConfirm } from '@/components/companies/parts'
+import { seriesTone, timelineFrame } from '@/components/views/dash-common'
+import { PROJECT_PHASE_LABELS, PROJECT_LIFECYCLE_LABELS, PROJECT_APPROVER_LABELS } from '@/lib/constants'
+import { deriveProjectStatus } from '@/lib/project-status'
+import { can } from '@/lib/rbac'
+import { formatDate, formatDateShort, formatDateTime, formatNumber, formatRelative, initials } from '@/lib/format'
+import { toastWithUndo } from '@/lib/undo-client' // [F2-URUNGKAN]
 
 type Approval = { role: string; decision: 'DISETUJUI' | 'DITOLAK' | null; note: string | null; decidedAt: string | null; decidedByName: string | null }
 
@@ -33,6 +28,9 @@ type ProjectItem = {
   lifecycle: string
   picName: string | null
   picUserId: string | null
+  /** [F2-ADMIN] divisi pelaksana (Project.divisionId). */
+  divisionId?: string | null
+  division?: { id: string; name: string } | null
   description: string | null
   purpose: string | null
   proposedBy: { id: string; name: string; role: string } | null
@@ -57,9 +55,13 @@ type Options = {
   entityPinned: boolean
   entities: { id: string; code: string; name: string }[]
   candidates: { id: string; name: string; activeProjects: number }[]
+  /** [F2-ADMIN] divisi aktif di PT pemilik. */
+  divisions?: { id: string; name: string }[]
   chain: string[]
   picIsSelf: boolean
 }
+
+type Decision = 'DISETUJUI' | 'DITOLAK'
 
 const LIFECYCLES = [
   { value: 'AKTIF', label: 'Aktif' },
@@ -70,9 +72,11 @@ const LIFECYCLES = [
   { value: 'ALL', label: 'Semua status' },
 ]
 
-const field = 'bg-white/70 dark:bg-slate-900/50 h-11 text-base'
-const selectClass =
-  'h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/50 px-3 text-base text-slate-800 dark:text-slate-100 disabled:opacity-70'
+/** Kolom isian bertoken (pengganti Input/Textarea lama). */
+const inputCls =
+  'h-11 w-full min-w-0 rounded-sm border-0 bg-fill-1 px-3.5 t-body text-ink placeholder:text-ink-3 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50'
+const areaCls =
+  'w-full min-h-20 rounded-md border-0 bg-fill-1 px-3.5 py-3 t-body text-ink placeholder:text-ink-3 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50'
 
 /** "2026-09-10T17:00:00Z" (tengah malam WIB) -> "2026-09-11" untuk <input type=date>. */
 function toDateInput(iso: string | null): string {
@@ -94,6 +98,82 @@ async function call(url: string, method: string, body?: unknown) {
   }
 }
 
+const approverLabel = (role: string | null | undefined) => PROJECT_APPROVER_LABELS[role ?? ''] ?? role ?? 'persetujuan'
+const rejectionNote = (p: ProjectItem) => p.approvals.find((a) => a.decision === 'DITOLAK')?.note ?? null
+
+/**
+ * Status tampilan satu proyek. Proyek berjalan memakai satu sumber
+ * (lib/project-status); pengajuan & arsip memakai status siklus hidupnya.
+ */
+function projectState(p: ProjectItem): { status: Status; label?: string; reason: string | null; progress: number } {
+  if (p.lifecycle === 'DIUSULKAN') return { status: 'info', label: `Menunggu ${approverLabel(p.pendingRole)}`, reason: null, progress: 0 }
+  if (p.lifecycle === 'DITOLAK') return { status: 'late', label: 'Ditolak', reason: rejectionNote(p), progress: 0 }
+  const r = p.latestReport
+  const d = deriveProjectStatus(
+    { lifecycle: p.lifecycle, targetEndDate: p.targetEndDate ? new Date(p.targetEndDate) : null },
+    r ? { status: r.status, progressPct: r.progressPct, obstacle: null, needsEscalation: false, reportDate: new Date(r.reportDate) } : null
+  )
+  if (p.lifecycle === 'DIARSIPKAN') return { status: 'neutral', label: 'Diarsipkan', reason: null, progress: d.progress }
+  if (p.lifecycle === 'DITUTUP') return { status: 'done', label: 'Ditutup', reason: null, progress: d.progress }
+  return { status: d.status, reason: d.reason, progress: d.progress }
+}
+
+function answerFor(lifecycle: string, total: number, filtered: boolean): string {
+  const n = formatNumber(total)
+  if (total === 0) {
+    if (filtered) return 'Tidak ada proyek yang cocok dengan saringan ini.'
+    switch (lifecycle) {
+      case 'DIUSULKAN':
+        return 'Tidak ada pengajuan yang menunggu persetujuan.'
+      case 'DITOLAK':
+        return 'Tidak ada pengajuan yang ditolak.'
+      case 'DITUTUP':
+        return 'Belum ada proyek yang ditutup.'
+      case 'DIARSIPKAN':
+        return 'Belum ada proyek yang diarsipkan.'
+      case 'AKTIF':
+        return 'Belum ada proyek aktif.'
+      default:
+        return 'Belum ada proyek.'
+    }
+  }
+  const suffix = filtered ? ' yang cocok dengan saringan' : ''
+  switch (lifecycle) {
+    case 'DIUSULKAN':
+      return `${n} pengajuan menunggu persetujuan${suffix}.`
+    case 'DITOLAK':
+      return `${n} pengajuan ditolak${suffix}.`
+    case 'DITUTUP':
+      return `${n} proyek ditutup${suffix}.`
+    case 'DIARSIPKAN':
+      return `${n} proyek diarsipkan${suffix}.`
+    case 'AKTIF':
+      return `${n} proyek aktif${suffix}.`
+    default:
+      return `${n} proyek di semua status${suffix}.`
+  }
+}
+
+function supportFor(items: ProjectItem[]): string | undefined {
+  if (!items.length) return undefined
+  const waiting = items.filter((p) => p.lifecycle === 'DIUSULKAN' && p.permissions.approve).length
+  const resubmit = items.filter((p) => p.permissions.resubmit).length
+  const running = items.filter((p) => p.lifecycle === 'AKTIF')
+  const states = running.map(projectState)
+  const late = states.filter((s) => s.status === 'late').length
+  const risk = states.filter((s) => s.status === 'risk').length
+  const silent = running.filter((p) => !p.latestReport).length
+  const parts: string[] = []
+  if (waiting) parts.push(`${waiting} pengajuan menunggu keputusan Anda`)
+  if (resubmit) parts.push(`${resubmit} pengajuan bisa Anda ajukan ulang`)
+  if (late) parts.push(`${late} terlambat`)
+  if (risk) parts.push(`${risk} perlu perhatian`)
+  if (silent) parts.push(`${silent} belum punya laporan harian`)
+  if (parts.length) return `Di halaman ini: ${parts.join(', ')}.`
+  if (running.length) return 'Semua proyek aktif di halaman ini sesuai jadwal.'
+  return undefined
+}
+
 /**
  * Modul Proyek (11 Sep 2026): siapa pun di rantai boleh mengajukan proyek —
  * rantai penyetujunya mengikuti peran pengaju — dengan PT-PT terkait; Super
@@ -105,7 +185,14 @@ export function ProjectsView() {
   const [search, setSearch] = useState('')
   const [phase, setPhase] = useState<string>('ALL')
   const [lifecycle, setLifecycle] = useState<string>('AKTIF')
-  const [form, setForm] = useState<{ mode: 'create' } | { mode: 'edit'; project: ProjectItem } | null>(null)
+  const [layout, setLayout] = useState<'daftar' | 'linimasa'>('daftar')
+
+  // Formulir & detail tetap terpasang selama animasi menutup; `n` memulai ulang isinya.
+  const [form, setForm] = useState<{ mode: 'create' | 'edit'; project?: ProjectItem; n: number } | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [detail, setDetail] = useState<{ id: string; snapshot: ProjectItem; decide: Decision | null; n: number } | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [approving, setApproving] = useState<string | null>(null)
 
   const params = new URLSearchParams({ page: String(page), pageSize: '12', lifecycle })
   if (search) params.set('search', search)
@@ -113,83 +200,285 @@ export function ProjectsView() {
 
   const { data, loading, error, reload } = useResource<ProjectListData>(`/api/projects?${params.toString()}`)
   const mayPropose = can(user.role, 'project:propose')
+  const filtered = search.trim() !== '' || phase !== 'ALL'
+  const items = useMemo(() => data?.items ?? [], [data])
+
+  // Warna seri per PT, urut kemunculan, supaya titik di baris konsisten.
+  const entityTone = useMemo(() => {
+    const ids = Array.from(new Set(items.map((p) => p.entity.id)))
+    return (id: string) => seriesTone(Math.max(0, ids.indexOf(id)))
+  }, [items])
+
+  const queue = items.filter((p) => p.lifecycle === 'DIUSULKAN' && p.permissions.approve)
+  const rest = items.filter((p) => !queue.includes(p))
+  const timed = rest.filter((p) => p.targetEndDate && (p.lifecycle === 'AKTIF' || p.lifecycle === 'DITUTUP'))
+  const showLayout = timed.length > 0
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
+
+  function openForm(mode: 'create' | 'edit', project?: ProjectItem) {
+    setForm((f) => ({ mode, project, n: (f?.n ?? 0) + 1 }))
+    setFormOpen(true)
+  }
+  function openDetail(p: ProjectItem, decide: Decision | null = null) {
+    setDetail((d) => ({ id: p.id, snapshot: p, decide, n: (d?.n ?? 0) + 1 }))
+    setDetailOpen(true)
+  }
+  function resetFilters() {
+    setSearch('')
+    setPhase('ALL')
+    setPage(1)
+  }
+
+  async function quickApprove(p: ProjectItem) {
+    setApproving(p.id)
+    const res = await call('/api/projects/approve', 'POST', { projectId: p.id, decision: 'DISETUJUI', note: '' })
+    setApproving(null)
+    if (!res.ok) {
+      toast.error(res.error ?? 'Persetujuan belum tersimpan.')
+      return
+    }
+    toastWithUndo(`${p.name} disetujui sebagai ${approverLabel(p.pendingRole)}.`, res.json.undoToken, reload) // [F2-URUNGKAN]
+    reload()
+  }
+
+  const detailProject = detail ? (items.find((p) => p.id === detail.id) ?? detail.snapshot) : null
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Modul Proyek</h1>
-          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
-            Holding → anak perusahaan → proyek → laporan harian, mingguan, bulanan
-          </p>
-        </div>
-        {mayPropose && (
-          <Button onClick={() => setForm({ mode: 'create' })} className="icon-rotate-hover h-11 bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-glow-blue">
-            <Plus className="h-5 w-5" /> Ajukan Proyek
-          </Button>
-        )}
-      </div>
-
-      <Card className="glass">
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-              <Input placeholder="Cari nama proyek…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} className="glass pl-9 h-10 text-sm border-slate-200/60" />
-            </div>
-            <Select value={lifecycle} onValueChange={(v) => { setLifecycle(v); setPage(1) }}>
-              <SelectTrigger className="glass h-10 text-sm w-full sm:w-44">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent className="glass-strong">
-                {LIFECYCLES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={phase} onValueChange={(v) => { setPhase(v); setPage(1) }}>
-              <SelectTrigger className="glass h-10 text-sm w-full sm:w-44">
-                <Filter className="h-3 w-3 mr-1 text-slate-400 dark:text-slate-500" />
-                <SelectValue placeholder="Tahap" />
-              </SelectTrigger>
-              <SelectContent className="glass-strong">
-                <SelectItem value="ALL">Semua tahap</SelectItem>
-                {Object.entries(PROJECT_PHASE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+    <>
+      <PageHeader
+        context="Holding · anak perusahaan · proyek · laporan"
+        title="Proyek"
+        tools={
+          <>
+            {mayPropose && (
+              <Button variant="primary" size="sm" icon="tambah" onClick={() => openForm('create')}>
+                Ajukan proyek
+              </Button>
+            )}
+            <span className="mk-desktop-only">
+              <NotificationButton />
+            </span>
+          </>
+        }
+      />
 
       {loading && !data ? (
-        <LoadingSpinner />
-      ) : error ? (
-        <ErrorState message={error} />
-      ) : !data?.items?.length ? (
-        <EmptyState icon={<FolderKanban className="h-5 w-5 text-slate-400 dark:text-slate-500" />} title="Tidak ada proyek" description={lifecycle === 'DIUSULKAN' ? 'Belum ada pengajuan yang menunggu.' : 'Coba ubah filter pencarian'} />
-      ) : (
-        <>
-          <div className={cn('grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 stagger', loading && 'opacity-60 transition-opacity')}>
-            {data.items.map((p) => (
-              <ProjectCard key={p.id} project={p} onChanged={reload} onEdit={() => setForm({ mode: 'edit', project: p })} />
+        <div className="mk-hero" aria-busy="true" aria-label="Memuat ringkasan proyek">
+          <div className="mk-hero__text">
+            <Skeleton h={26} w={160} r={999} />
+            <Skeleton h={36} w="70%" r={12} />
+            <Skeleton h={20} w="55%" />
+          </div>
+        </div>
+      ) : data ? (
+        <Hero
+          eyebrow={[LIFECYCLES.find((l) => l.value === lifecycle)?.label, phase !== 'ALL' ? PROJECT_PHASE_LABELS[phase] : null].filter(Boolean).join(' · ')}
+          answer={answerFor(lifecycle, data.total, filtered)}
+          support={supportFor(items)}
+        />
+      ) : null}
+
+      <div className="flex flex-col gap-3">
+        <div className="mk-chips" role="group" aria-label="Status proyek">
+          {LIFECYCLES.map((l) => (
+            <Chip
+              key={l.value}
+              selected={lifecycle === l.value}
+              onClick={() => {
+                setLifecycle(l.value)
+                setPage(1)
+              }}
+            >
+              {l.label}
+            </Chip>
+          ))}
+        </div>
+        <div className="mk-toolbar">
+          <label className="mk-sortsel">
+            <span className="mk-sr">Tahap proyek</span>
+            <select
+              className={selectCls}
+              value={phase}
+              onChange={(e) => {
+                setPhase(e.target.value)
+                setPage(1)
+              }}
+            >
+              <option value="ALL">Semua tahap</option>
+              {Object.entries(PROJECT_PHASE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <SearchField
+            id="pj-q"
+            label="Cari proyek"
+            placeholder="Cari nama proyek"
+            value={search}
+            onChange={(v) => {
+              setSearch(v)
+              setPage(1)
+            }}
+            className="mk-toolbar__search"
+          />
+        </div>
+      </div>
+
+      {loading && !data ? (
+        <Card ariaLabel="Memuat daftar proyek">
+          <div className="flex flex-col gap-3" aria-busy="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} h={56} r={12} />
             ))}
           </div>
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-sm text-slate-500 dark:text-slate-400">Menampilkan {data.items.length} dari {data.total} proyek</span>
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" className="glass h-8 text-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-              <span className="text-sm text-slate-600 dark:text-slate-300 px-2">{page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}</span>
-              <Button variant="outline" size="sm" className="glass h-8 text-sm" disabled={page * data.pageSize >= data.total} onClick={() => setPage((p) => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
-            </div>
-          </div>
+        </Card>
+      ) : error ? (
+        <Card>
+          <ErrorNote message={`Daftar proyek belum termuat. ${error}`} onRetry={reload} />
+        </Card>
+      ) : !items.length ? (
+        <Card>
+          <EmptyNote
+            icon="proyek"
+            action={
+              filtered ? (
+                <Button size="sm" onClick={resetFilters}>
+                  Hapus saringan
+                </Button>
+              ) : mayPropose && lifecycle === 'AKTIF' ? (
+                <Button size="sm" icon="tambah" onClick={() => openForm('create')}>
+                  Ajukan proyek
+                </Button>
+              ) : undefined
+            }
+          >
+            {filtered
+              ? 'Tidak ada proyek yang cocok dengan saringan ini.'
+              : lifecycle === 'DIUSULKAN'
+                ? 'Belum ada pengajuan yang menunggu.'
+                : 'Belum ada proyek dengan status ini.'}
+          </EmptyNote>
+        </Card>
+      ) : (
+        <>
+          {queue.length > 0 && (
+            <Card title="Menunggu keputusan Anda" subtitle="Setujui di tempat, atau buka detail untuk membaca penjelasan dan menolak dengan alasan.">
+              <div className="mk-list">
+                {queue.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <ApprovalItem
+                      approveVariant="secondary"
+                      className="flex-1 min-w-0"
+                      title={p.name}
+                      requester={p.proposedBy?.name ?? 'Pengaju'}
+                      initials={initials(p.proposedBy?.name ?? p.name)}
+                      tone={entityTone(p.entity.id)}
+                      time={p.proposedAt ? formatRelative(p.proposedAt) : '-'}
+                      amount={p.entity.name}
+                      approveLabel="Setujui"
+                      rejectLabel="Tolak"
+                      busy={approving === p.id}
+                      onApprove={() => quickApprove(p)}
+                      onReject={() => openDetail(p, 'DITOLAK')}
+                    />
+                    <IconButton icon="info" label={`Lihat detail ${p.name}`} onClick={() => openDetail(p)} />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {rest.length > 0 && (
+            <Card
+              title={queue.length ? 'Proyek lainnya' : 'Daftar proyek'}
+              subtitle={`Menampilkan ${items.length} dari ${formatNumber(data?.total ?? items.length)} proyek. Ketuk baris untuk membuka detail.`}
+              action={
+                showLayout ? (
+                  <SegmentedControl
+                    size="sm"
+                    label="Tampilan daftar"
+                    value={layout}
+                    onChange={(v) => setLayout(v as 'daftar' | 'linimasa')}
+                    options={[
+                      { value: 'daftar', label: 'Daftar' },
+                      { value: 'linimasa', label: 'Linimasa' },
+                    ]}
+                  />
+                ) : undefined
+              }
+            >
+              <div className={loading ? 'opacity-60 transition-opacity' : undefined}>
+                {layout === 'linimasa' && showLayout ? (
+                  <ProjectTimeline projects={timed} onOpen={openDetail} />
+                ) : (
+                  <div className="mk-prows mk-list">
+                    {rest.map((p) => {
+                      const st = projectState(p)
+                      return (
+                        <ProjectRow
+                          key={p.id}
+                          name={p.name}
+                          division={p.entity.name}
+                          divisionTone={entityTone(p.entity.id)}
+                          pic={p.picName ?? 'PIC belum ditentukan'}
+                          initials={p.picName ? initials(p.picName) : '-'}
+                          progress={st.progress}
+                          due={p.targetEndDate ? formatDateShort(p.targetEndDate) : 'Tanpa tenggat'}
+                          status={st.status}
+                          statusLabel={st.label}
+                          selected={detailOpen && detail?.id === p.id}
+                          onClick={() => openDetail(p)}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {data && data.total > data.pageSize && (
+            <nav className="flex items-center justify-between gap-2" aria-label="Halaman daftar proyek">
+              <Button icon="kiri" disabled={page <= 1} onClick={() => setPage((x) => Math.max(1, x - 1))}>
+                Sebelumnya
+              </Button>
+              <span className="t-footnote text-ink-2 tabular-nums">
+                Halaman {page} dari {pages}
+              </span>
+              <Button iconAfter="kanan" disabled={page * data.pageSize >= data.total} onClick={() => setPage((x) => x + 1)}>
+                Berikutnya
+              </Button>
+            </nav>
+          )}
         </>
       )}
 
+      {detail && (
+        <ProjectDetailSheet
+          key={`detail-${detail.n}`}
+          open={detailOpen}
+          project={detailProject!}
+          initialDecision={detail.decide}
+          onClose={() => setDetailOpen(false)}
+          onChanged={reload}
+          onEdit={(p) => {
+            setDetailOpen(false)
+            openForm('edit', p)
+          }}
+        />
+      )}
+
       {form && (
-        <ProjectFormDialog
+        <ProjectFormSheet
+          key={`form-${form.n}`}
+          open={formOpen}
           mode={form.mode}
           project={form.mode === 'edit' ? form.project : undefined}
-          onClose={() => setForm(null)}
+          onClose={() => setFormOpen(false)}
           onDone={(created) => {
-            setForm(null)
+            setFormOpen(false)
             if (created) {
               setLifecycle(created.lifecycle)
               setPage(1)
@@ -198,276 +487,367 @@ export function ProjectsView() {
           }}
         />
       )}
-    </div>
+    </>
   )
 }
 
-/** Slot tanda tangan sepanjang rantai: siapa sudah, siapa giliran, siapa menolak. */
-function ApprovalTrail({
-  approvals,
-  pendingRole,
-  chainless,
-  noApproval,
-  proposerName,
-}: {
-  approvals: Approval[]
-  pendingRole: string | null
-  chainless: boolean
-  noApproval: boolean
-  proposerName: string | null
-}) {
-  if (noApproval) {
-    return (
-      <p className="text-[12px] text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
-        <ShieldOff className="h-3.5 w-3.5 shrink-0 mt-px text-amber-600" />
-        Tahap awal tanpa persetujuan — didaftarkan {proposerName ?? 'pengaju'} dan langsung aktif. Persetujuan menyusul saat proyek naik tahap.
-      </p>
-    )
-  }
-  if (chainless) {
-    return (
-      <p className="text-[12px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Langsung aktif — diajukan {proposerName ?? 'pengaju di puncak rantai'} tanpa perlu persetujuan.
-      </p>
-    )
-  }
+/** Linimasa proyek di halaman ini: mulai sampai tenggat, progres, status. */
+function ProjectTimeline({ projects, onOpen }: { projects: ProjectItem[]; onOpen: (p: ProjectItem) => void }) {
+  const tl = timelineFrame(projects)
+  const rows = projects.map((p) => {
+    const st = projectState(p)
+    return {
+      id: p.id,
+      label: p.name,
+      sub: `${p.picName ?? 'PIC belum ditentukan'} · ${p.entity.code}`,
+      start: Math.max(0, tl.at(p.startDate, 0)),
+      end: Math.max(1, tl.at(p.targetEndDate, tl.span)),
+      progress: st.progress,
+      status: st.status,
+      range: `${p.startDate ? formatDateShort(p.startDate) : '…'}–${formatDateShort(p.targetEndDate)}`,
+    }
+  })
   return (
-    <div className="flex items-stretch gap-1.5">
-      {approvals.map((a, i) => {
-        const ok = a.decision === 'DISETUJUI'
-        const no = a.decision === 'DITOLAK'
-        const turn = a.role === pendingRole
-        return (
-          <div key={a.role} className="flex items-center gap-1.5 flex-1 min-w-0">
-            <div
-              title={a.note ?? undefined}
-              className={cn(
-                'flex-1 min-w-0 rounded-lg px-2 py-1.5 text-[11px] leading-tight border',
-                ok
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                  : no
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
-                    : turn
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300'
-                      : 'bg-slate-500/5 border-slate-200/70 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-              )}
-            >
-              <div className="flex items-center gap-1 font-semibold">
-                {ok ? <CheckCircle2 className="h-3 w-3" /> : no ? <XCircle className="h-3 w-3" /> : <Clock className={cn('h-3 w-3', turn && 'animate-pulse-soft')} />}
-                <span className="truncate">{PROJECT_APPROVER_LABELS[a.role] ?? a.role}</span>
-              </div>
-              <div className="truncate opacity-80">{a.decidedByName ?? (turn ? 'giliran sekarang' : 'menunggu')}</div>
-            </div>
-            {i < approvals.length - 1 && <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-600 shrink-0" />}
-          </div>
-        )
-      })}
+    <div className="mk-scroll-x pt-6">
+      <Timeline
+        rows={rows}
+        span={tl.span}
+        ticks={tl.ticks}
+        today={tl.today}
+        title="Proyek"
+        selectedId={null}
+        onSelect={(id) => {
+          const p = projects.find((x) => x.id === id)
+          if (p) onOpen(p)
+        }}
+      />
     </div>
   )
 }
 
-function ProjectCard({ project, onChanged, onEdit }: { project: ProjectItem; onChanged: () => void; onEdit: () => void }) {
-  const r = project.latestReport
-  const proposed = project.lifecycle === 'DIUSULKAN'
-  const rejected = project.lifecycle === 'DITOLAK'
-  const dormant = project.lifecycle === 'DITUTUP' || project.lifecycle === 'DIARSIPKAN'
-  const perm = project.permissions
+/** Rantai persetujuan sebagai alur: siapa sudah, siapa giliran, siapa menolak. */
+function approvalSteps(p: ProjectItem): FlowStep[] {
+  return p.approvals.map((a) => {
+    const ok = a.decision === 'DISETUJUI'
+    const no = a.decision === 'DITOLAK'
+    const turn = a.role === p.pendingRole
+    const who = a.decidedByName ? `${a.decidedByName}${a.decidedAt ? ` · ${formatDateTime(a.decidedAt)}` : ''}` : undefined
+    return {
+      title: approverLabel(a.role),
+      sub: who,
+      status: ok ? 'done' : no ? 'blocked' : turn ? 'current' : 'todo',
+      meta: ok
+        ? a.note
+          ? `Disetujui · ${a.note}`
+          : 'Disetujui'
+        : no
+          ? a.note
+            ? `Ditolak · ${a.note}`
+            : 'Ditolak'
+          : turn
+            ? 'Giliran sekarang'
+            : 'Menunggu',
+    }
+  })
+}
 
-  const [deciding, setDeciding] = useState<'DISETUJUI' | 'DITOLAK' | null>(null)
+/** Detail proyek di Sheet: progres, identitas, persetujuan, dan semua tindakan. */
+function ProjectDetailSheet({
+  open,
+  project: p,
+  initialDecision,
+  onClose,
+  onChanged,
+  onEdit,
+}: {
+  open: boolean
+  project: ProjectItem
+  initialDecision: Decision | null
+  onClose: () => void
+  onChanged: () => void
+  onEdit: (p: ProjectItem) => void
+}) {
+  const [confirmEl, confirm] = useConfirm()
+  const [deciding, setDeciding] = useState<Decision | null>(p.permissions.approve ? initialDecision : null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
-  async function decide(decision: 'DISETUJUI' | 'DITOLAK') {
+  const st = projectState(p)
+  const perm = p.permissions
+  const proposed = p.lifecycle === 'DIUSULKAN'
+  const rejected = p.lifecycle === 'DITOLAK'
+  const r = p.latestReport
+  const rejectNote = rejectionNote(p)
+
+  async function decide(decision: Decision) {
     setBusy('decide')
     setErr(null)
-    const res = await call('/api/projects/approve', 'POST', { projectId: project.id, decision, note })
+    const res = await call('/api/projects/approve', 'POST', { projectId: p.id, decision, note })
     setBusy(null)
-    if (!res.ok) setErr(res.error)
-    else {
-      setDeciding(null)
-      setNote('')
-      onChanged()
+    if (!res.ok) {
+      setErr(res.error)
+      return
     }
+    toastWithUndo(decision === 'DISETUJUI' ? `${p.name} disetujui.` : `${p.name} ditolak.`, res.json.undoToken, onChanged) // [F2-URUNGKAN]
+    onChanged()
+    onClose()
   }
 
+  // [F2-URUNGKAN] Ajukan ulang bisa diurungkan, jadi tanpa dialog konfirmasi.
   async function resubmit() {
-    if (!window.confirm('Ajukan ulang proyek ini? Slot persetujuan dikosongkan dan rantai dimulai dari awal.')) return
     setBusy('resubmit')
     setErr(null)
-    const res = await call('/api/projects', 'PATCH', { id: project.id, resubmit: true })
+    const res = await call('/api/projects', 'PATCH', { id: p.id, resubmit: true })
     setBusy(null)
-    if (!res.ok) setErr(res.error)
-    else onChanged()
+    if (!res.ok) {
+      setErr(res.error)
+      return
+    }
+    toastWithUndo(`${p.name} diajukan ulang.`, res.json.undoToken, onChanged, {
+      description: 'Slot persetujuan dikosongkan dan rantai dimulai dari awal.',
+    })
+    onChanged()
+    onClose()
   }
 
   async function remove() {
-    if (!window.confirm(`Hapus proyek "${project.name}" (${project.code})?`)) return
+    const ok = await confirm({
+      title: `Hapus ${p.name}?`,
+      description: `Proyek ${p.code} akan dihapus. Proyek yang sudah punya data tidak bisa dihapus, hanya diarsipkan. Tindakan ini tidak bisa dibatalkan.`,
+      confirmLabel: 'Hapus proyek',
+      destructive: true,
+    })
+    if (!ok) return
     setBusy('delete')
     setErr(null)
-    const res = await call(`/api/projects?id=${project.id}`, 'DELETE')
+    const res = await call(`/api/projects?id=${p.id}`, 'DELETE')
     if (res.ok) {
       setBusy(null)
+      toast.success(`${p.name} dihapus.`)
       onChanged()
+      onClose()
       return
     }
     // Proyek yang sudah punya data tidak dihapus; tawarkan pengarsipan.
-    if (res.status === 409 && res.json.canArchive === true && window.confirm(`${res.error}\n\nArsipkan proyek ini sekarang?`)) {
-      const arch = await call('/api/projects', 'PATCH', { id: project.id, lifecycle: 'DIARSIPKAN' })
-      setBusy(null)
-      if (!arch.ok) setErr(arch.error)
-      else onChanged()
-      return
+    if (res.status === 409 && res.json.canArchive === true) {
+      const archive = await confirm({
+        title: 'Arsipkan proyek ini?',
+        description: res.error,
+        confirmLabel: 'Arsipkan proyek',
+      })
+      if (archive) {
+        const arch = await call('/api/projects', 'PATCH', { id: p.id, lifecycle: 'DIARSIPKAN' })
+        setBusy(null)
+        if (!arch.ok) setErr(arch.error)
+        else {
+          toastWithUndo(`${p.name} diarsipkan.`, arch.json.undoToken, onChanged) // [F2-URUNGKAN]
+          onChanged()
+          onClose()
+        }
+        return
+      }
     }
     setBusy(null)
     setErr(res.error)
   }
 
-  return (
-    <Card className={cn('glass card-hover transition-all group flex flex-col', proposed && 'ring-1 ring-amber-500/40', (rejected || dormant) && 'opacity-80')}>
-      <CardContent className="p-4 space-y-3 flex-1 flex flex-col">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 leading-tight line-clamp-2 group-hover:text-blue-700 transition-colors">{project.name}</h3>
-            <Badge variant="outline" className="text-[11px] h-4 px-1 font-mono mt-1">{project.code}</Badge>
-          </div>
-          {r && !proposed && !rejected && <DailyStatusBadge status={r.status} size="xs" />}
-          {proposed && <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[11px]">Menunggu {PROJECT_APPROVER_LABELS[project.pendingRole ?? ''] ?? 'persetujuan'}</Badge>}
-          {rejected && <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300 text-[11px]">Ditolak</Badge>}
-          {dormant && <Badge className="bg-slate-500/15 text-slate-600 dark:text-slate-300 text-[11px]">{PROJECT_LIFECYCLE_LABELS[project.lifecycle]}</Badge>}
-        </div>
-
-        <div className="space-y-1 text-[13px] text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-1.5"><Building2 className="h-3 w-3 shrink-0" /><span className="truncate">{project.entity.name}</span></div>
-          {project.relatedEntities.length > 0 && (
-            <div className="flex items-start gap-1.5">
-              <Link2 className="h-3 w-3 shrink-0 mt-0.5" />
-              <div className="flex flex-wrap gap-1">
-                {project.relatedEntities.map((e) => (
-                  <span key={e.id} className="rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 text-[11px] font-medium">{e.name}</span>
-                ))}
-              </div>
-            </div>
+  const working = busy !== null
+  let footer: ReactNode = null
+  if (perm.approve && deciding) {
+    footer = (
+      <>
+        <Button onClick={() => setDeciding(null)} disabled={working}>
+          Batal
+        </Button>
+        <Button
+          variant={deciding === 'DITOLAK' ? 'destructive' : 'primary'}
+          onClick={() => decide(deciding)}
+          disabled={working || (deciding === 'DITOLAK' && note.trim().length < 5)}
+        >
+          {busy === 'decide' ? 'Menyimpan…' : deciding === 'DITOLAK' ? 'Tolak pengajuan' : 'Setujui pengajuan'}
+        </Button>
+      </>
+    )
+  } else {
+    const hasPrimary = perm.approve || perm.resubmit
+    footer =
+      perm.approve || perm.resubmit || perm.manage ? (
+        <>
+          {perm.manage && (
+            <Button variant={hasPrimary ? 'secondary' : 'primary'} onClick={() => onEdit(p)} disabled={working}>
+              Ubah proyek
+            </Button>
           )}
-          <div className="flex items-center gap-1.5"><User className="h-3 w-3 shrink-0" /><span className="truncate">{project.picName ? `PIC ${project.picName}` : 'PIC belum ditentukan'}</span></div>
-          {(project.startDate || project.targetEndDate) && (
-            <div className="flex items-center gap-1.5">
-              <Target className="h-3 w-3 shrink-0" />
-              <span>{project.startDate ? formatDate(project.startDate) : '—'} → {project.targetEndDate ? formatDate(project.targetEndDate) : 'target belum ada'}</span>
-            </div>
+          {perm.resubmit && (
+            <Button variant="primary" icon="kirim" onClick={resubmit} disabled={working}>
+              {busy === 'resubmit' ? 'Mengirim…' : 'Ajukan ulang'}
+            </Button>
           )}
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge variant="outline" className="text-[11px] h-4 px-1 border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/5">{PROJECT_PHASE_LABELS[project.phase] ?? project.phase}</Badge>
-          <Badge variant="outline" className="text-[11px] h-4 px-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/5">{PROJECT_LIFECYCLE_LABELS[project.lifecycle] ?? project.lifecycle}</Badge>
-          {project.noApproval && (
-            <Badge
-              variant="outline"
-              title="Didaftarkan di tahap awal tanpa melewati rantai persetujuan"
-              className="text-[11px] h-4 px-1 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5"
-            >
-              <ShieldOff className="h-3 w-3" /> Tanpa persetujuan
-            </Badge>
-          )}
-        </div>
-
-        {(proposed || rejected) && (
-          <div className="space-y-2 pt-2 border-t border-slate-100/60 dark:border-white/10">
-            {project.description && <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-3">{project.description}</p>}
-            {project.purpose && <p className="text-[13px] text-slate-500 dark:text-slate-400 line-clamp-2"><strong className="text-slate-700 dark:text-slate-200">Tujuan:</strong> {project.purpose}</p>}
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Diajukan {project.proposedBy?.name ?? '—'}{project.proposedAt ? ` · ${formatDateTime(project.proposedAt)}` : ''}
-            </div>
-            <ApprovalTrail
-              approvals={project.approvals}
-              pendingRole={project.pendingRole}
-              chainless={project.approvalChain.length === 0}
-              noApproval={project.noApproval}
-              proposerName={project.proposedBy?.name ?? null}
-            />
-            {rejected && project.approvals.find((a) => a.decision === 'DITOLAK')?.note && (
-              <p className="text-[13px] rounded-lg bg-rose-500/10 border border-rose-500/25 px-2.5 py-1.5 text-rose-700 dark:text-rose-300">
-                <strong>Alasan:</strong> {project.approvals.find((a) => a.decision === 'DITOLAK')?.note}
-              </p>
-            )}
-            {perm.approve && (
-              deciding ? (
-                <div className="space-y-2">
-                  <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={deciding === 'DITOLAK' ? 'Alasan penolakan (wajib)' : 'Catatan (opsional)'} className="bg-white/70 dark:bg-slate-900/50 text-sm" />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => decide(deciding)} disabled={busy !== null || (deciding === 'DITOLAK' && note.trim().length < 5)} className={cn('text-white', deciding === 'DISETUJUI' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' : 'bg-gradient-to-r from-rose-600 to-rose-500')}>
-                      {busy === 'decide' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {deciding === 'DISETUJUI' ? 'Konfirmasi setuju' : 'Konfirmasi tolak'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setDeciding(null)} disabled={busy !== null}><X className="h-4 w-4" /> Batal</Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex gap-2 flex-wrap">
-                  <Button size="sm" onClick={() => setDeciding('DISETUJUI')} className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white">
-                    <ThumbsUp className="h-4 w-4" /> Setujui sebagai {PROJECT_APPROVER_LABELS[project.pendingRole ?? ''] ?? '…'}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setDeciding('DITOLAK')} className="border-rose-500/40 text-rose-700 dark:text-rose-300">
-                    <ThumbsDown className="h-4 w-4" /> Tolak
-                  </Button>
-                </div>
-              )
-            )}
-            {perm.resubmit && (
-              <Button size="sm" variant="outline" onClick={resubmit} disabled={busy !== null} className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-                {busy === 'resubmit' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Ajukan ulang
+          {perm.approve && (
+            <>
+              <Button onClick={() => setDeciding('DITOLAK')} disabled={working}>
+                Tolak
               </Button>
+              <Button variant="primary" onClick={() => setDeciding('DISETUJUI')} disabled={working}>
+                Setujui
+              </Button>
+            </>
+          )}
+        </>
+      ) : null
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={p.name}
+      subtitle={`${p.code} · ${p.entity.name}`}
+      eyebrow={<StatusBadge status={st.status} size="sm">{st.label}</StatusBadge>}
+      backLabel="Proyek"
+      footer={footer}
+    >
+      {!proposed && !rejected && (
+        <div className="flex items-center gap-5">
+          <ProgressRing value={st.progress} size={104} status={st.status === 'neutral' || st.status === 'info' ? 'accent' : st.status} sublabel="selesai" />
+          <div className="flex flex-col gap-1 min-w-0">
+            <span className="t-headline">{st.progress}% selesai</span>
+            <span className="t-footnote text-ink-2">
+              {p.targetEndDate ? `Tenggat ${formatDate(p.targetEndDate)}` : 'Tenggat belum ditetapkan'}
+            </span>
+            <span className="t-footnote text-ink-2">
+              {r ? `Laporan terakhir ${formatDate(r.reportDate)}` : 'Belum ada laporan harian'}
+            </span>
+            {r?.isLate && (
+              <span>
+                <StatusBadge status="late" size="sm">
+                  Laporan terlambat
+                </StatusBadge>
+              </span>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {!proposed && !rejected && (
-          <>
-            {project.description && <p className="text-[13px] text-slate-500 dark:text-slate-400 line-clamp-2">{project.description}</p>}
+      {st.reason && !rejected && (
+        <div className={`mk-note-box ${st.status === 'late' ? 'mk-soft--late' : 'mk-soft--risk'}`}>{st.reason}</div>
+      )}
+
+      <section className="flex flex-col gap-2">
+        <InfoLine icon="gedung">{p.entity.name}{p.entity.region ? ` · ${p.entity.region}` : ''}</InfoLine>
+        <InfoLine icon="pengguna">{p.picName ? `PIC ${p.picName}` : 'PIC belum ditentukan'}</InfoLine>
+        {(p.startDate || p.targetEndDate) && (
+          <InfoLine icon="kalender">
+            {p.startDate ? formatDate(p.startDate) : '-'} sampai {p.targetEndDate ? formatDate(p.targetEndDate) : 'target belum ada'}
+          </InfoLine>
+        )}
+        {p.relatedEntities.length > 0 && (
+          <InfoLine icon="alur">Terkait {p.relatedEntities.map((e) => e.name).join(', ')}</InfoLine>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          <span className="mk-tag">{PROJECT_PHASE_LABELS[p.phase] ?? p.phase}</span>
+          <span className="mk-tag">{PROJECT_LIFECYCLE_LABELS[p.lifecycle] ?? p.lifecycle}</span>
+          {p.noApproval && (
+            <span className="mk-tag" title="Didaftarkan di tahap awal tanpa melewati rantai persetujuan">
+              Tanpa persetujuan
+            </span>
+          )}
+        </div>
+      </section>
+
+      {(p.description || p.purpose) && (
+        <section className="flex flex-col gap-3">
+          {p.description && (
             <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-slate-500 dark:text-slate-400">Progress</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 tabular-nums">{r?.progressPct || 0}%</span>
-              </div>
-              <Progress value={r?.progressPct || 0} className="h-1.5" />
+              <h3 className="t-headline mb-1">Penjelasan</h3>
+              <p className="t-body text-ink">{p.description}</p>
             </div>
-            {r ? (
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100/60 dark:border-white/10">
-                <Calendar className="h-3 w-3" /><span>Laporan terakhir: {formatDate(r.reportDate)}</span>
-                {r.isLate && <Badge className="text-[8px] h-3.5 px-1 bg-rose-500/15 text-rose-700 dark:text-rose-300">Terlambat</Badge>}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300 pt-2 border-t border-slate-100/60 dark:border-white/10">
-                <Calendar className="h-3 w-3" /><span>Belum ada laporan</span>
-              </div>
-            )}
-          </>
-        )}
+          )}
+          {p.purpose && (
+            <div>
+              <h3 className="t-headline mb-1">Tujuan</h3>
+              <p className="t-body text-ink-2">{p.purpose}</p>
+            </div>
+          )}
+        </section>
+      )}
 
-        {err && <p className="text-sm text-rose-700 dark:text-rose-300 flex items-start gap-1.5"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> {err}</p>}
+      {(proposed || rejected || p.noApproval) && (
+        <section className="flex flex-col gap-3">
+          <SectionTitle icon="persetujuan">Persetujuan</SectionTitle>
+          <p className="t-footnote text-ink-2">
+            Diajukan {p.proposedBy?.name ?? '-'}
+            {p.proposedAt ? ` · ${formatDateTime(p.proposedAt)}` : ''}
+          </p>
+          {p.noApproval ? (
+            <p className="mk-note-box mk-soft--info">
+              Tahap awal tanpa persetujuan. Didaftarkan {p.proposedBy?.name ?? 'pengaju'} dan langsung aktif. Persetujuan menyusul saat proyek naik tahap.
+            </p>
+          ) : p.approvalChain.length === 0 ? (
+            <p className="mk-note-box mk-soft--done">
+              Langsung aktif. Diajukan {p.proposedBy?.name ?? 'pengaju di puncak rantai'} tanpa perlu persetujuan.
+            </p>
+          ) : (
+            <FlowDiagram orientation="vertical" steps={approvalSteps(p)} label="Rantai persetujuan" />
+          )}
+          {rejected && rejectNote && (
+            <p className="mk-note-box mk-soft--late">
+              <strong>Alasan penolakan:</strong> {rejectNote}
+            </p>
+          )}
+        </section>
+      )}
 
-        {perm.manage && (
-          <div className="flex gap-1.5 pt-2 mt-auto border-t border-slate-100/60 dark:border-white/10">
-            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={onEdit} disabled={busy !== null}>
-              <Pencil className="h-3.5 w-3.5" /> Ubah
-            </Button>
-            <Button size="sm" variant="ghost" className="h-9 text-xs text-slate-500 hover:text-rose-600 hover:bg-rose-500/10" onClick={remove} disabled={busy !== null}>
-              {busy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Hapus
-            </Button>
+      {perm.approve && deciding && (
+        <Field
+          label={deciding === 'DITOLAK' ? 'Alasan penolakan' : 'Catatan untuk pengaju'}
+          htmlFor="pd-note"
+          required={deciding === 'DITOLAK'}
+          hint={deciding === 'DITOLAK' ? 'Minimal 5 karakter agar pengaju tahu yang perlu diperbaiki.' : 'Opsional.'}
+        >
+          <textarea
+            id="pd-note"
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={deciding === 'DITOLAK' ? 'Tulis alasan penolakan' : 'Tulis catatan bila perlu'}
+            className={areaCls}
+          />
+        </Field>
+      )}
+
+      {err && (
+        <p className="mk-note-box mk-soft--late" role="alert">
+          {err}
+        </p>
+      )}
+
+      {perm.manage && !deciding && (
+        <div className="mk-danger">
+          <div className="min-w-0">
+            <div className="t-body-strong">Hapus proyek</div>
+            <p className="t-footnote text-ink-2">Proyek yang sudah punya laporan hanya bisa diarsipkan.</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <Button variant="destructive" size="sm" onClick={remove} disabled={working}>
+            {busy === 'delete' ? 'Menghapus…' : 'Hapus proyek'}
+          </Button>
+        </div>
+      )}
+      {confirmEl}
+    </Sheet>
   )
 }
 
-/** Pop-up pengajuan / perubahan proyek — layar penuh di ponsel, lembar lebar di desktop. */
-function ProjectFormDialog({
+/** Pengajuan / perubahan proyek di Sheet lebar — layar didorong di ponsel. */
+function ProjectFormSheet({
+  open,
   mode,
   project,
   onClose,
   onDone,
 }: {
+  open: boolean
   mode: 'create' | 'edit'
   project?: ProjectItem
   onClose: () => void
@@ -477,13 +857,14 @@ function ProjectFormDialog({
   const editing = mode === 'edit' && project
   const [entityId, setEntityId] = useState(project?.entity.id ?? '')
   const optionsUrl = `/api/projects?options=1${entityId ? `&entityId=${entityId}` : ''}`
-  const { data: opt, loading: optLoading } = useResource<Options>(optionsUrl)
+  const { data: opt, loading: optLoading, error: optError } = useResource<Options>(optionsUrl)
 
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
   const [purpose, setPurpose] = useState(project?.purpose ?? '')
   const [phase, setPhase] = useState(project?.phase ?? '')
   const [picUserId, setPicUserId] = useState(project?.picUserId ?? '')
+  const [divisionId, setDivisionId] = useState(project?.divisionId ?? '') // [F2-ADMIN]
   const [startDate, setStartDate] = useState(toDateInput(project?.startDate ?? null))
   const [targetEndDate, setTargetEndDate] = useState(toDateInput(project?.targetEndDate ?? null))
   const [related, setRelated] = useState<string[]>(project?.relatedEntities.map((e) => e.id) ?? [])
@@ -497,6 +878,7 @@ function ProjectFormDialog({
   const ownerId = opt?.entity?.id ?? entityId
   const relatedChoices = useMemo(() => (opt?.entities ?? []).filter((e) => e.id !== ownerId), [opt, ownerId])
   const chain = opt?.chain ?? []
+  const chainText = chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')
   const earlyPhase = phase === '' || phase === 'INISIASI'
   const canSkip = !editing && chain.length > 0 && earlyPhase
   const skipping = canSkip && skipApproval
@@ -510,6 +892,8 @@ function ProjectFormDialog({
       purpose,
       phase,
       picUserId,
+      // [F2-ADMIN] kirim hanya bila berubah (divisi lama yang nonaktif tidak ditolak ulang)
+      ...(editing && divisionId === (project!.divisionId ?? '') ? {} : { divisionId }),
       startDate,
       targetEndDate,
       relatedEntityIds: related,
@@ -520,10 +904,14 @@ function ProjectFormDialog({
     setBusy(false)
     if (!res.ok) {
       const list = res.json.errors
-      setErrors(Array.isArray(list) && list.length ? (list as string[]) : [res.error ?? 'Gagal menyimpan'])
+      setErrors(Array.isArray(list) && list.length ? (list as string[]) : [res.error ?? 'Proyek belum tersimpan. Coba lagi.'])
       return
     }
     const created = res.json.project as { lifecycle: string } | undefined
+    const doneMsg = editing ? 'Perubahan proyek tersimpan.' : chain.length > 0 && !skipping ? 'Pengajuan proyek terkirim.' : 'Proyek dibuat dan langsung aktif.'
+    // [F2-URUNGKAN] mengarsipkan lewat formulir juga bisa diurungkan (hanya siklus hidupnya).
+    if (res.json.undoToken) toastWithUndo('Proyek diarsipkan.', res.json.undoToken, () => onDone(null))
+    else toast.success(doneMsg)
     onDone(editing ? null : (created ?? null))
   }
 
@@ -531,190 +919,216 @@ function ProjectFormDialog({
   const valid = name.trim().length >= 5 && description.trim().length >= 20 && !needsEntity
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        className={cn(
-          'glass-modal p-0 gap-0 flex flex-col overflow-hidden',
-          'w-screen h-dvh max-w-none rounded-none top-0 left-0 translate-x-0 translate-y-0',
-          'sm:w-[min(96vw,44rem)] sm:max-w-none sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2'
-        )}
-      >
-        <DialogHeader className="px-5 sm:px-7 pt-5 pb-4 border-b border-white/40 dark:border-white/10 text-left">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <DialogTitle className="text-2xl font-bold tracking-tight">{editing ? 'Ubah Proyek' : 'Ajukan Proyek'}</DialogTitle>
-              <DialogDescription className="text-sm mt-0.5">
-                {editing
-                  ? `${project!.code} · ${project!.entity.name}`
-                  : skipping
-                    ? 'Tahap awal tanpa persetujuan — proyek langsung aktif.'
-                    : chain.length > 0
-                      ? `Perlu persetujuan berurutan: ${chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')}.`
-                      : 'Peran Anda tidak memerlukan persetujuan — proyek langsung aktif.'}
-              </DialogDescription>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Tutup" className="shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-500/10 dark:hover:bg-white/10">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </DialogHeader>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      size="wide"
+      backLabel="Proyek"
+      title={editing ? 'Ubah proyek' : 'Ajukan proyek'}
+      subtitle={
+        editing
+          ? `${project!.code} · ${project!.entity.name}`
+          : skipping
+            ? 'Tahap awal tanpa persetujuan. Proyek langsung aktif.'
+            : chain.length > 0
+              ? `Perlu persetujuan berurutan: ${chainText}.`
+              : 'Peran Anda tidak memerlukan persetujuan. Proyek langsung aktif.'
+      }
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>
+            Batal
+          </Button>
+          <Button variant="primary" icon={editing ? 'selesai' : 'kirim'} onClick={submit} disabled={busy || !valid}>
+            {busy ? 'Menyimpan…' : editing ? 'Simpan perubahan' : chain.length > 0 && !skipping ? 'Ajukan proyek' : 'Buat proyek'}
+          </Button>
+        </>
+      }
+    >
+      {optError && <ErrorNote message={`Pilihan PT dan PIC belum termuat. ${optError}`} />}
 
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-5 sm:px-7 py-5 space-y-4">
+      <section className="mk-formsec">
+        <div className="mk-formgrid">
           {!editing && opt && !opt.entityPinned && (
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-entity" className="text-sm">PT pemilik proyek <span className="text-rose-500">*</span></Label>
-              <select id="pp-entity" value={entityId} onChange={(e) => { setEntityId(e.target.value); setPicUserId(''); setRelated((r) => r.filter((x) => x !== e.target.value)) }} className={selectClass}>
-                <option value="">— pilih PT —</option>
-                {opt.entities.map((e) => <option key={e.id} value={e.id}>{e.name} · {e.code}</option>)}
-              </select>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-name" className="text-sm">Nama proyek <span className="text-rose-500">*</span></Label>
-            <Input id="pp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Pembangunan Gudang Distribusi Timur" className={field} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-desc" className="text-sm">Penjelasan <span className="text-rose-500">*</span></Label>
-            <Textarea id="pp-desc" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Apa yang dibangun / dikerjakan, lingkupnya, dan perkiraan kebutuhan." className="bg-white/70 dark:bg-slate-900/50 text-base" />
-            <p className="text-xs text-slate-500 dark:text-slate-400">Minimal 20 karakter agar penyetuju paham.</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-purpose" className="text-sm">Tujuan / manfaat</Label>
-            <Textarea id="pp-purpose" rows={2} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Manfaat bagi PT, target yang ingin dicapai." className="bg-white/70 dark:bg-slate-900/50 text-base" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-phase" className="text-sm">Tahap awal <span className="text-slate-400 font-normal">(opsional)</span></Label>
+            <Field label="PT pemilik proyek" htmlFor="pp-entity" required className="is-full">
               <select
-                id="pp-phase"
-                value={phase}
+                id="pp-entity"
+                value={entityId}
                 onChange={(e) => {
-                  setPhase(e.target.value)
-                  // Jalur tanpa persetujuan hanya untuk tahap awal.
-                  if (e.target.value !== '' && e.target.value !== 'INISIASI') setSkipApproval(false)
+                  setEntityId(e.target.value)
+                  setPicUserId('')
+                  setDivisionId('')
+                  setRelated((r) => r.filter((x) => x !== e.target.value))
                 }}
-                className={selectClass}
+                className={selectCls}
               >
-                <option value="">Belum ditentukan (dianggap Inisiasi)</option>
-                {Object.entries(PROJECT_PHASE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-pic" className="text-sm">PIC / Manager proyek <span className="text-slate-400 font-normal">(opsional)</span></Label>
-              <select id="pp-pic" value={picUserId} onChange={(e) => setPicUserId(e.target.value)} disabled={optLoading} className={selectClass}>
-                <option value="">Kosongkan — tentukan nanti</option>
-                {(opt?.candidates ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.id === me.id ? ' (Anda)' : ''}{c.activeProjects > 0 ? ` · memegang ${c.activeProjects} proyek` : ' · belum memegang proyek'}
+                <option value="">Pilih PT</option>
+                {opt.entities.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} · {e.code}
                   </option>
                 ))}
-                {editing && project!.picUserId && !(opt?.candidates ?? []).some((c) => c.id === project!.picUserId) && (
-                  <option value={project!.picUserId}>{project!.picName}</option>
-                )}
               </select>
-              {opt && ownerId && opt.candidates.length === 0 && (
-                <p className="text-xs text-amber-700 dark:text-amber-300">Belum ada akun Manager Proyek di PT ini.</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-start" className="text-sm">Rencana mulai</Label>
-              <Input id="pp-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={field} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-end" className="text-sm">Target selesai</Label>
-              <Input id="pp-end" type="date" value={targetEndDate} onChange={(e) => setTargetEndDate(e.target.value)} className={field} />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm flex items-center gap-1.5"><Link2 className="h-4 w-4" /> PT yang berkaitan <span className="text-slate-400 font-normal">(boleh lebih dari satu)</span></Label>
-            {relatedChoices.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{ownerId ? 'Tidak ada PT lain.' : 'Pilih PT pemilik dulu.'}</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {relatedChoices.map((e) => {
-                  const on = related.includes(e.id)
-                  return (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => setRelated((r) => (on ? r.filter((x) => x !== e.id) : [...r, e.id]))}
-                      aria-pressed={on}
-                      className={cn(
-                        'min-h-10 rounded-full border px-3 text-sm font-medium inline-flex items-center gap-1.5',
-                        on ? 'border-blue-500 bg-blue-500/15 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-500/10'
-                      )}
-                    >
-                      {on && <Check className="h-3.5 w-3.5" />} {e.name}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            {related.length > 0 && <p className="text-xs text-slate-500 dark:text-slate-400">Proyek ini akan tampil juga di daftar proyek {related.length} PT terkait.</p>}
-          </div>
-
-          {editing && project!.permissions.setLifecycle && (
-            <div className="space-y-1.5">
-              <Label htmlFor="pp-life" className="text-sm">Status proyek</Label>
-              <select id="pp-life" value={lifecycle} onChange={(e) => setLifecycle(e.target.value)} className={selectClass}>
-                {project!.lifecycle === 'DIUSULKAN' && <option value="DIUSULKAN">Diusulkan (menunggu persetujuan)</option>}
-                {project!.lifecycle === 'DITOLAK' && <option value="DITOLAK">Ditolak</option>}
-                <option value="AKTIF">Aktif</option>
-                <option value="DITUTUP">Ditutup</option>
-                <option value="DIARSIPKAN">Diarsipkan</option>
-              </select>
-            </div>
+            </Field>
           )}
 
-          {!editing && chain.length > 0 && (
-            <label
-              htmlFor="pp-skip"
-              className={cn(
-                'flex items-start gap-3 rounded-2xl border p-3 cursor-pointer transition-colors',
-                skipping ? 'border-amber-500/50 bg-amber-500/10' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-500/5',
-                !earlyPhase && 'opacity-60 cursor-not-allowed'
-              )}
+          <Field label="Nama proyek" htmlFor="pp-name" required className="is-full" hint="Minimal 5 karakter.">
+            <input
+              id="pp-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="mis. Pembangunan Gudang Distribusi Timur"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Penjelasan" htmlFor="pp-desc" required className="is-full" hint="Minimal 20 karakter agar penyetuju paham.">
+            <textarea
+              id="pp-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Apa yang dibangun atau dikerjakan, lingkupnya, dan perkiraan kebutuhan."
+              className={areaCls}
+            />
+          </Field>
+          <Field label="Tujuan atau manfaat" htmlFor="pp-purpose" className="is-full">
+            <textarea
+              id="pp-purpose"
+              rows={2}
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              placeholder="Manfaat bagi PT, target yang ingin dicapai."
+              className={areaCls}
+            />
+          </Field>
+
+          <Field label="Tahap awal" htmlFor="pp-phase" hint="Opsional.">
+            <select
+              id="pp-phase"
+              value={phase}
+              onChange={(e) => {
+                setPhase(e.target.value)
+                // Jalur tanpa persetujuan hanya untuk tahap awal.
+                if (e.target.value !== '' && e.target.value !== 'INISIASI') setSkipApproval(false)
+              }}
+              className={selectCls}
             >
-              <input
-                id="pp-skip"
-                type="checkbox"
-                checked={skipping}
-                disabled={!canSkip}
-                onChange={(e) => setSkipApproval(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-amber-600"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">Daftarkan tanpa persetujuan (tahap awal)</span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {earlyPhase
-                    ? `Proyek langsung aktif tanpa menunggu ${chain.map((r) => PROJECT_APPROVER_LABELS[r] ?? r).join(' → ')}. Tercatat di kartu proyek dan jejak audit.`
-                    : 'Hanya untuk tahap awal (Inisiasi). Ubah tahapnya bila ingin memakai jalur ini.'}
-                </span>
-              </span>
-            </label>
-          )}
-
-          {errors.length > 0 && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 space-y-1">
-              {errors.map((e, i) => (
-                <p key={i} className="text-sm text-rose-700 dark:text-rose-300 flex items-start gap-2"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> {e}</p>
+              <option value="">Belum ditentukan (dianggap Inisiasi)</option>
+              {Object.entries(PROJECT_PHASE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
               ))}
-            </div>
-          )}
+            </select>
+          </Field>
+          <Field
+            label="PIC atau manager proyek"
+            htmlFor="pp-pic"
+            hint={opt && ownerId && opt.candidates.length === 0 ? 'Belum ada akun manager proyek di PT ini.' : 'Opsional. Bisa ditentukan nanti.'}
+          >
+            <select id="pp-pic" value={picUserId} onChange={(e) => setPicUserId(e.target.value)} disabled={optLoading} className={selectCls}>
+              <option value="">Kosongkan, tentukan nanti</option>
+              {(opt?.candidates ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.id === me.id ? ' (Anda)' : ''}
+                  {c.activeProjects > 0 ? ` · memegang ${c.activeProjects} proyek` : ' · belum memegang proyek'}
+                </option>
+              ))}
+              {editing && project!.picUserId && !(opt?.candidates ?? []).some((c) => c.id === project!.picUserId) && (
+                <option value={project!.picUserId}>{project!.picName}</option>
+              )}
+            </select>
+          </Field>
+          <Field
+            label="Divisi pelaksana"
+            htmlFor="pp-division"
+            hint={opt && ownerId && (opt.divisions ?? []).length === 0 ? 'Belum ada divisi aktif di PT ini.' : 'Opsional. Kosong = mengikuti divisi PIC.'}
+          >
+            <select id="pp-division" value={divisionId} onChange={(e) => setDivisionId(e.target.value)} disabled={optLoading} className={selectCls}>
+              <option value="">Ikuti divisi PIC</option>
+              {(opt?.divisions ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+              {editing && project!.divisionId && project!.division && !(opt?.divisions ?? []).some((d) => d.id === project!.divisionId) && (
+                <option value={project!.divisionId}>{project!.division.name}</option>
+              )}
+            </select>
+          </Field>
+          <Field label="Rencana mulai" htmlFor="pp-start">
+            <input id="pp-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Target selesai" htmlFor="pp-end">
+            <input id="pp-end" type="date" value={targetEndDate} onChange={(e) => setTargetEndDate(e.target.value)} className={inputCls} />
+          </Field>
         </div>
+      </section>
 
-        <div className="px-5 sm:px-7 py-4 border-t border-white/40 dark:border-white/10 flex gap-2 justify-end bg-white/40 dark:bg-slate-900/40">
-          <Button variant="ghost" onClick={onClose} disabled={busy} className="h-12 px-5 text-base">Batal</Button>
-          <Button onClick={submit} disabled={busy || !valid} className="h-12 px-6 text-base bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-glow-blue">
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : editing ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-            {editing ? 'Simpan perubahan' : chain.length > 0 && !skipping ? 'Ajukan' : 'Buat proyek'}
-          </Button>
+      <section className="mk-formsec">
+        <SectionTitle icon="alur">PT yang berkaitan</SectionTitle>
+        {optLoading && !opt ? (
+          <div className="flex gap-2" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} h={36} w={120} r={999} />
+            ))}
+          </div>
+        ) : relatedChoices.length === 0 ? (
+          <p className="t-footnote text-ink-2">{ownerId ? 'Tidak ada PT lain.' : 'Pilih PT pemilik dulu.'}</p>
+        ) : (
+          <div className="mk-filterrow" role="group" aria-label="PT yang berkaitan">
+            {relatedChoices.map((e) => {
+              const on = related.includes(e.id)
+              return (
+                <Chip key={e.id} selected={on} onClick={() => setRelated((r) => (on ? r.filter((x) => x !== e.id) : [...r, e.id]))}>
+                  {e.name}
+                </Chip>
+              )
+            })}
+          </div>
+        )}
+        <p className="t-footnote text-ink-2">
+          {related.length > 0
+            ? `Proyek ini akan tampil juga di daftar proyek ${related.length} PT terkait.`
+            : 'Boleh lebih dari satu. Proyek ikut tampil di daftar PT yang dipilih.'}
+        </p>
+      </section>
+
+      {editing && project!.permissions.setLifecycle && (
+        <Field label="Status proyek" htmlFor="pp-life">
+          <select id="pp-life" value={lifecycle} onChange={(e) => setLifecycle(e.target.value)} className={selectCls}>
+            {project!.lifecycle === 'DIUSULKAN' && <option value="DIUSULKAN">Diusulkan (menunggu persetujuan)</option>}
+            {project!.lifecycle === 'DITOLAK' && <option value="DITOLAK">Ditolak</option>}
+            <option value="AKTIF">Aktif</option>
+            <option value="DITUTUP">Ditutup</option>
+            <option value="DIARSIPKAN">Diarsipkan</option>
+          </select>
+        </Field>
+      )}
+
+      {!editing && chain.length > 0 && (
+        <SwitchRow
+          id="pp-skip"
+          title="Daftarkan tanpa persetujuan (tahap awal)"
+          description={
+            earlyPhase
+              ? `Proyek langsung aktif tanpa menunggu ${chainText}. Tercatat di detail proyek dan jejak audit.`
+              : 'Hanya untuk tahap awal (Inisiasi). Ubah tahapnya bila ingin memakai jalur ini.'
+          }
+          checked={skipping}
+          onChange={setSkipApproval}
+          disabled={!canSkip}
+        />
+      )}
+
+      {errors.length > 0 && (
+        <div className="mk-note-box mk-soft--late flex flex-col gap-1" role="alert">
+          {errors.map((e, i) => (
+            <p key={i}>{e}</p>
+          ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </Sheet>
   )
 }
