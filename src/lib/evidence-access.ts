@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { isMasterRole } from '@/lib/rbac'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence } from '@/lib/lock'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * Who may attach evidence to a report line, and who may read it back.
@@ -36,6 +37,7 @@ async function targetEntity(
         entityId: true,
         reportDate: true,
         isLocked: true,
+        forwardedAt: true,
         project: { select: { picUserId: true } },
       },
     })
@@ -43,7 +45,9 @@ async function targetEntity(
       ? {
           entityId: r.entityId,
           picUserId: r.project.picUserId,
-          locked: r.isLocked || isDailyLocked(r.reportDate),
+          locked:
+            (r.isLocked || !!r.forwardedAt || isDailyLocked(r.reportDate)) &&
+            !(await activeUnlockFor('DAILY_REPORT', targetId)),
         }
       : null
   }
@@ -54,7 +58,9 @@ async function targetEntity(
       select: {
         weeklyReport: {
           select: {
+            id: true,
             entityId: true,
+            forwardedAt: true,
             periodStart: true,
             isLocked: true,
             statusHeader: true,
@@ -68,9 +74,11 @@ async function targetEntity(
           entityId: item.weeklyReport.entityId,
           headUserId: item.weeklyReport.division.headUserId,
           locked:
-            item.weeklyReport.isLocked ||
-            item.weeklyReport.statusHeader === 'TERKUNCI' ||
-            isWeeklyLocked(item.weeklyReport.periodStart),
+            (item.weeklyReport.isLocked ||
+              !!item.weeklyReport.forwardedAt ||
+              item.weeklyReport.statusHeader === 'TERKUNCI' ||
+              isWeeklyLocked(item.weeklyReport.periodStart)) &&
+            !(await activeUnlockFor('WEEKLY_REPORT', item.weeklyReport.id)),
         }
       : null
   }
@@ -81,16 +89,23 @@ async function targetEntity(
       select: {
         entityId: true,
         workDate: true,
+        projectId: true,
         project: { select: { picUserId: true } },
       },
     })
-    return t
-      ? {
-          entityId: t.entityId,
-          picUserId: t.project.picUserId,
-          locked: isDailyLocked(t.workDate),
-        }
-      : null
+    if (!t) return null
+
+    // Task evidence follows the same project/day report as task edits.
+    const report = await db.dailyProjectReport.findUnique({
+      where: { projectId_reportDate: { projectId: t.projectId, reportDate: t.workDate } },
+      select: { id: true, isLocked: true, forwardedAt: true },
+    })
+    const frozen = !!(report?.isLocked || report?.forwardedAt) || isDailyLocked(t.workDate)
+    return {
+      entityId: t.entityId,
+      picUserId: t.project.picUserId,
+      locked: frozen && !(report && (await activeUnlockFor('DAILY_REPORT', report.id))),
+    }
   }
 
   if (targetType === 'PROGRESS_REPORT') {
