@@ -28,13 +28,13 @@ Cara memakai:
 | TUGAS CD 6 | Commit bertahap cabang `desain-baru` | Claude | menunggu persetujuan pengguna | CD 5 |
 | TUGAS CD 7 | Gabungkan hasil Codex + tulis migrasi dari usulan skema | Claude | menunggu | CD 6, semua CX selesai |
 | TUGAS CD 8 | Hapus 44 berkas UI tak terpakai & paket npm-nya | Claude | menunggu persetujuan pengguna | CD 7 |
-| TUGAS CX 1 | Buka kunci berlaku untuk bukti (unggah/hapus) | Codex | siap | — |
-| TUGAS CX 2 | Papan task mingguan menandai hari yang dibekukan | Codex | siap | — |
-| TUGAS CX 3 | CI GitHub Actions | Codex | siap | — |
-| TUGAS CX 4 | Basis data lokal di Docker untuk pengembangan | Codex | siap | — |
-| TUGAS CX 5 | Data seed untuk semua model baru | Codex | siap | CX 4 (untuk uji) |
-| TUGAS CX 6 | Tinjauan & pengujian paket deploy VPS | Codex | siap | — |
-| TUGAS CX 7 | Driver penyimpanan bukti yang bisa diganti (S3/MinIO) | Codex | ditahan — tunggu keputusan pengguna | — |
+| TUGAS CX 1 | Buka kunci berlaku untuk bukti (unggah/hapus) | Codex | selesai | — |
+| TUGAS CX 2 | Papan task mingguan menandai hari yang dibekukan | Codex | selesai | — |
+| TUGAS CX 3 | CI GitHub Actions | Codex | selesai | — |
+| TUGAS CX 4 | Basis data lokal di Docker untuk pengembangan | Codex | selesai | — |
+| TUGAS CX 5 | Data seed untuk semua model baru | Codex | selesai | CX 4 (untuk uji) |
+| TUGAS CX 6 | Tinjauan & pengujian paket deploy VPS | Codex | selesai | — |
+| TUGAS CX 7 | Driver penyimpanan bukti yang bisa diganti (S3/MinIO) | Codex | selesai | — |
 
 ---
 
@@ -114,8 +114,8 @@ tidak disentuh agen mana pun.
 - **Kerjakan:** periksa skrip dengan `shellcheck` (pasang manual di luar sandbox bila perlu), uji `deploy/app-vps/docker-compose.yml` dan `deploy.sh` di mesin lokal sejauh mungkin (tanpa server sungguhan), perbaiki temuan, tambahkan `deploy/CHECKLIST-RILIS.md`.
 - **Kriteria:** `bash -n` dan `shellcheck -S warning` bersih; `docker compose -f deploy/app-vps/docker-compose.yml config` sah; tidak ada port aplikasi yang terbuka selain lewat Caddy.
 
-### TUGAS CX 7 — Driver penyimpanan bukti (ditahan)
-- Pengguna memutuskan penyimpanan **tetap Supabase Storage** untuk sekarang, dan akan menyiapkan penyimpanan di Docker nanti. Jangan dikerjakan sampai statusnya diubah menjadi **siap** oleh pengguna.
+### TUGAS CX 7 — Driver penyimpanan bukti
+- Dibuka oleh permintaan pengguna untuk mengerjakan CX 1 sampai CX 7 pada 6 Oktober 2026. **Supabase tetap driver bawaan**; S3/MinIO menjadi pilihan konfigurasi server, tanpa memindahkan data atau mengubah penyimpanan aktif.
 - Rancangan bila dibuka: `STORAGE_DRIVER=supabase|s3` di `src/lib/storage.ts`, bawaan `supabase`, perilaku tidak berubah.
 
 ---
@@ -126,7 +126,10 @@ Tulis di sini bila sebuah tugas butuh perubahan di zona pihak lain.
 
 | Dari | Untuk | Berkas | Perubahan yang diminta | Status |
 |---|---|---|---|---|
-| | | | | |
+| CX 2 | Claude CD 1 | `src/components/preview/mock-pic.ts` | Pratinjau laporan mingguan PIC perlu mock `/api/progress-reports` dan `/api/tasks?week=` dengan `frozenDays`, agar visual hari beku dapat diuji. | diminta |
+| CX 2 | Claude CD 3 | `src/components/weekly-board.tsx` | Prop opsional `disabledLanes` dan `renderLaneNote` agar lajur beku tetap pada urutan kronologis satu papan. CX2 sekarang menampilkan bagian baca-saja terpisah dengan guard mutasi. | diminta |
+| CX 7 | Claude CD 4 | `src/lib/security-headers.ts` | Izinkan origin storage S3 yang dipilih konfigurasi pada img/media/connect CSP (tanpa wildcard). CSP sekarang hanya mengenal Supabase, sehingga preview gambar S3 di produksi diblokir. | diminta |
+| CX 7 | Claude CD 4 | `src/app/api/evidence/upload/route.ts` | Pesan needsConfig masih hanya menyebut SUPABASE_SERVICE_ROLE_KEY; sesuaikan dengan driver aktif. Ekspor/fungsi driver tetap kompatibel. | diminta |
 
 ## Sinkronisasi
 
@@ -141,3 +144,7 @@ git merge --no-edit codex/basis
 
 `sinkron-codex.sh` hanya memindahkan cabang `codex/basis` ke potret pohon kerja
 Claude saat itu; folder dan cabang Claude tidak berubah.
+
+## Serah terima CX 1–7
+
+Implementasi dan kriteria pemeriksaan CX selesai pada 6 Oktober 2026. Hasil integrasi dan batas verifikasi ada di [docs/codex/README.md](codex/README.md). CI GitHub menunggu push; uji visual CX2 dan CSP gambar S3 membutuhkan tindak lanjut lintas zona di tabel di atas. Tidak ada merge ke desain-baru atau akses Supabase.
