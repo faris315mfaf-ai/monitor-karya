@@ -3,16 +3,18 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { useApp } from '@/components/app-provider'
-import { BrandLogo, initialsOf } from '@/components/brand-logo'
+import { BrandLogo } from '@/components/brand-logo'
+import { Avatar, LogoMark } from '@/components/mk'
 import { ROLE_LABELS } from '@/lib/constants'
+import { initials } from '@/lib/format'
 
-const SHOW_MS = 2800
+const SHOW_MS = 2400
 
 /**
  * Layar pembuka sekali setiap kali masuk (14 Sep 2026): logo holding sebagai
- * inisiator sistem, lalu siapa yang masuk beserta logo perusahaannya.
- * Kuncinya waktu masuk terakhir, jadi memuat ulang halaman tidak
- * memunculkannya lagi; masuk berikutnya iya. Ketuk di mana saja untuk lewat.
+ * inisiator sistem, lalu siapa yang masuk beserta perusahaannya. Kuncinya
+ * waktu masuk terakhir, jadi memuat ulang halaman tidak memunculkannya lagi.
+ * Ketuk di mana saja untuk lewat.
  */
 export function SplashScreen() {
   const { user, branding } = useApp()
@@ -26,7 +28,6 @@ export function SplashScreen() {
     } catch {}
     if (seen) return
     try {
-      // Buang kunci masuk sebelumnya milik akun ini supaya localStorage tidak menumpuk.
       const prefix = `mk-splash:${user.id}:`
       Object.keys(window.localStorage)
         .filter((k) => k.startsWith(prefix) && k !== key)
@@ -56,60 +57,41 @@ export function SplashScreen() {
             onClick={() => setVisible(false)}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.35, ease: 'easeIn' } }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 text-white cursor-pointer select-none"
+            exit={{ opacity: 0, transition: { duration: 0.25, ease: [0.4, 0, 1, 1] } }}
+            className="mk-splash"
           >
-            {/* Kilau lembut di belakang logo */}
-            <div className="absolute h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
-
             <motion.div
-              initial={{ scale: 0.86, opacity: 0, y: 14 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 240, damping: 24 }}
-              className="relative flex flex-col items-center text-center px-6"
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+              className="flex flex-col items-center text-center px-6"
             >
               {initiator ? (
-                <BrandLogo name={initiator.name} logoData={initiator.logoData} size={120} tone="slate" className="shadow-2xl ring-4 ring-white/10" />
+                <BrandLogo name={initiator.name} logoData={initiator.logoData} size={104} tone="slate" />
               ) : (
-                <div className="h-[120px] w-[120px] rounded-3xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center text-4xl font-bold shadow-2xl">MK</div>
+                <LogoMark size={96} label="Monitor Karya" />
               )}
-              <div className="mt-6 text-[11px] uppercase tracking-[0.25em] text-cyan-200/80">Inisiator · Holding</div>
-              <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight">{initiator?.name ?? 'MonitorKarya'}</h1>
-              <p className="mt-1 text-sm text-white/60">Sistem pemantauan bisnis holding</p>
+              <h1 className="t-title-1 mt-6">{initiator?.name ?? 'Monitor Karya'}</h1>
+              <p className="t-body text-ink-2 mt-1">Pemantauan kerja berbasis output</p>
 
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.4 }}
-                className="mt-8 flex items-center gap-3 rounded-2xl bg-white/10 backdrop-blur px-4 py-3 text-left"
+                transition={{ delay: 0.35, duration: 0.3 }}
+                className="mk-card mt-8 flex items-center gap-3 text-left !py-3 !px-4"
               >
-                {company ? (
-                  <BrandLogo name={company.name} logoData={company.logoData} size={44} />
-                ) : (
-                  <div className="h-11 w-11 rounded-xl flex items-center justify-center font-bold text-white" style={{ background: user.avatarColor ?? '#2563eb' }}>
-                    {initialsOf(user.name)}
-                  </div>
-                )}
+                {company ? <BrandLogo name={company.name} logoData={company.logoData} size={40} /> : <Avatar initials={initials(user.name)} size={40} />}
                 <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-wide text-white/60">Masuk sebagai</div>
-                  <div className="text-base font-semibold leading-tight truncate">{user.name}</div>
-                  <div className="text-[13px] text-white/70 truncate">
+                  <div className="t-caption text-ink-2">Masuk sebagai</div>
+                  <div className="t-body-strong truncate">{user.name}</div>
+                  <div className="t-footnote text-ink-2 truncate">
                     {roleLabel}
                     {company ? ` · ${company.name}` : ''}
                   </div>
                 </div>
               </motion.div>
             </motion.div>
-
-            <div className="absolute bottom-10 h-1 w-40 overflow-hidden rounded-full bg-white/15">
-              <motion.div
-                initial={{ width: '0%' }}
-                animate={{ width: '100%' }}
-                transition={{ duration: SHOW_MS / 1000, ease: 'linear' }}
-                className="h-full bg-cyan-300"
-              />
-            </div>
-            <div className="absolute bottom-4 text-xs text-white/50">Ketuk untuk lanjut</div>
+            <div className="absolute bottom-8 t-footnote text-ink-2">Ketuk untuk lanjut</div>
           </motion.div>
         )}
       </AnimatePresence>

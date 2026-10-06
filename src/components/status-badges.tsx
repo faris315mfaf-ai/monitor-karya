@@ -1,6 +1,11 @@
 'use client'
 
-import { cn } from '@/lib/utils'
+/**
+ * Lencana status lama dipetakan ke StatusBadge desain: warna + ikon + kata
+ * (01 · Prinsip: warna tidak pernah sendirian).
+ */
+
+import { StatusBadge, type Status } from '@/components/mk'
 import {
   DAILY_STATUS_META,
   WEEKLY_STATUS_META,
@@ -9,79 +14,81 @@ import {
   PRIORITY_META,
   UNLOCK_STATUS_META,
 } from '@/lib/constants'
+import { formatPercent } from '@/lib/format'
+
+const DAILY: Record<string, Status> = {
+  SELESAI: 'done',
+  ON_PROGRESS: 'on',
+  TERKENDALA: 'risk',
+  MENUNGGU_KEPUTUSAN: 'info',
+  TIDAK_ADA_PERUBAHAN: 'neutral',
+}
+const WEEKLY_ITEM: Record<string, Status> = {
+  SELESAI: 'done',
+  ON_PROGRESS: 'on',
+  BELUM_MULAI: 'neutral',
+  TERKENDALA: 'risk',
+  NA: 'neutral',
+}
+const WEEKLY_HEADER: Record<string, Status> = {
+  DRAFT: 'info',
+  MENUNGGU_PERSETUJUAN: 'risk',
+  DISETUJUI: 'done',
+  TERKUNCI: 'neutral',
+}
+const ESCALATION: Record<string, Status> = { DIAJUKAN: 'info', DITINJAU: 'risk', DIPUTUSKAN: 'done', DITUTUP: 'neutral' }
+const PRIORITY: Record<string, Status> = { TINGGI: 'late', SEDANG: 'risk', RENDAH: 'info' }
+const UNLOCK: Record<string, Status> = { DIAJUKAN: 'info', DISETUJUI: 'done', DITOLAK: 'late', DIEKSEKUSI: 'done' }
+
+export const dailyStatus = (s: string | null | undefined): Status => (s && DAILY[s]) || 'neutral'
+export const weeklyItemStatus = (s: string | null | undefined): Status => (s && WEEKLY_ITEM[s]) || 'neutral'
+export const weeklyHeaderStatus = (s: string | null | undefined): Status => (s && WEEKLY_HEADER[s]) || 'neutral'
+export const escalationStatus = (s: string | null | undefined): Status => (s && ESCALATION[s]) || 'neutral'
+
+function Unknown({ value }: { value: string }) {
+  return <StatusBadge status="neutral" size="sm">{value}</StatusBadge>
+}
 
 export function DailyStatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'xs' }) {
   const meta = DAILY_STATUS_META[status]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{status}</span>
-  const sz = size === 'xs' ? 'text-[11px] px-1.5 py-0.5 gap-1' : 'text-xs px-2 py-0.5 gap-1.5'
-  return (
-    <span className={cn('inline-flex items-center rounded-full font-semibold', meta.bg, meta.text, sz)}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} />
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={status} />
+  return <StatusBadge status={DAILY[status]} size={size === 'xs' ? 'sm' : 'md'}>{meta.label}</StatusBadge>
 }
 
 export function WeeklyItemStatusBadge({ status }: { status: string }) {
   const meta = WEEKLY_STATUS_META[status]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{status}</span>
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full text-xs font-semibold px-2 py-0.5', meta.bg, meta.text)}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} />
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={status} />
+  return <StatusBadge status={WEEKLY_ITEM[status]} size="sm">{meta.label}</StatusBadge>
 }
 
 export function WeeklyHeaderBadge({ status }: { status: string }) {
   const meta = WEEKLY_HEADER_META[status]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{status}</span>
-  return (
-    <span className={cn('inline-flex items-center rounded-full text-xs font-semibold px-2 py-0.5', meta.bg, meta.text)}>
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={status} />
+  return <StatusBadge status={WEEKLY_HEADER[status]} size="sm">{meta.label}</StatusBadge>
 }
 
 export function EscalationStatusBadge({ status }: { status: string }) {
   const meta = ESCALATION_STATUS_META[status]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{status}</span>
-  return (
-    <span className={cn('inline-flex items-center rounded-full text-xs font-semibold px-2 py-0.5', meta.bg, meta.text)}>
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={status} />
+  return <StatusBadge status={ESCALATION[status]} size="sm">{meta.label}</StatusBadge>
 }
 
 export function PriorityBadge({ priority }: { priority: string }) {
   const meta = PRIORITY_META[priority]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{priority}</span>
-  return (
-    <span className={cn('inline-flex items-center rounded-full text-xs font-semibold px-2 py-0.5', meta.bg, meta.text)}>
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={priority} />
+  return <StatusBadge status={PRIORITY[priority]} size="sm">{meta.label}</StatusBadge>
 }
 
 export function UnlockStatusBadge({ status }: { status: string }) {
   const meta = UNLOCK_STATUS_META[status]
-  if (!meta) return <span className="text-sm text-slate-500 dark:text-slate-400">{status}</span>
-  return (
-    <span className={cn('inline-flex items-center rounded-full text-xs font-semibold px-2 py-0.5', meta.bg, meta.text)}>
-      {meta.label}
-    </span>
-  )
+  if (!meta) return <Unknown value={status} />
+  return <StatusBadge status={UNLOCK[status]} size="sm">{meta.label}</StatusBadge>
+}
+
+export function complianceStatus(score: number): Status {
+  return score >= 90 ? 'done' : score >= 75 ? 'on' : score >= 60 ? 'risk' : 'late'
 }
 
 export function ComplianceBadge({ score }: { score: number }) {
-  const color =
-    score >= 90 ? { bg: 'bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300' }
-    : score >= 75 ? { bg: 'bg-blue-500/15', text: 'text-blue-700 dark:text-blue-300' }
-    : score >= 60 ? { bg: 'bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300' }
-    : { bg: 'bg-rose-500/15', text: 'text-rose-700 dark:text-rose-300' }
-  return (
-    <span className={cn('inline-flex items-center rounded-full text-xs font-bold px-2 py-0.5 tabular-nums', color.bg, color.text)}>
-      {score.toFixed(1)}%
-    </span>
-  )
+  return <StatusBadge status={complianceStatus(score)} size="sm">{formatPercent(score, 1)}</StatusBadge>
 }

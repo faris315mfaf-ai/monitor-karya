@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
+import { isDailyLocked } from '@/lib/lock'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * Rolls a project's tasks up into its daily report.
@@ -113,7 +115,11 @@ export async function rollupDailyReport(projectId: string, workDate: Date): Prom
     return null
   }
 
-  if (existing?.isLocked) return rollup
+  // Laporan yang dikunci atau sudah diteruskan ke holding dibekukan; hanya buka
+  // kunci yang sedang berlaku yang boleh mengubah angkanya lagi.
+  if ((existing?.isLocked || existing?.forwardedAt) && !(await activeUnlockFor('DAILY_REPORT', existing.id))) {
+    return rollup
+  }
 
   const ownEvidence = existing
     ? await db.evidence.count({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
@@ -179,4 +185,53 @@ export async function syncEvidenceCount(targetType: string, targetId: string): P
   }
 
   return count
+}
+
+// ------------------------------------------------------------------
+// Pembekuan laporan harian (6 Okt 2026)
+// ------------------------------------------------------------------
+
+/** Pesan 409 untuk laporan yang sudah diteruskan Admin PT ke holding. */
+export const FORWARDED_FROZEN_MESSAGE = 'Laporan sudah diteruskan ke holding. Ajukan buka kunci untuk mengubahnya.'
+export const REPORT_LOCKED_MESSAGE = 'Laporan ini sudah dikunci. Ajukan buka kunci untuk mengubahnya.'
+
+export type DailyGate = {
+  report: { id: string; forwardedAt: Date | null; isLocked: boolean } | null
+  /** Buka kunci yang sedang berlaku untuk laporan hari itu, bila ada. */
+  unlock: { id: string; unlockUntil: Date | null } | null
+  /** Alasan laporan dibekukan (diteruskan/terkunci) tanpa buka kunci aktif; null bila tidak. */
+  frozen: 'FORWARDED' | 'LOCKED' | null
+  /** Lewat tenggat 17.00 hari itu dan tidak sedang dibuka. */
+  timeLocked: boolean
+}
+
+/**
+ * Boleh tidaknya laporan harian satu proyek pada satu hari ditulis — dipakai
+ * /api/daily-input dan /api/tasks agar aturannya satu:
+ *
+ *   - laporan yang sudah diteruskan ke holding (`forwardedAt`) atau dikunci
+ *     (`isLocked`) dibekukan;
+ *   - hari yang lewat tenggat 17.00 WIB terkunci;
+ *   - keduanya hanya bisa ditembus oleh buka kunci yang sedang berlaku
+ *     (`activeUnlockFor`), yang selalu menunjuk satu laporan.
+ */
+export async function dailyGate(projectId: string, day: Date, now: Date = new Date()): Promise<DailyGate> {
+  const report = await db.dailyProjectReport.findUnique({
+    where: { projectId_reportDate: { projectId, reportDate: day } },
+    select: { id: true, forwardedAt: true, isLocked: true },
+  })
+  const pastCutoff = isDailyLocked(day, now)
+  const blocked = Boolean(report?.forwardedAt) || Boolean(report?.isLocked) || pastCutoff
+  const unlock = report && blocked ? await activeUnlockFor('DAILY_REPORT', report.id, now) : null
+  return {
+    report: report ?? null,
+    unlock,
+    frozen: unlock ? null : report?.forwardedAt ? 'FORWARDED' : report?.isLocked ? 'LOCKED' : null,
+    timeLocked: pastCutoff && !unlock,
+  }
+}
+
+/** Pesan untuk laporan yang dibekukan, atau null. */
+export function frozenMessage(gate: Pick<DailyGate, 'frozen'>): string | null {
+  return gate.frozen === 'FORWARDED' ? FORWARDED_FROZEN_MESSAGE : gate.frozen === 'LOCKED' ? REPORT_LOCKED_MESSAGE : null
 }

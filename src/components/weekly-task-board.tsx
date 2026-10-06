@@ -1,19 +1,16 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
-import { LoadingSpinner, ErrorState } from '@/components/loading-states'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import { WeeklyBoard, WEEKLY_LANE, boardSignature, wibKey, type BoardMove } from '@/components/weekly-board'
+import {
+  Button, Card as MkCard, ErrorNote, Icon, IconButton, ProgressBar, Skeleton, StatusBadge, cx, type Status,
+} from '@/components/mk'
+import { useConfirm } from '@/components/companies/parts'
+import { WeeklyBoard, WEEKLY_LANE, boardSignature, movesFor, wibKey, type BoardMove } from '@/components/weekly-board'
 import { TaskDialog, TASK_STATUS_META, type ProjectOption, type TaskRecord } from '@/components/task-dialog'
 import { URGENCY_META } from '@/lib/constants'
 import { formatDate, formatDateTime } from '@/lib/format'
-import { cn } from '@/lib/utils'
-import {
-  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, ListChecks, Loader2, Lock, Paperclip, Plus,
-  SquarePen, Trash2,
-} from 'lucide-react'
 
 type WeekTask = TaskRecord & { workDate: string; scope: string; sortOrder: number }
 
@@ -28,7 +25,8 @@ type Data = {
 
 type Card = WeekTask & { lane: string }
 
-const laneOf = (t: WeekTask) => (t.scope === 'MINGGUAN' ? WEEKLY_LANE : wibKey(t.workDate))
+// Tanpa workDate (data pratinjau lama) kartu jatuh ke lajur mingguan, bukan galat RangeError.
+const laneOf = (t: WeekTask) => (t.scope === 'MINGGUAN' || !t.workDate ? WEEKLY_LANE : wibKey(t.workDate))
 
 /** Kunci minggu ISO ("2026-W37") untuk sebuah instan, dihitung dalam WIB. */
 export function weekKeyOf(date: Date = new Date()): string {
@@ -50,6 +48,41 @@ export function shiftWeekKey(key: string, offset: number): string {
   const monday = jan4 - (dow - 1) * 86400000 + (Number(m[2]) - 1 + offset) * 7 * 86400000
   // Senin 00:00 WIB sebagai instan UTC, lalu kunci minggunya.
   return weekKeyOf(new Date(monday - 7 * 3600000))
+}
+
+/** Status task → kosakata status desain (warna + ikon + kata). */
+const TASK_STATUS: Record<string, Status> = {
+  BELUM_MULAI: 'neutral',
+  BERJALAN: 'on',
+  SELESAI: 'done',
+  TERKENDALA: 'risk',
+  MENUNGGU_KEPUTUSAN: 'info',
+}
+
+/** Urgensi → nada tepi kartu dan titik label. */
+const URGENCY_TONE: Record<string, 'late' | 'risk' | 'accent' | 'neutral'> = {
+  KRITIS: 'late',
+  TINGGI: 'risk',
+  SEDANG: 'accent',
+  RENDAH: 'neutral',
+}
+
+/** Kerangka memuat seukuran isi asli: navigasi minggu + empat lajur. */
+function BoardSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Memuat capaian mingguan">
+      <div className="mk-card">
+        <Skeleton h={20} w={180} />
+        <div className="h-2" />
+        <Skeleton h={14} w="60%" />
+      </div>
+      <div className="mk-wb">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} h={160} r={14} />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -76,20 +109,24 @@ export function WeeklyTaskBoard({
   const [dialog, setDialog] = useState<{ task: WeekTask | null; lane: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [confirmEl, confirm] = useConfirm()
 
   const cards = useMemo<Card[]>(() => (data?.tasks ?? []).map((t) => ({ ...t, lane: laneOf(t) })), [data])
 
-  if (loading) return <LoadingSpinner className="py-8" />
-  if (error || !data) return <ErrorState message={error ?? 'Data tidak tersedia'} />
+  if (loading && !data) return <BoardSkeleton />
+  if (error || !data) return <ErrorNote message={error ?? 'Data capaian mingguan belum termuat.'} onRetry={reload} />
 
   const done = data.tasks.filter((t) => t.status === 'SELESAI').length
   const blocked = data.tasks.filter((t) => t.status === 'TERKENDALA' || t.status === 'MENUNGGU_KEPUTUSAN').length
   const avg = data.tasks.length ? Math.round(data.tasks.reduce((s, t) => s + t.progressPct, 0) / data.tasks.length) : 0
   const weekNo = Number(data.period.key.split('-W')[1])
+  const answer =
+    data.tasks.length === 0
+      ? `Belum ada capaian di minggu ${weekNo}.`
+      : `${done} dari ${data.tasks.length} capaian minggu ${weekNo} sudah selesai.`
 
-  async function move(moves: BoardMove[]) {
-    setMsg(null)
+  /** Kirim susunan ke server; true bila tersimpan. */
+  async function persist(moves: BoardMove[]): Promise<boolean> {
     try {
       const res = await fetch('/api/tasks', {
         method: 'PATCH',
@@ -101,110 +138,116 @@ export function WeeklyTaskBoard({
         }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) setMsg({ kind: 'err', text: json.error || 'Gagal memindahkan kartu' })
-      else setMsg({ kind: 'ok', text: 'Susunan tersimpan.' })
+      if (!res.ok) {
+        toast.error(json.error || 'Kartu belum berpindah. Coba lagi.')
+        return false
+      }
+      return true
     } catch {
-      setMsg({ kind: 'err', text: 'Tidak dapat menghubungi server.' })
+      toast.error('Tidak dapat menghubungi server.')
+      return false
     } finally {
       setVersion((v) => v + 1)
       reload()
     }
   }
 
-  async function remove(id: string) {
-    if (!window.confirm('Hapus capaian ini beserta lampirannya?')) return
-    setBusy(id)
-    setMsg(null)
+  async function move(moves: BoardMove[]) {
+    // Susunan sebelum dipindah, untuk "Urungkan": lajur yang sama, urutan lama.
+    const undo = movesFor(cards, moves.map((m) => m.lane))
+    if (!(await persist(moves))) return
+    toast('Susunan tersimpan.', {
+      action: {
+        label: 'Urungkan',
+        onClick: () => {
+          void persist(undo).then((ok) => ok && toast('Susunan dikembalikan.'))
+        },
+      },
+    })
+  }
+
+  async function remove(t: WeekTask) {
+    const ok = await confirm({
+      title: 'Hapus capaian ini?',
+      description: `"${t.title}" beserta lampirannya akan dihapus permanen.`,
+      confirmLabel: 'Hapus capaian',
+      destructive: true,
+    })
+    if (!ok) return
+    setBusy(t.id)
     try {
-      const res = await fetch(`/api/tasks?id=${id}&context=MINGGUAN`, { method: 'DELETE' })
+      const res = await fetch(`/api/tasks?id=${t.id}&context=MINGGUAN`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) setMsg({ kind: 'err', text: json.error || 'Gagal menghapus' })
-      else reload()
+      if (!res.ok) toast.error(json.error || 'Capaian belum terhapus.')
+      else {
+        toast.success('Capaian dihapus.')
+        reload()
+      }
     } catch {
-      setMsg({ kind: 'err', text: 'Tidak dapat menghubungi server.' })
+      toast.error('Tidak dapat menghubungi server.')
     } finally {
       setBusy(null)
     }
   }
 
   return (
-    <div className="space-y-3">
+    <div className={cx('space-y-3', loading && 'opacity-60 pointer-events-none transition-opacity')} aria-busy={loading || undefined}>
       {/* Navigasi minggu + ringkasan */}
-      <div className="glass rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="icon-sm" aria-label="Minggu sebelumnya" onClick={() => onWeekChange(shiftWeekKey(data.period.key, -1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0 px-1">
-            <div className="text-base font-semibold text-slate-800 dark:text-slate-100 leading-tight">
-              Minggu {weekNo}
-              {data.period.current && (
-                <span className="ml-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5">
-                  Berjalan
+      <MkCard>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex items-center gap-1">
+            <IconButton icon="kiri" label="Minggu sebelumnya" onClick={() => onWeekChange(shiftWeekKey(data.period.key, -1))} />
+            <div className="min-w-0 px-1">
+              <div className="t-headline text-ink flex items-center gap-2">
+                Minggu {weekNo}
+                {data.period.current && <span className="t-caption font-semibold text-accent">Berjalan</span>}
+              </div>
+              <div className="t-footnote text-ink-2">
+                {formatDate(data.period.start)}–{formatDate(data.period.end)} ·{' '}
+                {data.locked ? `dikunci ${formatDateTime(data.period.lockAt)}` : `kunci ${formatDateTime(data.period.lockAt)}`}
+              </div>
+            </div>
+            <IconButton
+              icon="kanan"
+              label="Minggu berikutnya"
+              disabled={data.period.current}
+              onClick={() => onWeekChange(shiftWeekKey(data.period.key, 1))}
+            />
+          </div>
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="t-body-strong text-ink">{answer}</p>
+            <div className="mk-wb-sum">
+              <span>
+                <strong>{data.tasks.length}</strong> capaian
+              </span>
+              <span>
+                <strong>{done}</strong> selesai
+              </span>
+              {blocked > 0 && (
+                <span className="mk-text--risk">
+                  <strong className="mk-text--risk">{blocked}</strong> terhambat
                 </span>
               )}
-            </div>
-            <div className="text-[13px] text-slate-500 dark:text-slate-400">
-              {formatDate(data.period.start)} – {formatDate(data.period.end)} ·{' '}
-              {data.locked ? `dikunci ${formatDateTime(data.period.lockAt)}` : `kunci ${formatDateTime(data.period.lockAt)}`}
+              <span className="mk-wb-sum__bar">
+                <ProgressBar value={avg} label="Rata-rata progres minggu ini" />
+              </span>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            aria-label="Minggu berikutnya"
-            disabled={data.period.current}
-            onClick={() => onWeekChange(shiftWeekKey(data.period.key, 1))}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
-          <span>
-            <strong className="text-slate-800 dark:text-slate-100">{data.tasks.length}</strong> capaian
-          </span>
-          <span>
-            <strong className="text-emerald-600">{done}</strong> selesai
-          </span>
-          {blocked > 0 && (
-            <span>
-              <strong className="text-rose-600">{blocked}</strong> terhambat
-            </span>
+          {!data.locked ? (
+            <Button variant="primary" icon="tambah" onClick={() => setDialog({ task: null, lane: wibKey(data.today) })}>
+              Tambah capaian
+            </Button>
+          ) : (
+            <p className="mk-wb-note is-neutral">
+              <Icon name="kunci" size={16} />
+              <span>Minggu terkunci, hanya dapat dibaca.</span>
+            </p>
           )}
-          <span className="flex items-center gap-2 min-w-[120px]">
-            <Progress value={avg} className="h-1.5 flex-1" /> <span className="tabular-nums">{avg}%</span>
-          </span>
         </div>
-        {!data.locked ? (
-          <Button
-            onClick={() => setDialog({ task: null, lane: wibKey(data.today) })}
-            className="h-11 bg-gradient-to-r from-blue-600 to-blue-500 text-white"
-          >
-            <Plus className="h-5 w-5" /> Tambah capaian
-          </Button>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-sm text-rose-700 dark:text-rose-300">
-            <Lock className="h-4 w-4" /> Minggu terkunci
-          </span>
-        )}
-      </div>
-
-      {msg && (
-        <div
-          className={cn(
-            'flex items-start gap-2 rounded-lg p-2.5 text-[13px]',
-            msg.kind === 'ok'
-              ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300'
-              : 'bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300'
-          )}
-        >
-          {msg.kind === 'ok' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
-          {msg.text}
-        </div>
-      )}
+      </MkCard>
 
       {!data.locked && (
-        <p className="text-[13px] text-slate-500 dark:text-slate-400 px-1">
+        <p className="t-footnote text-ink-2 px-1">
           Seret pegangan ⋮ untuk memindahkan capaian antar hari atau ke lajur mingguan. Di ponsel, tahan kartu sebentar lalu geser.
         </p>
       )}
@@ -225,7 +268,7 @@ export function WeeklyTaskBoard({
             locked={data.locked}
             busy={busy === t.id}
             onEdit={() => setDialog({ task: t, lane: t.lane })}
-            onDelete={() => remove(t.id)}
+            onDelete={() => remove(t)}
           />
         )}
       />
@@ -244,6 +287,7 @@ export function WeeklyTaskBoard({
           weekly={{ week: data.period.key, days: data.days, lane: dialog.lane }}
         />
       )}
+      {confirmEl}
     </div>
   )
 }
@@ -265,69 +309,52 @@ function TaskCard({
 }) {
   const meta = TASK_STATUS_META[t.status] ?? TASK_STATUS_META.BELUM_MULAI
   const urg = URGENCY_META[t.urgency] ?? URGENCY_META.SEDANG
+  const urgTone = URGENCY_TONE[t.urgency] ?? 'accent'
   const subDone = t.subtasks.filter((s) => s.isDone).length
+  const files = t.evidence?.length ?? 0
   return (
-    <div
-      className={cn(
-        'glass rounded-xl p-3 space-y-2 border-l-4',
-        t.urgency === 'KRITIS'
-          ? 'border-l-rose-500'
-          : t.urgency === 'TINGGI'
-            ? 'border-l-amber-500'
-            : t.urgency === 'RENDAH'
-              ? 'border-l-slate-300 dark:border-l-slate-600'
-              : 'border-l-blue-500',
-        dragging && 'ring-2 ring-blue-500/50'
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug">{t.title}</div>
-        <span className={cn('shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full', meta.chip)}>{meta.label}</span>
+    <article className={cx('mk-wb-card', `is-${urgTone}`, dragging && 'is-dragging')} aria-label={t.title}>
+      <div className="mk-wb-card__top">
+        <div className="mk-wb-card__title">{t.title}</div>
+        <StatusBadge status={TASK_STATUS[t.status] ?? 'neutral'} size="sm" className="shrink-0">
+          {meta.label}
+        </StatusBadge>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-        <span className={cn('inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded-full', urg.bg, urg.text)}>
-          <span className={cn('h-1.5 w-1.5 rounded-full', urg.dot)} /> {urg.label}
+      <div className="mk-wb-card__meta">
+        <span>
+          <span className={cx('mk-dot', `mk-bg--${urgTone}`)} aria-hidden /> Urgensi {urg.label.toLowerCase()}
         </span>
         {t.picName && <span>PIC {t.picName}</span>}
         {t.subtasks.length > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <ListChecks className="h-3.5 w-3.5" /> {subDone}/{t.subtasks.length}
+          <span aria-label={`${subDone} dari ${t.subtasks.length} langkah selesai`}>
+            <Icon name="persetujuan" size={14} /> {subDone}/{t.subtasks.length}
           </span>
         )}
-        {(t.evidence?.length ?? 0) > 0 && (
-          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-            <Paperclip className="h-3.5 w-3.5" /> {t.evidence!.length}
+        {files > 0 && (
+          <span className="mk-text--done" aria-label={`${files} bukti`}>
+            <Icon name="dokumen" size={14} /> {files}
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <Progress value={t.progressPct} className="h-1.5 flex-1" />
-        <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t.progressPct}%</span>
-      </div>
+      <ProgressBar value={t.progressPct} label={`Progres ${t.title}`} />
       {(t.obstacle || t.decisionNeeded) && (
-        <p className="text-xs rounded-md bg-rose-500/10 border border-rose-500/25 px-2 py-1 text-rose-700 dark:text-rose-300 line-clamp-2">
-          {t.obstacle ?? t.decisionNeeded}
+        <p className="mk-wb-note mk-wb-note--clamp is-late">
+          <Icon name="peringatan" size={14} />
+          <span>{t.obstacle ?? t.decisionNeeded}</span>
         </p>
       )}
       {!locked && !dragging && (
-        <div className="flex gap-1.5 pt-0.5">
-          <Button size="sm" variant="outline" className="h-9 text-xs" onClick={onEdit}>
-            <SquarePen className="h-3.5 w-3.5" /> Ubah
+        <div className="mk-wb-card__actions">
+          <Button size="sm" icon="catatan" className="mk-wk-tap" onClick={onEdit}>
+            Ubah capaian
           </Button>
           {!t.escalationId && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-9 w-9 p-0 text-slate-500 hover:text-rose-600"
-              aria-label="Hapus capaian"
-              onClick={onDelete}
-              disabled={busy}
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            <Button size="sm" variant="plain" className="mk-wk-tap" onClick={onDelete} disabled={busy} aria-busy={busy || undefined}>
+              {busy ? 'Menghapus…' : 'Hapus'}
             </Button>
           )}
         </div>
       )}
-    </div>
+    </article>
   )
 }

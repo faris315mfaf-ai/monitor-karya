@@ -4,6 +4,7 @@ import { syncEvidenceCount } from '@/lib/daily-rollup'
 import { requireApiUser } from '@/lib/auth'
 import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
 import { removeEvidence, signedEvidenceUrl, storageConfigured } from '@/lib/storage'
+import { serverError } from '@/lib/api-error'
 
 export const runtime = 'nodejs'
 
@@ -41,10 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const url = await signedEvidenceUrl(evidence.storageKey)
     return NextResponse.json({ url, kind: 'file' as const, expiresInSeconds: 300 })
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Gagal membuat tautan' },
-      { status: 502 }
-    )
+    return serverError(err, 'Gagal membuat tautan berkas. Coba lagi.', 'evidence GET', 502)
   }
 }
 
@@ -66,10 +64,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     try {
       await removeEvidence(evidence.storageKey)
     } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Gagal menghapus berkas' },
-        { status: 502 }
-      )
+      return serverError(err, 'Gagal menghapus berkas. Coba lagi.', 'evidence DELETE', 502)
     }
   }
 

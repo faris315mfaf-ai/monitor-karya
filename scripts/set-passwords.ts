@@ -5,20 +5,17 @@
  *   npm run db:passwords -- --all         # reset every account
  *   npm run db:passwords -- superadmin    # just one account (username or email)
  *
- * The password comes from SEED_PASSWORD in .env ("1234" for the sample
- * accounts since 10 Sep 2026). These are demo accounts on demo data — do not
- * run this against real user records.
+ * The password comes from SEED_PASSWORD in .env (minimal 8 karakter sejak
+ * F1-C, 6 Okt 2026). Bila kosong, kata sandi acak dibuat dan dicetak sekali.
+ * These are demo accounts on demo data — do not run this against real user
+ * records.
  */
 import { db } from '../src/lib/db'
 import { hashPassword } from '../src/lib/password'
-
-const MIN_LENGTH = 4
+import { resolveSeedPassword } from '../src/lib/password-policy'
 
 async function main() {
-  const password = process.env.SEED_PASSWORD
-  if (!password || password.length < MIN_LENGTH) {
-    throw new Error(`SEED_PASSWORD is missing or shorter than ${MIN_LENGTH} characters — set it in .env`)
-  }
+  const { password, generated } = resolveSeedPassword(process.env.SEED_PASSWORD)
 
   const args = process.argv.slice(2)
   const resetAll = args.includes('--all')
@@ -47,6 +44,7 @@ async function main() {
   }
 
   console.log(`✅ ${updated} akun diperbarui.`)
+  if (generated) console.log(`   SEED_PASSWORD kosong — kata sandi acak untuk semua akun ini: ${password}`)
   const byRole = users.reduce<Record<string, number>>((acc, u) => {
     acc[u.role] = (acc[u.role] || 0) + 1
     return acc

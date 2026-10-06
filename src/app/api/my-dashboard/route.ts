@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
-import { dailyCountdown, dailyLockAt, isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import { dailyCountdown, dailyLockAt, isoWeekOf, isoWeekStart as isoWeekStartOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
 import { monthKeyNow } from '@/lib/wib'
+import { deriveProjectStatus } from '@/lib/project-status'
+import { countDailyIntake } from '@/lib/daily-intake'
 
 /**
  * The dashboard each role actually needs.
@@ -21,7 +23,18 @@ async function picDashboard(user: SessionUser) {
 
   const projects = await db.project.findMany({
     where: { picUserId: user.id, lifecycle: 'AKTIF' },
-    select: { id: true, code: true, name: true, phase: true, targetEndDate: true, entity: { select: { name: true } } },
+    select: {
+      id: true, code: true, name: true, phase: true, lifecycle: true, startDate: true, targetEndDate: true,
+      entity: { select: { name: true } },
+      dailyReports: {
+        orderBy: { reportDate: 'desc' },
+        take: 10,
+        select: {
+          reportDate: true, status: true, progressPct: true, obstacle: true, followUp: true, achievementToday: true,
+          needsEscalation: true, submittedAt: true, forwardedAt: true, isLate: true,
+        },
+      },
+    },
     orderBy: { code: 'asc' },
   })
   const ids = projects.map((p) => p.id)
@@ -55,12 +68,32 @@ async function picDashboard(user: SessionUser) {
     },
     projects: projects.map((p) => {
       const r = byProject.get(p.id)
+      const last = p.dailyReports[0] ?? null
+      const derived = deriveProjectStatus(p, last, new Date())
       return {
         id: p.id,
         code: p.code,
         name: p.name,
         phase: p.phase,
+        startDate: p.startDate,
         targetEndDate: p.targetEndDate,
+        derivedStatus: derived.status,
+        reason: derived.reason,
+        latestProgress: derived.progress,
+        latest: last
+          ? { reportDate: last.reportDate, achievementToday: last.achievementToday, obstacle: last.obstacle, followUp: last.followUp }
+          : null,
+        history: p.dailyReports
+          .slice()
+          .reverse()
+          .map((h) => ({
+            reportDate: h.reportDate,
+            status: h.status,
+            progressPct: h.progressPct,
+            submitted: Boolean(h.submittedAt),
+            forwarded: Boolean(h.forwardedAt),
+            isLate: h.isLate,
+          })),
         entityName: p.entity.name,
         status: r?.status ?? null,
         progressPct: r?.progressPct ?? null,
@@ -86,11 +119,35 @@ async function kadivDashboard(user: SessionUser) {
 
   const reports = await db.weeklyDivisionReport.findMany({
     where: { divisionId: { in: ids }, isoYear, isoWeek },
-    include: { items: { select: { status: true, evidenceCount: true, needsEscalation: true, priorityId: true } } },
+    include: {
+      items: {
+        select: {
+          id: true, workItem: true, picName: true, targetDate: true, progressPct: true,
+          status: true, evidenceCount: true, needsEscalation: true, priorityId: true,
+          priority: { select: { code: true } },
+        },
+        orderBy: { position: 'asc' },
+      },
+    },
   })
 
+  // Riwayat 8 minggu: item selesai dibanding seluruh item per minggu.
+  const histFrom = new Date(isoWeekStartOf(now).getTime() - 7 * 7 * 86400000)
+  const history = await db.weeklyDivisionReport.findMany({
+    where: { divisionId: { in: ids }, periodStart: { gte: histFrom } },
+    select: { isoWeek: true, periodStart: true, items: { select: { status: true } } },
+    orderBy: { periodStart: 'asc' },
+  })
+  const histByWeek = new Map<number, { done: number; total: number }>()
+  for (const h of history) {
+    const cur = histByWeek.get(h.isoWeek) ?? { done: 0, total: 0 }
+    cur.total += h.items.filter((i) => i.status !== 'NA').length
+    cur.done += h.items.filter((i) => i.status === 'SELESAI').length
+    histByWeek.set(h.isoWeek, cur)
+  }
+
   const items = reports.flatMap((r) => r.items)
-  const byStatus = items.reduce<Record<string, number>>((acc, i) => {
+    const byStatus = items.reduce<Record<string, number>>((acc, i) => {
     acc[i.status] = (acc[i.status] || 0) + 1
     return acc
   }, {})
@@ -114,6 +171,24 @@ async function kadivDashboard(user: SessionUser) {
       needsEscalation: items.filter((i) => i.needsEscalation).length,
     },
     byStatus,
+    history: Array.from({ length: 8 }, (_, i) => {
+      const wk = isoWeekOf(new Date(histFrom.getTime() + i * 7 * 86400000)).isoWeek
+      const h = histByWeek.get(wk) ?? { done: 0, total: 0 }
+      return { label: 'M' + wk, done: h.done, total: h.total }
+    }),
+    items: items
+      .map((i) => ({
+        id: i.id,
+        workItem: i.workItem,
+        picName: i.picName,
+        targetDate: i.targetDate,
+        progressPct: i.progressPct,
+        status: i.status,
+        priority: i.priority?.code ?? null,
+        needsEscalation: i.needsEscalation,
+        evidenceCount: i.evidenceCount,
+      }))
+      .slice(0, 40),
     divisions: divisions.map((d) => {
       const r = reports.find((x) => x.divisionId === d.id)
       return {
@@ -134,19 +209,51 @@ async function adminDashboard(user: SessionUser) {
   const today = startOfWibDay(new Date())
   const { isoYear, isoWeek } = isoWeekOf(new Date())
 
-  const [entity, projects, dailyToday, divisions, weekly, kpi, lateThisMonth, openEscalations] =
+  const heatFrom = new Date(today.getTime() - 20 * 86400000)
+  const [entity, projectList, dailyToday, divisionList, weekly, kpi, lateThisMonth, openEscalations, recentDaily] =
     await Promise.all([
       db.entity.findUnique({ where: { id: entityId }, select: { name: true, code: true, region: true } }),
-      db.project.count({ where: { entityId, lifecycle: 'AKTIF' } }),
+      db.project.findMany({
+        where: { entityId, lifecycle: 'AKTIF' },
+        select: { id: true, name: true, picName: true, picUser: { select: { name: true } } },
+        orderBy: { name: 'asc' },
+      }),
       db.dailyProjectReport.findMany({ where: { entityId, reportDate: today } }),
-      db.division.count({ where: { entityId, isActive: true } }),
+      db.division.findMany({
+        where: { entityId, isActive: true },
+        select: { id: true, name: true, headUser: { select: { name: true } } },
+        orderBy: { name: 'asc' },
+      }),
       db.weeklyDivisionReport.findMany({ where: { entityId, isoYear, isoWeek } }),
       db.kpiSnapshot.findFirst({
         where: { entityId, periodType: 'BULANAN', periodKey: monthKeyNow() },
       }),
       db.lateIncident.count({ where: { entityId, period: { startsWith: monthKeyNow() } } }),
       db.escalation.count({ where: { entityId, status: { in: ['DIAJUKAN', 'DITINJAU'] } } }),
+      db.dailyProjectReport.findMany({
+        where: { entityId, reportDate: { gte: heatFrom } },
+        select: { reportDate: true, submittedAt: true, isLate: true },
+      }),
     ])
+  const projects = projectList.length
+  const divisions = divisionList.length
+  // Sumber yang sama dengan Meja kerja & Penerimaan: hanya proyek aktif.
+  const intake = countDailyIntake(projectList.map((p) => p.id), dailyToday)
+  const submittedIds = intake.receivedIds
+
+  // 10 hari kerja terakhir: berapa laporan masuk dibanding proyek aktif.
+  const days: { date: string; submitted: number; onTime: number }[] = []
+  for (let t = today.getTime(); days.length < 10 && t >= heatFrom.getTime(); t -= 86400000) {
+    const d = new Date(t)
+    const dow = new Date(t + 7 * 3600000).getUTCDay()
+    if (dow === 0 || dow === 6) continue
+    const mine = recentDaily.filter((r) => r.reportDate.getTime() === t)
+    days.unshift({
+      date: d.toISOString(),
+      submitted: mine.filter((r) => r.submittedAt).length,
+      onTime: mine.filter((r) => r.submittedAt && !r.isLate).length,
+    })
+  }
 
   return {
     kind: 'ADMIN' as const,
@@ -155,9 +262,9 @@ async function adminDashboard(user: SessionUser) {
     summary: {
       projects,
       divisions,
-      dailyReceived: dailyToday.filter((r) => r.submittedAt).length,
-      dailyAwaitingForward: dailyToday.filter((r) => r.submittedAt && !r.forwardedAt).length,
-      dailyMissing: projects - dailyToday.filter((r) => r.submittedAt).length,
+      dailyReceived: intake.received,
+      dailyAwaitingForward: intake.awaitingForward,
+      dailyMissing: intake.missing,
       weeklyApproved: weekly.filter((w) => w.statusHeader === 'DISETUJUI').length,
       weeklyAwaitingForward: weekly.filter((w) => w.statusHeader === 'DISETUJUI' && !w.forwardedAt).length,
       weeklyDraft: weekly.filter((w) => w.statusHeader === 'DRAFT').length,
@@ -166,50 +273,21 @@ async function adminDashboard(user: SessionUser) {
       complianceScore: kpi?.complianceScore ?? 0,
       onTimeDailyPct: kpi?.onTimeDailyPct ?? 0,
     },
-  }
-}
-
-/** Extra panel for the roles that oversee rather than input. */
-async function oversightPanel(user: SessionUser) {
-  const scopeIds = await scopeEntityIds(user)
-  const entityFilter = scopeIds ? { entityId: { in: scopeIds } } : {}
-
-  const [blockedDaily, blockedWeekly, awaitingDecision, staleEscalations] = await Promise.all([
-    db.dailyProjectReport.count({
-      where: { ...entityFilter, needsEscalation: true, reportDate: { gte: startOfWibDay(new Date()) } },
+    missing: projectList
+      .filter((p) => !submittedIds.has(p.id))
+      .map((p) => ({ id: p.id, name: p.name, pic: p.picUser?.name ?? p.picName ?? null })),
+    divisionsWeekly: divisionList.map((d) => {
+      const w = weekly.find((x) => x.divisionId === d.id)
+      return {
+        id: d.id,
+        name: d.name,
+        head: d.headUser?.name ?? null,
+        statusHeader: w?.statusHeader ?? null,
+        submittedAt: w?.submittedAt ?? null,
+        forwardedAt: w?.forwardedAt ?? null,
+      }
     }),
-    db.weeklyReportItem.count({
-      where: {
-        needsEscalation: true,
-        ...(scopeIds ? { weeklyReport: { entityId: { in: scopeIds } } } : {}),
-      },
-    }),
-    db.escalation.findMany({
-      where: { ...entityFilter, status: { in: ['DIAJUKAN', 'DITINJAU'] } },
-      include: { entity: { select: { name: true, code: true } } },
-      orderBy: { raisedAt: 'asc' },
-      take: 6,
-    }),
-    db.escalation.count({
-      where: { ...entityFilter, status: 'DIAJUKAN', raisedAt: { lt: new Date(Date.now() - 7 * 86400000) } },
-    }),
-  ])
-
-  return {
-    blockedDaily,
-    blockedWeekly,
-    staleEscalations,
-    awaitingDecision: awaitingDecision.map((e) => ({
-      id: e.id,
-      summary: e.summary,
-      needed: e.needed,
-      status: e.status,
-      raisedAt: e.raisedAt,
-      ageDays: Math.floor((Date.now() - e.raisedAt.getTime()) / 86400000),
-      slaDays: e.slaDays,
-      entityName: e.entity.name,
-      entityCode: e.entity.code,
-    })),
+    days,
   }
 }
 
@@ -227,7 +305,8 @@ export async function GET() {
     if (user.role === 'ADMIN_PT' && user.scopeEntityId) {
       return NextResponse.json(await adminDashboard(user))
     }
-    return NextResponse.json({ kind: 'OVERSIGHT' as const, panel: await oversightPanel(user) })
+    // Peran pemantau memakai /api/ringkasan.
+    return NextResponse.json({ kind: 'OVERSIGHT' as const })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Gagal menyusun dashboard'
     return NextResponse.json({ error: msg }, { status: 500 })

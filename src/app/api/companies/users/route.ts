@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
-import { ENTITY_ROLES, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
-import { MIN_PASSWORD, USERNAME_RE, assignPosition, createAccount, isKnownRole, isValidEmail, readPosition } from '@/lib/companies'
+import { ENTITY_ROLES } from '@/lib/rbac'
+import { accountDesk as desk, deskReachError, entityRef, isLastSuperadmin as lastSuperadmin, roleOutOfReachMessage } from '@/lib/account-desk'
+import { passwordProblem } from '@/lib/password-policy'
+import { USERNAME_RE, assignPosition, createAccount, isKnownRole, isValidEmail, readPosition } from '@/lib/companies'
+import { clientErrorMessage } from '@/lib/api-error'
 
 /**
  * Akun & posisi — meja Super Admin (10 Sep 2026), dan sejak 5 Okt 2026 juga
@@ -26,34 +29,35 @@ function forbid(message = 'Peran Anda tidak mengelola akun') {
   return NextResponse.json({ error: message }, { status: 403 })
 }
 
-type Desk = { full: boolean; roles: readonly string[]; entityId: string | null }
-
-/** Sejauh mana akun yang sedang masuk boleh memakai meja akun. */
-function desk(user: { role: string; scopeEntityId: string | null }): Desk | null {
-  if (!canManageAccounts(user.role)) return null
-  if (canManageAllAccounts(user.role)) return { full: true, roles: manageableRoles(user.role), entityId: null }
-  if (!user.scopeEntityId) return null
-  return { full: false, roles: manageableRoles(user.role), entityId: user.scopeEntityId }
-}
-
-/** Pesan tunggal untuk posisi di luar wewenang meja terbatas. */
+/** Pesan tunggal untuk posisi di luar wewenang meja terbatas. Aturan meja ada di src/lib/account-desk.ts. */
 function roleOutOfReach(role: string) {
-  return NextResponse.json(
-    { error: `Posisi ${role === 'DIREKTUR_ENTITAS' ? 'Direktur Perusahaan' : role} hanya dapat dikelola Super Admin.` },
-    { status: 403 }
-  )
+  return NextResponse.json({ error: roleOutOfReachMessage(role) }, { status: 403 })
 }
 
-async function entityRef(id: string | null) {
-  if (!id) return null
-  const e = await db.entity.findFirst({ where: { id, type: { in: ['HOLDING', 'PT'] } }, select: { id: true, code: true, name: true } })
-  if (!e) throw new Error('Perusahaan tidak ditemukan.')
-  return e
+/**
+ * [F2-ADMIN] Keanggotaan divisi (User.divisionId) — dikirim sebagai
+ * `memberDivisionId` karena `divisionId` di rute ini berarti divisi yang
+ * DIPIMPIN kepala divisi. '' / null = lepas dari divisi. Divisi harus aktif
+ * di PT akun itu. Mengembalikan id, null, atau pesan galat.
+ */
+async function readMemberDivision(raw: unknown, entityId: string | null): Promise<string | null | { error: string }> {
+  if (raw === null || raw === '') return null
+  if (typeof raw !== 'string' || raw.length > 64) return { error: 'Divisi tidak valid.' }
+  if (!entityId) return { error: 'Akun tingkat grup tidak menjadi anggota divisi.' }
+  const d = await db.division.findFirst({ where: { id: raw, entityId, isActive: true }, select: { id: true } })
+  return d ? d.id : { error: 'Divisi itu bukan divisi aktif di perusahaan akun ini.' }
 }
 
-async function lastSuperadmin(excludeId: string): Promise<boolean> {
-  const others = await db.user.count({ where: { role: 'SUPERADMIN', isActive: true, id: { not: excludeId } } })
-  return others === 0
+/** GET ?id= — [F2-ADMIN] keanggotaan divisi satu akun untuk sheet akun (meja akun saja). */
+export async function GET(req: NextRequest) {
+  const user = await requireApiUser()
+  if (user instanceof NextResponse) return user
+  const access = desk(user)
+  if (!access) return forbid()
+  const id = (req.nextUrl.searchParams.get('id') || '').slice(0, 64)
+  const row = id ? await db.user.findUnique({ where: { id }, select: { id: true, scopeEntityId: true, divisionId: true } }) : null
+  if (!row || (!access.full && row.scopeEntityId !== access.entityId)) return NextResponse.json({ error: 'Akun tidak ditemukan' }, { status: 404 })
+  return NextResponse.json({ id: row.id, memberDivisionId: row.divisionId })
 }
 
 export async function POST(req: NextRequest) {
@@ -82,16 +86,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Posisi ini harus ditempatkan di sebuah perusahaan.' }, { status: 422 })
     }
     if (!access.roles.includes(p.role)) return roleOutOfReach(p.role)
+    const member = body.memberDivisionId === undefined ? undefined : await readMemberDivision(body.memberDivisionId, entity?.id ?? null)
+    if (member && typeof member === 'object') return NextResponse.json({ error: member.error }, { status: 422 })
 
     const account = await db.$transaction(async (tx) => {
       const created = await createAccount(tx, entity, p)
+      if (typeof member === 'string') await tx.user.update({ where: { id: created.id }, data: { divisionId: member } }) // [F2-ADMIN]
       await tx.auditLog.create({
         data: {
           actorId: user.id,
           action: 'CREATE_ACCOUNT',
           targetType: 'USER',
           targetId: created.id,
-          afterData: JSON.stringify({ username: created.username, role: created.role, entity: entity?.code ?? null }),
+          afterData: JSON.stringify({ username: created.username, role: created.role, entity: entity?.code ?? null, ...(typeof member === 'string' ? { memberDivisionId: member } : {}) }),
           ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
         },
       })
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, account })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Gagal menambah akun' }, { status: 422 })
+    return NextResponse.json({ error: clientErrorMessage(err, 'Gagal menambah akun. Coba lagi.', 'companies/users POST') }, { status: 422 })
   }
 }
 
@@ -120,19 +127,18 @@ export async function PATCH(req: NextRequest) {
   const existing = await db.user.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Akun tidak ditemukan' }, { status: 404 })
 
-  if (!access.full) {
-    if (existing.scopeEntityId !== access.entityId) return forbid('Akun ini bukan di perusahaan Anda.')
-    if (!access.roles.includes(existing.role)) return roleOutOfReach(existing.role)
-    if (typeof body.entityId === 'string' && body.entityId !== access.entityId) {
-      return forbid('Anda tidak dapat memindahkan akun ke perusahaan lain.')
-    }
-    if (typeof body.role === 'string' && !access.roles.includes(body.role)) return roleOutOfReach(body.role)
-    if (id === user.id && typeof body.role === 'string' && body.role !== existing.role) {
-      return forbid('Anda tidak dapat mengubah posisi akun sendiri.')
-    }
+  const refusal = deskReachError(access, user.id, existing, {
+    role: typeof body.role === 'string' ? body.role : undefined,
+    entityId: typeof body.entityId === 'string' ? body.entityId : undefined,
+  })
+  if (refusal) return NextResponse.json({ error: refusal.error }, { status: refusal.status })
+  // Meja terbatas tidak boleh melepas akun dari PT-nya (entityId null/kosong
+  // = tingkat holding, di luar jangkauan Admin PT) — 6 Okt 2026.
+  if (!access.full && body.entityId !== undefined && body.entityId !== access.entityId) {
+    return forbid('Anda tidak dapat memindahkan akun ke perusahaan lain.')
   }
 
-  const s = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : undefined)
+  const s = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, 500) : undefined)
   const data: Record<string, unknown> = {}
   const audit: Record<string, unknown> = {}
 
@@ -177,7 +183,7 @@ export async function PATCH(req: NextRequest) {
     try {
       await entityRef(entityId)
     } catch (err) {
-      return NextResponse.json({ error: err instanceof Error ? err.message : 'Perusahaan tidak ditemukan' }, { status: 422 })
+      return NextResponse.json({ error: clientErrorMessage(err, 'Perusahaan tidak ditemukan', 'companies/users PATCH') }, { status: 422 })
     }
     data.scopeEntityId = entityId
     audit.entityId = entityId
@@ -196,13 +202,28 @@ export async function PATCH(req: NextRequest) {
 
   const password = s('password')
   if (password !== undefined && password !== '') {
-    if (password.length < MIN_PASSWORD) return NextResponse.json({ error: `Kata sandi minimal ${MIN_PASSWORD} karakter.` }, { status: 422 })
+    const problem = passwordProblem(password)
+    if (problem) return NextResponse.json({ error: problem }, { status: 422 })
     data.passwordHash = await hashPassword(password)
+    // F1-C: kata sandi yang disetel admin untuk orang lain wajib diganti pemiliknya saat masuk.
+    if (id !== user.id) data.mustChangePassword = true
     audit.passwordReset = true
   }
 
   const finalRole = (data.role as string | undefined) ?? existing.role
   const finalEntityId = (data.scopeEntityId as string | null | undefined) ?? existing.scopeEntityId
+  // [F2-ADMIN] keanggotaan divisi; pindah PT melepas keanggotaan lama.
+  if (body.memberDivisionId !== undefined) {
+    const member = await readMemberDivision(body.memberDivisionId, data.scopeEntityId !== undefined ? (data.scopeEntityId as string | null) : existing.scopeEntityId)
+    if (member && typeof member === 'object') return NextResponse.json({ error: member.error }, { status: 422 })
+    if (member !== existing.divisionId) {
+      data.divisionId = member
+      audit.memberDivisionId = member
+    }
+  } else if (data.scopeEntityId !== undefined && data.scopeEntityId !== existing.scopeEntityId && existing.divisionId) {
+    data.divisionId = null
+    audit.memberDivisionId = null
+  }
   const wantsLink = body.divisionId !== undefined || body.divisionName !== undefined || body.projectId !== undefined || body.projectName !== undefined
 
   try {
@@ -232,7 +253,7 @@ export async function PATCH(req: NextRequest) {
           action: audit.passwordReset && Object.keys(audit).length === 1 ? 'RESET_PASSWORD' : 'UPDATE_ACCOUNT',
           targetType: 'USER',
           targetId: id,
-          beforeData: JSON.stringify({ name: existing.name, username: existing.username, role: existing.role, isActive: existing.isActive }),
+          beforeData: JSON.stringify({ name: existing.name, username: existing.username, role: existing.role, isActive: existing.isActive, memberDivisionId: existing.divisionId }),
           afterData: JSON.stringify(audit),
           ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
         },
@@ -241,7 +262,7 @@ export async function PATCH(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, account: result })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Gagal mengubah akun' }, { status: 422 })
+    return NextResponse.json({ error: clientErrorMessage(err, 'Gagal mengubah akun. Coba lagi.', 'companies/users PATCH') }, { status: 422 })
   }
 }
 

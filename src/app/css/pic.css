@@ -1,0 +1,95 @@
+/* Fitur PIC proyek (05-pic-proyek.md): output, catatan kepala divisi, tahapan, usulan tenggat.
+   Semua nilai dari design-system/tokens.css. */
+
+/* ---------- Output saya ---------- */
+.mk-pic-outputs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mk-pic-outputs > li + li { border-top: 1px solid var(--line); }
+.mk-pic-output { display: flex; align-items: center; gap: var(--space-2); }
+.mk-pic-output__hit {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--space-3);
+  min-height: var(--touch-min); padding: 10px 8px; margin: 2px 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.mk-pic-output__hit:hover { background: var(--fill-1); }
+.mk-pic-output__hit:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mk-pic-output__icon {
+  flex: none; width: 36px; height: 36px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.mk-pic-output__badge { flex: none; }
+.mk-pic-output__sub { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mk-pic-output__badge-inline { display: none; flex: none; }
+.mk-pic-output__chev { flex: none; color: var(--ink-3); display: none; }
+/* Ponsel: judul, lencana + waktu, chevron; unggah bukti dari layar detail. */
+@media (max-width: 599px) {
+  .mk-pic-output__badge, .mk-pic-output__upload { display: none; }
+  .mk-pic-output__badge-inline, .mk-pic-output__chev { display: inline-flex; }
+}
+
+/* ---------- Sheet output ---------- */
+.mk-pic-revision { border-radius: var(--radius-md); padding: 12px 14px; font: var(--text-body); }
+.mk-pic-revision__by { display: block; margin-top: 6px; font: var(--text-footnote); opacity: 0.9; }
+.mk-pic-evidence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mk-pic-evidence > li { display: flex; align-items: center; gap: var(--space-3); min-height: var(--touch-min); padding: 6px 0; }
+.mk-pic-evidence > li + li { border-top: 1px solid var(--line); }
+.mk-pic-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: 132px; padding: var(--space-5); border-radius: var(--radius-md);
+  border: 1.5px dashed var(--line-strong); background: var(--surface-2); color: var(--ink-2);
+  text-align: center; font: var(--text-callout);
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.mk-pic-drop.is-over { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.mk-pic-drop.is-disabled { opacity: 0.6; }
+
+/* ---------- Catatan kepala divisi ---------- */
+.mk-pic-chat { display: flex; flex-direction: column; gap: var(--space-3); max-height: 360px; overflow-y: auto; padding: 2px; overscroll-behavior: contain; }
+.mk-pic-bubble { max-width: 86%; display: flex; flex-direction: column; gap: 4px; }
+.mk-pic-bubble.is-theirs { align-self: flex-start; }
+.mk-pic-bubble.is-mine { align-self: flex-end; align-items: flex-end; }
+.mk-pic-bubble__body {
+  padding: 10px 14px; border-radius: var(--radius-lg); font: var(--text-body);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.mk-pic-bubble.is-theirs .mk-pic-bubble__body { background: var(--fill-1); color: var(--ink); border-bottom-left-radius: var(--radius-xs); }
+.mk-pic-bubble.is-mine .mk-pic-bubble__body { background: var(--accent-fill); color: var(--on-accent); border-bottom-right-radius: var(--radius-xs); }
+.mk-pic-bubble__meta { font: var(--text-caption); color: var(--ink-2); padding: 0 4px; }
+.mk-pic-compose { display: flex; align-items: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+.mk-pic-compose textarea { flex: 1 1 auto; min-height: var(--touch-min); max-height: 160px; resize: none; }
+.mk-pic-send.mk-iconbtn { flex: none; width: var(--touch-min); height: var(--touch-min); }
+.mk-pic-send.mk-iconbtn:not(:disabled) { background: var(--accent-fill); color: var(--on-accent); }
+.mk-pic-send.mk-iconbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 599px) {
+  /* Kolom balas menempel tepat di atas tab bar. */
+  .mk-pic-compose { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); background: var(--surface); padding: var(--space-2) 0; z-index: 1; }
+}
+
+/* ---------- Tahapan & usulan tenggat ---------- */
+.mk-pic-stages-edit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-pic-stage-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.mk-pic-up svg { transform: rotate(180deg); }
+.mk-pic-stage-row__main { flex: 1 1 160px; min-width: 0; }
+.mk-pic-deadline { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.mk-pic-deadline__text { flex: 1 1 auto; min-width: 0; }
+
+/* ---------- [F2-PIC] Seret-lepas bukti ---------- */
+/* Baris output yang masih dikerjakan menerima berkas yang diseret. */
+.mk-pic-output { border-radius: var(--radius-sm); transition: background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); }
+.mk-pic-output.is-over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+/* Petunjuk ringkas di bawah daftar bukti; seluruh bagian Bukti menerima berkas. */
+.mk-pic-evidence > li.mk-pic-drop.is-compact {
+  flex-direction: row; justify-content: flex-start; min-height: var(--touch-min); padding: 8px 12px; margin-top: var(--space-2);
+  font: var(--text-footnote); border-top: 1.5px dashed var(--line-strong);
+}
+
+/* ---------- [F2-PIC] Layar PIC: tab tablet/ponsel, KPI, daftar ---------- */
+.mk-pic-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+@media (min-width: 600px) { .mk-pic-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+ul.mk-pic-list { list-style: none; margin: 0; padding: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk-pic-bubble { animation: mkPicIn var(--dur-base) var(--ease-spring) both; }
+  .mk-pic-outputs > li { animation: mkPicIn var(--dur-base) var(--ease-standard) both; animation-delay: calc(var(--i, 0) * 30ms); }
+}
+@keyframes mkPicIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

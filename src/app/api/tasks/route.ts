@@ -11,15 +11,18 @@ import {
   daysOfWeek,
   isDailyLocked,
   isWeeklyLocked,
+  isWorkingDay,
   parseWeekKey,
   parseWibDateKey,
   startOfWibDay,
   weekPeriodOf,
   weeklyDeadlines,
+  wibDateKey,
   type Period,
   type TaskScope,
 } from '@/lib/lock'
-import { rollupDailyReport } from '@/lib/daily-rollup'
+import { dailyGate, frozenMessage, rollupDailyReport } from '@/lib/daily-rollup'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * Daily tasks — the granular work a PIC plans and reports under one project.
@@ -36,6 +39,12 @@ import { rollupDailyReport } from '@/lib/daily-rollup'
  * report is composed from the week's daily tasks — follows the Friday lock of
  * that week instead, so a PIC can still tidy Monday's achievements on Wednesday.
  * Everything is gated on owning the project, the same rule the report follows.
+ *
+ * Pembekuan (6 Okt 2026): task bercakupan HARIAN adalah isi laporan harian
+ * harinya. Begitu laporan itu diteruskan ke holding (atau dikunci), task hari
+ * itu ikut dibekukan — tulis ditolak 409 kecuali buka kunci sedang berlaku.
+ * Dengan buka kunci aktif, meja harian juga boleh menulis task tanggal lampau
+ * yang dibuka (`workDate` "YYYY-MM-DD" di POST, `date` di GET).
  */
 
 type Context = 'HARIAN' | 'MINGGUAN'
@@ -77,17 +86,52 @@ async function guardProject(user: SessionUser, projectId: string, opts?: { write
   return { ok: true, project }
 }
 
-/** The lock that applies: the day's own 17:00 on the daily desk, the week's
- *  Friday 17:00 on the weekly board. Returns the 409 to send, or null. */
-function lockCheck(context: Context, workDate: Date): NextResponse | null {
+/**
+ * Kunci yang berlaku untuk menulis task pada satu hari: laporan harinya yang
+ * sudah diteruskan/dikunci membekukan task HARIAN; lalu tenggat 17.00 hari itu
+ * di meja harian, atau kunci Jumat 17.00 minggunya di papan mingguan. Buka kunci
+ * yang sedang berlaku untuk laporan hari itu menembus keduanya di meja harian.
+ * Mengembalikan 409 yang harus dikirim, atau null.
+ */
+async function lockCheck(context: Context, projectId: string, workDate: Date, scope: TaskScope): Promise<NextResponse | null> {
+  const day = startOfWibDay(workDate)
+  const gate = await dailyGate(projectId, day)
+  if (scope === 'HARIAN') {
+    const frozen = frozenMessage(gate)
+    if (frozen) {
+      return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
+    }
+  }
   if (context === 'HARIAN') {
-    return isDailyLocked(workDate)
-      ? NextResponse.json({ error: `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
-      : null
+    if (!gate.timeLocked) return null
+    const isToday = day.getTime() === startOfWibDay(new Date()).getTime()
+    return NextResponse.json(
+      {
+        error: isToday
+          ? `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`
+          : 'Hari itu tidak sedang dibuka. Ajukan buka kunci untuk mengubahnya.',
+        locked: true,
+        reportId: gate.report?.id ?? null,
+      },
+      { status: 409 }
+    )
   }
   return isWeeklyLocked(weekPeriodOf(workDate).start)
     ? NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
     : null
+}
+
+/** Hari-hari di minggu itu yang laporan hariannya dibekukan (tanpa buka kunci aktif). */
+async function frozenDaysOf(projectId: string, period: Period): Promise<string[]> {
+  const reports = await db.dailyProjectReport.findMany({
+    where: { projectId, reportDate: { gte: period.start, lte: period.end }, OR: [{ forwardedAt: { not: null } }, { isLocked: true }] },
+    select: { id: true, reportDate: true },
+  })
+  const out: string[] = []
+  for (const r of reports) {
+    if (!(await activeUnlockFor('DAILY_REPORT', r.id))) out.push(r.reportDate.toISOString())
+  }
+  return out
 }
 
 /** Parses "HH:MM" against a WIB day into a UTC instant. */
@@ -99,19 +143,20 @@ function timeOn(day: Date, hhmm: unknown): Date | null {
 }
 
 function readBody(body: Record<string, unknown>, day: Date) {
-  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+  // Batas panjang per kolom (6 Okt 2026): teks bebas tidak boleh tak terbatas.
+  const str = (k: string, max = 2000) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, max) : '')
   const startAt = timeOn(day, body.startTime)
   const endAt = timeOn(day, body.endTime)
 
   return {
-    title: str('title'),
-    description: str('description') || null,
-    picName: str('picName') || null,
+    title: str('title', 200),
+    description: str('description', 4000) || null,
+    picName: str('picName', 120) || null,
     picUserId: typeof body.picUserId === 'string' && body.picUserId ? body.picUserId : null,
     tags: Array.isArray(body.tags)
       ? (body.tags as unknown[])
           .filter((t): t is string => typeof t === 'string')
-          .map((t) => t.trim())
+          .map((t) => t.trim().slice(0, 40))
           .filter(Boolean)
           .slice(0, 8)
       : [],
@@ -133,7 +178,7 @@ function readBody(body: Record<string, unknown>, day: Date) {
           .map((s) => (s && typeof s === 'object' ? (s as Record<string, unknown>) : null))
           .filter((s): s is Record<string, unknown> => s !== null)
           .map((s, i) => ({
-            title: typeof s.title === 'string' ? s.title.trim() : '',
+            title: typeof s.title === 'string' ? s.title.trim().slice(0, 200) : '',
             isDone: Boolean(s.isDone),
             position: i,
           }))
@@ -227,6 +272,7 @@ export async function GET(req: NextRequest) {
         current: period.key === weekPeriodOf(new Date()).key,
       },
       locked: isWeeklyLocked(period.start),
+      frozenDays: await frozenDaysOf(projectId, period),
       today: startOfWibDay(new Date()).toISOString(),
       days: daysOfWeek(period).map((d) => d.toISOString()),
       tasks: await attachEvidence(tasks),
@@ -234,11 +280,12 @@ export async function GET(req: NextRequest) {
   }
 
   const dateParam = req.nextUrl.searchParams.get('date')
-  const parsed = dateParam ? new Date(dateParam) : new Date()
+  const parsed = dateParam ? (parseWibDateKey(dateParam) ?? new Date(dateParam)) : new Date()
   if (Number.isNaN(parsed.getTime())) {
     return NextResponse.json({ error: 'Parameter tanggal tidak valid' }, { status: 400 })
   }
   const day = startOfWibDay(parsed)
+  const gate = await dailyGate(projectId, day)
 
   // Meja harian hanya memuat capaian hari itu; capaian bercakupan MINGGUAN
   // hidup di papan mingguan.
@@ -250,7 +297,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     workDate: day.toISOString(),
-    locked: isDailyLocked(day),
+    // Terkunci bila lewat 17.00 atau laporan harinya dibekukan, kecuali sedang dibuka.
+    locked: gate.timeLocked || gate.frozen !== null,
+    frozen: gate.frozen,
+    reportId: gate.report?.id ?? null,
+    unlockUntil: gate.unlock?.unlockUntil ?? null,
     tasks: await attachEvidence(tasks),
   })
 }
@@ -285,9 +336,21 @@ export async function POST(req: NextRequest) {
     if (!dayInPeriod(period, workDate)) {
       return NextResponse.json({ error: 'Tanggal berada di luar minggu ini.' }, { status: 422 })
     }
+  } else if (body.workDate !== undefined && body.workDate !== null && body.workDate !== '') {
+    // Meja harian: tanggal lampau hanya untuk hari kerja yang laporannya sedang dibuka
+    // (diperiksa lockCheck); tanggal masa depan tidak pernah.
+    const requested = parseWibDateKey(body.workDate)
+    if (!requested) return NextResponse.json({ error: 'Tanggal tidak valid.' }, { status: 400 })
+    if (requested.getTime() > today.getTime()) {
+      return NextResponse.json({ error: 'Task tidak bisa dicatat untuk tanggal yang belum tiba.' }, { status: 422 })
+    }
+    if (!isWorkingDay(requested)) {
+      return NextResponse.json({ error: 'Task harian hanya untuk hari kerja (Senin–Jumat).' }, { status: 422 })
+    }
+    workDate = requested
   }
 
-  const lockRes = lockCheck(context, workDate)
+  const lockRes = await lockCheck(context, projectId, workDate, scope)
   if (lockRes) return lockRes
 
   const t = readBody(body, workDate)
@@ -315,7 +378,7 @@ export async function POST(req: NextRequest) {
       action: 'CREATE_TASK',
       targetType: 'TASK',
       targetId: task.id,
-      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length }),
+      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length, workDate: wibDateKey(workDate) }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
@@ -344,7 +407,7 @@ export async function PUT(req: NextRequest) {
   if (!guard.ok) return guard.res
 
   const context = contextOf(body.context)
-  const lockRes = lockCheck(context, existing.workDate)
+  const lockRes = await lockCheck(context, existing.projectId, existing.workDate, existing.scope as TaskScope)
   if (lockRes) return lockRes
 
   // Di papan mingguan kartu boleh pindah hari atau berubah cakupan, selama
@@ -363,11 +426,20 @@ export async function PUT(req: NextRequest) {
     if (body.scope === 'HARIAN' || body.scope === 'MINGGUAN') scope = body.scope
   }
 
+  // Pindah ke hari lain: hari tujuan juga tidak boleh beku.
+  if (workDate.getTime() !== startOfWibDay(existing.workDate).getTime() || scope !== existing.scope) {
+    const targetRes = await lockCheck(context, existing.projectId, workDate, scope)
+    if (targetRes) return targetRes
+  }
+
   const t = readBody(body, workDate)
   const errors = await validate(t, guard.project.entityId)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
+  // Form tugas (TaskDialog) tidak mengirim picUserId; tanpa kunci itu akun PIC
+  // tugas dipertahankan, bukan dikosongkan. Mengirim null tetap melepasnya.
+  if (!('picUserId' in body)) fields.picUserId = existing.picUserId
   const movedLane = workDate.getTime() !== existing.workDate.getTime() || scope !== existing.scope
   const sortOrder = movedLane
     ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period))
@@ -464,6 +536,21 @@ export async function PATCH(req: NextRequest) {
     updates.push({ id: current.id, workDate, scope, sortOrder: Math.max(0, Math.floor(Number(m.sortOrder) || 0)) })
   }
 
+  // Hari asal dan tujuan yang laporannya sudah diteruskan/dikunci tidak boleh berubah isinya.
+  const harianDays = new Set<number>()
+  for (const u of updates) {
+    const cur = byId.get(u.id)!
+    if (cur.scope === 'HARIAN') harianDays.add(startOfWibDay(cur.workDate).getTime())
+    if (u.scope === 'HARIAN') harianDays.add(u.workDate.getTime())
+  }
+  for (const ms of harianDays) {
+    const gate = await dailyGate(projectId, new Date(ms))
+    const frozen = frozenMessage(gate)
+    if (frozen) {
+      return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
+    }
+  }
+
   await db.$transaction(
     updates.map((u) =>
       db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
@@ -503,7 +590,7 @@ export async function DELETE(req: NextRequest) {
   const guard = await guardProject(user, existing.projectId, { write: true })
   if (!guard.ok) return guard.res
 
-  const lockRes = lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.workDate)
+  const lockRes = await lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.projectId, existing.workDate, existing.scope as TaskScope)
   if (lockRes) return lockRes
   if (existing.escalationId) {
     return NextResponse.json(
@@ -522,6 +609,7 @@ export async function DELETE(req: NextRequest) {
       targetType: 'TASK',
       targetId: id,
       beforeData: JSON.stringify({ title: existing.title, status: existing.status, workDate: existing.workDate, scope: existing.scope }),
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 

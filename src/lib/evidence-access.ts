@@ -14,7 +14,7 @@ import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence }
  * minted for a file inside the caller's own subtree.
  */
 
-export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT'])
+export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT', 'OUTPUT'])
 
 type Result = { ok: true; entityId: string } | { ok: false; status: number; error: string }
 
@@ -27,6 +27,7 @@ async function targetEntity(
   picUserId?: string | null
   headUserId?: string | null
   locked?: boolean
+  lockMessage?: string
 } | null> {
   if (targetType === 'DAILY_REPORT') {
     const r = await db.dailyProjectReport.findUnique({
@@ -121,6 +122,26 @@ async function targetEntity(
       : null
   }
 
+  // Output proyek (6 Okt 2026): bukti dibekukan selama menunggu review dan
+  // setelah diterima, supaya yang direview sama dengan yang dikirim.
+  if (targetType === 'OUTPUT') {
+    const o = await db.output.findUnique({
+      where: { id: targetId },
+      select: { status: true, project: { select: { entityId: true, picUserId: true } } },
+    })
+    return o
+      ? {
+          entityId: o.project.entityId,
+          picUserId: o.project.picUserId,
+          locked: o.status === 'MENUNGGU_REVIEW' || o.status === 'DITERIMA',
+          lockMessage:
+            o.status === 'DITERIMA'
+              ? 'Output ini sudah diterima; buktinya tidak dapat diubah.'
+              : 'Output ini sedang direview; batalkan pengiriman dulu untuk mengubah bukti.',
+        }
+      : null
+  }
+
   if (targetType === 'PROJECT_CLOSING') {
     const p = await db.project.findUnique({
       where: { id: targetId },
@@ -145,6 +166,9 @@ export async function canWriteEvidence(
   const target = await targetEntity(targetType, targetId)
   if (!target) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }
 
+  // Hanya pemilik pekerjaan yang menulis bukti: PIC proyeknya, kepala
+  // divisinya, Admin PT di PT itu, atau akun induk. Peran pantau (Direktur,
+  // Manajemen, Auditor) membaca saja walau berada di PT yang sama (6 Okt 2026).
   const owns =
     user.role === 'PIC_PROYEK'
       ? target.picUserId === user.id
@@ -152,7 +176,7 @@ export async function canWriteEvidence(
         ? target.headUserId === user.id
         : isMasterRole(user.role)
           ? true
-          : target.entityId === user.scopeEntityId
+          : user.role === 'ADMIN_PT' && !!user.scopeEntityId && target.entityId === user.scopeEntityId
 
   if (!owns) {
     return { ok: false, status: 403, error: 'Bukti ini di luar tanggung jawab Anda' }
@@ -164,7 +188,7 @@ export async function canWriteEvidence(
     return {
       ok: false,
       status: 409,
-      error: 'Laporan ini sudah dikunci, bukti tidak dapat diubah. Ajukan permohonan buka kunci.',
+      error: target.lockMessage ?? 'Laporan ini sudah dikunci, bukti tidak dapat diubah. Ajukan permohonan buka kunci.',
     }
   }
 

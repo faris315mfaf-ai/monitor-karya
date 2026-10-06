@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 import { hashPassword } from '@/lib/password'
+import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, generatePassword } from '@/lib/password-policy'
 import { ALL_ROLES, ENTITY_ROLES, HOLDING_ROLES } from '@/lib/rbac'
 
 /**
@@ -11,13 +12,13 @@ import { ALL_ROLES, ENTITY_ROLES, HOLDING_ROLES } from '@/lib/rbac'
  */
 
 export const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/
-export const MIN_PASSWORD = 4
-/**
- * Kata sandi awal ketika Super Admin membuat akun tanpa mengisi sandinya.
- * Pemegang akun diharapkan menggantinya; Super Admin bisa menyetel ulang
- * kapan saja dari meja Perusahaan & Akun.
+/** F1-C (6 Okt 2026): minimal 8 karakter — sumbernya src/lib/password-policy.ts. */
+export const MIN_PASSWORD = MIN_PASSWORD_LENGTH
+/*
+ * Akun yang dibuat tanpa kata sandi tidak lagi memakai "1234" bawaan: diberi
+ * kata sandi acak (generatePassword) dan mustChangePassword = true. Pemegang
+ * meja memberi kata sandi awal lewat "Setel ulang kata sandi".
  */
-export const DEFAULT_NEW_PASSWORD = process.env.SEED_PASSWORD || '1234'
 /** Logo disimpan sebagai data URL; 400 KB sudah lebih dari cukup untuk 256 px. */
 export const MAX_LOGO_CHARS = 400_000
 
@@ -81,6 +82,7 @@ export function readPosition(raw: unknown, opts: { holding: boolean }): Position
   if (!isValidEmail(email)) return `Email "${email}" tidak valid.`
   const password = str(o, 'password')
   if (password && password.length < MIN_PASSWORD) return `Kata sandi ${username} minimal ${MIN_PASSWORD} karakter.`
+  if (password.length > MAX_PASSWORD_LENGTH) return `Kata sandi ${username} maksimal ${MAX_PASSWORD_LENGTH} karakter.`
   return {
     role,
     name,
@@ -206,7 +208,10 @@ export async function assignPosition(
   return {}
 }
 
-/** Membuat akun untuk satu posisi, lalu menautkannya. Kata sandi kosong = kata sandi contoh. */
+/**
+ * Membuat akun untuk satu posisi, lalu menautkannya. Kata sandi kosong = acak.
+ * Akun buatan admin selalu wajib ganti kata sandi saat masuk pertama (F1-C).
+ */
 export async function createAccount(tx: Tx, entity: EntityRef | null, p: PositionInput) {
   const [userClash, emailClash] = await Promise.all([
     tx.user.findUnique({ where: { username: p.username }, select: { id: true } }),
@@ -226,7 +231,8 @@ export async function createAccount(tx: Tx, entity: EntityRef | null, p: Positio
       phone: p.phone,
       scopeEntityId: scoped ? (entity?.id ?? null) : entity?.id ?? null,
       avatarColor: p.avatarColor ?? pickColor(p.username),
-      passwordHash: await hashPassword(p.password || DEFAULT_NEW_PASSWORD),
+      passwordHash: await hashPassword(p.password || generatePassword()),
+      mustChangePassword: true,
     },
     select: { id: true, name: true, role: true, username: true, email: true },
   })
