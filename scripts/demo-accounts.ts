@@ -10,14 +10,14 @@
  *   manager                -> PIC_PROYEK proyek pertama PT Sigma
  *   direkturentitas        -> DIREKTUR_ENTITAS PT Sigma
  *
- * Kata sandi dari SEED_PASSWORD di .env (1234 untuk demo). Sejak seed 10 Sep
+ * Kata sandi dari SEED_PASSWORD di .env (minimal 8 karakter; kosong = acak
+ * dan dicetak — F1-C, 6 Okt 2026). Sejak seed 10 Sep
  * 2026 akun-akun ini sudah ditanam oleh seed itu sendiri; skrip ini tinggal
  * alat perbaikan. Jalankan: npm run db:demo
  */
 import { db } from '../src/lib/db'
 import { hashPassword } from '../src/lib/password'
-
-const PASSWORD = process.env.SEED_PASSWORD
+import { resolveSeedPassword } from '../src/lib/password-policy'
 
 type Spec = { username: string; email: string; name: string; role: string; title: string; avatarColor: string; scope: 'GROUP' | 'HOLDING' | 'PT' }
 
@@ -33,9 +33,7 @@ const SPECS: Spec[] = [
 ]
 
 async function main() {
-  if (!PASSWORD || PASSWORD.length < 4) {
-    throw new Error('SEED_PASSWORD is missing or shorter than 4 characters — set it in .env')
-  }
+  const { password: PASSWORD, generated } = resolveSeedPassword(process.env.SEED_PASSWORD)
 
   const pt = await db.entity.findUnique({ where: { code: 'PT-SIGMA' } })
   if (!pt) throw new Error('Entitas PT-SIGMA tidak ditemukan — jalankan seed terlebih dahulu.')
@@ -67,7 +65,7 @@ async function main() {
   const project = await db.project.findFirst({ where: { entityId: pt.id, lifecycle: 'AKTIF' }, orderBy: { code: 'asc' } })
   if (project) await db.project.update({ where: { id: project.id }, data: { picUserId: ids.manager, picName: SPECS[6].name } })
 
-  console.log('✅ Akun contoh siap (kata sandi = SEED_PASSWORD):')
+  console.log(generated ? `✅ Akun contoh siap (kata sandi acak: ${PASSWORD}):` : '✅ Akun contoh siap (kata sandi = SEED_PASSWORD):')
   for (const s of SPECS) console.log(`   ${s.username.padEnd(16)} ${s.role}`)
 }
 
