@@ -1,0 +1,21 @@
+/* Masih memakai urutan tujuh hari WeeklyBoard; lajur beku dirender terpisah.
+   display:none juga mengeluarkan target kosong dari keyboard/pointer. */
+.mk-weekly-task-editable.has-frozen-1 > .mk-wb > .mk-wb-lane:nth-child(1) { display: none; }
+.mk-weekly-task-editable.has-frozen-2 > .mk-wb > .mk-wb-lane:nth-child(2) { display: none; }
+.mk-weekly-task-editable.has-frozen-3 > .mk-wb > .mk-wb-lane:nth-child(3) { display: none; }
+.mk-weekly-task-editable.has-frozen-4 > .mk-wb > .mk-wb-lane:nth-child(4) { display: none; }
+.mk-weekly-task-editable.has-frozen-5 > .mk-wb > .mk-wb-lane:nth-child(5) { display: none; }
+.mk-weekly-task-editable.has-frozen-6 > .mk-wb > .mk-wb-lane:nth-child(6) { display: none; }
+.mk-weekly-task-editable.has-frozen-7 > .mk-wb > .mk-wb-lane:nth-child(7) { display: none; }
+
+.mk-wt-frozen { background: var(--surface-2); }
+.mk-wt-frozen:focus-visible { outline: var(--space-1) solid var(--focus); }
+.mk-wt-frozen__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  color: var(--ink-2);
+  font: var(--text-footnote);
+}
+.mk-wt-frozen__note > svg { flex-shrink: 0; }
