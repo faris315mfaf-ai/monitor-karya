@@ -43,6 +43,7 @@ case "$ACTION" in
     "${COMPOSE[@]}" down --volumes
     "${COMPOSE[@]}" up -d --wait postgres ;;
   migrasi) npx prisma migrate deploy ;;
+  seed-sql) npx tsx scripts/guard-db-lokal.ts seed-sql ;;
   seed) export SEED_PASSWORD=${SEED_PASSWORD:-kata-sandi-lokal-aman}; npx tsx scripts/seed.ts ;;
-  *) echo 'Pemakaian: bash scripts/db-lokal.sh naik|turun|ulang --hapus-data-lokal|migrasi|seed' >&2; exit 2 ;;
+  *) echo 'Pemakaian: bash scripts/db-lokal.sh naik|turun|ulang --hapus-data-lokal|migrasi|seed|seed-sql' >&2; exit 2 ;;
 esac

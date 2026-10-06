@@ -7,19 +7,23 @@
 #   migrate  — image kecil berisi Prisma CLI untuk `prisma migrate deploy`
 #   runner   — image akhir: hanya server standalone, user non-root
 
-ARG NODE_VERSION=22-bookworm-slim
+ARG NODE_VERSION=22.23.3-bookworm-slim
 
 FROM node:${NODE_VERSION} AS base
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+# npm 11.19 membaca package.json#allowScripts; npm bawaan Node 22 belum tentu.
+RUN npm install --global npm@11.19.1 --ignore-scripts --no-audit --no-fund
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json prisma.config.ts ./
 COPY prisma ./prisma
-RUN npm ci --no-audit --no-fund
+RUN DATABASE_URL=postgresql://build:build@127.0.0.1:1/build \
+    DIRECT_URL=postgresql://build:build@127.0.0.1:1/build \
+    npm ci --no-audit --no-fund
 
 FROM deps AS build
 COPY . .
@@ -38,7 +42,7 @@ RUN DATABASE_URL=postgresql://build:build@127.0.0.1:1/build \
 
 FROM base AS migrate
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json ./
+COPY package.json prisma.config.ts ./
 COPY prisma ./prisma
 USER node
 CMD ["npx", "prisma", "migrate", "deploy"]

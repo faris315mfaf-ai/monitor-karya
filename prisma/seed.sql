@@ -6,7 +6,8 @@
 -- diisi sendiri dan perubahannya terlihat.
 --
 -- Jalankan: npm run db:seed:sql   lalu   npm run db:passwords -- --all
--- (SEED_PASSWORD di .env = 1234 untuk seluruh akun contoh)
+-- Hanya lewat wrapper lokal; DATABASE_URL eksplisit wajib menunjuk DB dev.
+-- Isi SEED_PASSWORD minimal 8 karakter di lingkungan proses untuk db:passwords.
 --
 -- Akun contoh (username): superadmin, owner, manajemen, holding, adminbike,
 --   adminptcontoh, kepaladivisi, manager, direkturentitas (PT Sigma),

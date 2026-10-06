@@ -5,17 +5,25 @@
  *   npm run db:passwords -- --all         # reset every account
  *   npm run db:passwords -- superadmin    # just one account (username or email)
  *
- * The password comes from SEED_PASSWORD in .env (minimal 8 karakter sejak
+ * The password comes from SEED_PASSWORD in the process environment (minimal 8 karakter sejak
  * F1-C, 6 Okt 2026). Bila kosong, kata sandi acak dibuat dan dicetak sekali.
  * These are demo accounts on demo data — do not run this against real user
  * records.
  */
-import { db } from '../src/lib/db'
+import type { PrismaClient } from '@prisma/client'
+import { requireLocalDatabase } from './guard-db-lokal'
+
 import { hashPassword } from '../src/lib/password'
 import { resolveSeedPassword } from '../src/lib/password-policy'
 
+let db: PrismaClient | undefined
+
 async function main() {
+  const databaseUrl = requireLocalDatabase(process.env, 'Akun contoh')
   const { password, generated } = resolveSeedPassword(process.env.SEED_PASSWORD)
+  const { PrismaClient } = await import('@prisma/client')
+  const client = new PrismaClient({ datasources: { db: { url: databaseUrl } } })
+  db = client
 
   const args = process.argv.slice(2)
   const resetAll = args.includes('--all')
@@ -27,7 +35,7 @@ async function main() {
       ? {}
       : { passwordHash: null }
 
-  const users = await db.user.findMany({ where, select: { id: true, email: true, username: true, role: true } })
+  const users = await client.user.findMany({ where, select: { id: true, email: true, username: true, role: true } })
   if (users.length === 0) {
     console.log('Tidak ada akun yang perlu diperbarui.')
     return
@@ -36,9 +44,9 @@ async function main() {
   // scrypt is deliberately slow; each account still gets its own salt.
   let updated = 0
   for (const u of users) {
-    await db.user.update({
+    await client.user.update({
       where: { id: u.id },
-      data: { passwordHash: await hashPassword(password) },
+      data: { passwordHash: await hashPassword(password), mustChangePassword: true },
     })
     updated++
   }
@@ -60,9 +68,9 @@ async function main() {
 }
 
 main()
-  .then(() => db.$disconnect())
+  .then(() => db?.$disconnect())
   .catch(async (e) => {
     console.error('❌ Gagal:', e instanceof Error ? e.message : e)
-    await db.$disconnect()
+    await db?.$disconnect()
     process.exit(1)
   })

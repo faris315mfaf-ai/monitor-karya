@@ -25,3 +25,6 @@ Dockerfile
 .aws
 .agents
 .codex
+
+# Runner E2E mengimpor tests/; keduanya hanya di-mount saat uji terisolasi.
+scripts/uji-alur-lokal.ts

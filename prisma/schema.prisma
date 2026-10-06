@@ -669,6 +669,7 @@ model Output {
 
   @@index([projectId, status])
   @@index([ownerId])
+  @@index([reviewerId])
 }
 
 // ==== [P2-A] PIC proyek: model baru di bawah baris ini ====
@@ -732,6 +733,7 @@ model DeadlineProposal {
 
   @@index([projectId, status])
   @@index([proposedById])
+  @@index([decidedById])
 }
 
 // ==== [P2-B] Kepala divisi: model baru di bawah baris ini ====
@@ -813,6 +815,7 @@ model AccessRequest {
   @@index([requestedById])
   @@index([targetUserId])
   @@index([status, expiresAt])
+  @@index([decidedById])
 }
 
 /// Pengingat otomatis per PT (6 Okt 2026). Baris yang belum ada = nilai bawaan

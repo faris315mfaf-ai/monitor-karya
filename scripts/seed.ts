@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@prisma/client'
+import { requireLocalDatabase } from './guard-db-lokal'
 import { hashPassword } from '../src/lib/password'
 import { resolveSeedPassword } from '../src/lib/password-policy'
 
@@ -17,34 +18,12 @@ function isoWeek(date: Date) {
   return { year: d.getUTCFullYear(), week: weekNum }
 }
 
-function requireLocalDatabase() {
-  const localPort = process.env.LOCAL_DB_PORT ?? '54329'
-  if (!['54329', '54339'].includes(localPort)) {
-    throw new Error('Seed ditolak: LOCAL_DB_PORT hanya boleh 54329 atau 54339.')
-  }
-  const databaseUrl = process.env.DATABASE_URL
-  if (!databaseUrl) throw new Error('Seed ditolak: DATABASE_URL lokal wajib diisi.')
-  for (const [name, value] of [['DATABASE_URL', databaseUrl], ['DIRECT_URL', process.env.DIRECT_URL]] as const) {
-    if (value === undefined) continue
-    let url: URL
-    try { url = new URL(value) } catch { throw new Error(`Seed ditolak: ${name} tidak sah.`) }
-    const allowedParams = new Set(['schema', 'connection_limit', 'connect_timeout', 'pool_timeout', 'sslmode', 'pgbouncer'])
-    if (!['postgres:', 'postgresql:'].includes(url.protocol)
-      || !['127.0.0.1', 'localhost'].includes(url.hostname)
-      || url.port !== localPort
-      || url.pathname !== '/monitor_karya_local'
-      || [...url.searchParams.keys()].some((key) => !allowedParams.has(key))) {
-      throw new Error(`Seed ditolak: ${name} harus menunjuk monitor_karya_local di localhost:${localPort} tanpa pengalihan koneksi.`)
-    }
-  }
-  return databaseUrl
-}
-
 async function main() {
   const databaseUrl = requireLocalDatabase()
   // Diperiksa sebelum data dihapus: SEED_PASSWORD lemah menghentikan seed sejak awal.
   const seedPw = resolveSeedPassword(process.env.SEED_PASSWORD)
   // URL eksplisit mencegah konfigurasi .env mengalihkan koneksi seed.
+  const { PrismaClient } = await import('@prisma/client')
   const client = new PrismaClient({ datasources: { db: { url: databaseUrl } } })
   db = client
   console.log('🌱 Seeding business monitoring database...')
@@ -896,7 +875,7 @@ async function main() {
   // KATA SANDI (F1-C, 6 Okt 2026): tanpa "1234" bawaan. SEED_PASSWORD wajib
   // >= 8 karakter, atau kosong = dibuat acak lalu dicetak sekali di bawah.
   // ============================================================
-  await client.user.updateMany({ data: { passwordHash: await hashPassword(seedPw.password) } })
+  await client.user.updateMany({ data: { passwordHash: await hashPassword(seedPw.password), mustChangePassword: true } })
 
   console.log('\n✅ Seed completed successfully!')
   console.log(`  - ${pts.length} PT entities in hierarchy`)
