@@ -47,6 +47,8 @@ export function useFetch<T>(url: string | null) {
     error: null,
     url: null,
   })
+  // Muat ulang diam-diam (tanpa kerangka memuat) setelah sebuah tindakan.
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     if (!url) return
@@ -75,11 +77,11 @@ export function useFetch<T>(url: string | null) {
     return () => {
       cancelled = true
     }
-  }, [url, router])
+  }, [url, router, tick])
 
   // Derive loading: if the URL has changed since the last fetch completed,
   // we are effectively loading (waiting for the new fetch to resolve).
   const isLoading = url !== state.url ? !!url : state.loading
 
-  return { data: state.data, loading: isLoading, error: state.error }
+  return { data: state.data, loading: isLoading, error: state.error, reload: () => setTick((t) => t + 1) }
 }

@@ -147,6 +147,60 @@ export function isWeeklyLocked(periodStart: Date, now: Date = new Date()): boole
   return now >= weeklyDeadlines(periodStart).lockAt
 }
 
+/** Laporan mingguan yang sudah diteruskan Admin PT ke holding dibekukan (6 Okt 2026). */
+export const WEEKLY_FROZEN_MESSAGE =
+  'Laporan minggu ini sudah diteruskan ke holding dan dibekukan. Perubahan hanya lewat permohonan buka kunci yang disetujui.'
+
+export type WeeklyWriteBlock = {
+  reason: 'FUTURE_WEEK' | 'FORWARDED' | 'PAST_WEEK' | 'TIME_LOCKED' | 'REPORT_LOCKED'
+  message: string
+}
+
+/**
+ * Boleh tidaknya laporan mingguan sebuah divisi ditulis (item, susunan,
+ * serah, setujui). Null = boleh. Urutannya:
+ *
+ *   1. Buka kunci yang sedang berlaku (UnlockRequest DIEKSEKUSI, belum lewat
+ *      `unlockUntil`) mengangkat semua kunci — kunci jam, kunci baris, dan
+ *      pembekuan setelah diteruskan. Buka kunci selalu menunjuk satu laporan.
+ *   2. Minggu yang belum berjalan tidak bisa diisi.
+ *   3. Laporan yang sudah diteruskan ke holding dibekukan.
+ *   4. Minggu yang sudah lewat hanya dibaca.
+ *   5. Minggu berjalan terkunci sejak Jumat 17.00 WIB (WEEKLY_LOCK_LABEL).
+ *   6. Baris yang dikunci (isLocked / TERKUNCI) tetap terkunci.
+ */
+export function weeklyWriteBlock(input: {
+  period: { key: string; start: Date }
+  report: { isLocked: boolean; statusHeader: string; forwardedAt: Date | null } | null
+  unlocked: boolean
+  now?: Date
+}): WeeklyWriteBlock | null {
+  const now = input.now ?? new Date()
+  if (input.unlocked && input.report) return null
+  const current = isoWeekStart(now).getTime()
+  const start = input.period.start.getTime()
+  if (start > current) {
+    return { reason: 'FUTURE_WEEK', message: 'Minggu yang belum berjalan belum bisa diisi.' }
+  }
+  if (input.report?.forwardedAt) return { reason: 'FORWARDED', message: WEEKLY_FROZEN_MESSAGE }
+  if (start < current) {
+    return {
+      reason: 'PAST_WEEK',
+      message: 'Hanya minggu berjalan yang bisa diisi. Minggu lain hanya dibaca; ajukan permohonan buka kunci untuk mengubahnya.',
+    }
+  }
+  if (isWeeklyLocked(input.period.start, now)) {
+    return {
+      reason: 'TIME_LOCKED',
+      message: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}). Ajukan permohonan buka kunci.`,
+    }
+  }
+  if (input.report && (input.report.isLocked || input.report.statusHeader === 'TERKUNCI')) {
+    return { reason: 'REPORT_LOCKED', message: 'Laporan minggu ini sudah dikunci. Ajukan permohonan buka kunci.' }
+  }
+  return null
+}
+
 // ------------------------------------------------------------------
 // Laporan kemajuan proyek — mingguan & bulanan (7 Sep 2026)
 // ------------------------------------------------------------------
@@ -247,7 +301,8 @@ export function dayInPeriod(period: Period, day: Date): boolean {
 export function parseWibDateKey(key: unknown): Date | null {
   if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null
   const d = new Date(`${key}T00:00:00+07:00`)
-  return Number.isNaN(d.getTime()) ? null : d
+  // "2026-02-31" diterima Date sebagai 3 Maret; tolak tanggal yang tidak ada.
+  return Number.isNaN(d.getTime()) || wibDateKey(d) !== key ? null : d
 }
 
 export function validateProgressReport(input: {

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
 import { requireApiUser } from '@/lib/auth'
 import { canWriteEvidence } from '@/lib/evidence-access'
+import { clientIp, cleanText, contentMatchesMime, safeDisplayName } from '@/lib/security'
 import {
   ALLOWED_EVIDENCE_MIME,
   MAX_EVIDENCE_BYTES,
@@ -10,6 +11,7 @@ import {
   storageConfigured,
   uploadEvidence,
 } from '@/lib/storage'
+import { serverError } from '@/lib/api-error'
 
 // Files are buffered in memory before going to Storage, so this must run on
 // the Node runtime rather than the edge.
@@ -41,6 +43,15 @@ export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
 
+  // Tolak sebelum badan dibaca ke memori: berkas 20 MB + pembungkus multipart.
+  const declared = Number(req.headers.get('content-length') ?? '')
+  if (Number.isFinite(declared) && declared > MAX_EVIDENCE_BYTES + 1024 * 1024) {
+    return NextResponse.json(
+      { error: `Ukuran berkas melebihi ${Math.round(MAX_EVIDENCE_BYTES / 1024 / 1024)} MB` },
+      { status: 413 }
+    )
+  }
+
   let form: FormData
   try {
     form = await req.formData()
@@ -48,9 +59,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unggahan tidak valid' }, { status: 400 })
   }
 
-  const targetType = String(form.get('targetType') ?? '')
-  const targetId = String(form.get('targetId') ?? '')
-  const label = String(form.get('label') ?? '').trim()
+  const targetType = cleanText(form.get('targetType'), 40)
+  const targetId = cleanText(form.get('targetId'), 64)
+  const label = cleanText(form.get('label'), 200)
   const file = form.get('file')
 
   if (!(file instanceof File)) {
@@ -97,14 +108,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Isi berkas harus cocok dengan jenisnya (tanda tangan byte awal), jadi
+  // HTML/skrip yang dinamai .png ditolak.
+  const bytes = await file.arrayBuffer()
+  if (!contentMatchesMime(new Uint8Array(bytes), mime)) {
+    return NextResponse.json(
+      { error: `Isi berkas tidak sesuai dengan jenis ${mime}. Unggah berkas aslinya.` },
+      { status: 415 }
+    )
+  }
+
+  const displayName = safeDisplayName(label || file.name)
   const key = buildStorageKey(targetType, targetId, file.name)
   try {
-    await uploadEvidence(key, await file.arrayBuffer(), mime)
+    await uploadEvidence(key, bytes, mime)
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Gagal mengunggah berkas' },
-      { status: 502 }
-    )
+    return serverError(err, 'Gagal mengunggah berkas. Coba lagi.', 'evidence/upload', 502)
   }
 
   const evidence = await db.evidence.create({
@@ -112,7 +131,7 @@ export async function POST(req: NextRequest) {
       targetType,
       targetId,
       storageKey: key,
-      fileName: label || file.name,
+      fileName: displayName,
       mime,
       size: file.size,
       url: null, // read through a signed URL; never a permanent link
@@ -129,8 +148,8 @@ export async function POST(req: NextRequest) {
       targetType,
       targetId,
       afterData: JSON.stringify({ fileName: evidence.fileName, size: file.size, mime }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-      userAgent: req.headers.get('user-agent') || null,
+      ip: clientIp(req),
+      userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
     },
   })
 

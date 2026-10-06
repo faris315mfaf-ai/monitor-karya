@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, resolveScopeEntityId } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 // GET /api/compliance-map - hierarchical treemap data for compliance heatmap
 // Groups: subHoldings > sectors > regions > PTs.
@@ -143,7 +144,7 @@ export async function GET(req: NextRequest) {
       topLevelType,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Peta kepatuhan belum termuat. Coba lagi.', 'compliance-map GET')
   }
 }

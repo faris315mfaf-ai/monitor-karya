@@ -1,8 +1,9 @@
-import { timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { refuseCron } from '@/lib/cron-auth'
 import { db } from '@/lib/db'
 import { isWorkingDay } from '@/lib/lock'
 import { remindUnreportedDivisions } from '@/lib/reminders'
+import { entitiesWithRuleEnabled } from '@/lib/reminder-rules'
 
 /**
  * Cron Vercel (lihat vercel.json): tiap pagi hari kerja, ingatkan kepala divisi
@@ -13,26 +14,16 @@ import { remindUnreportedDivisions } from '@/lib/reminders'
 
 export const dynamic = 'force-dynamic'
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const given = Buffer.from(req.headers.get('authorization') ?? '')
-  const expected = Buffer.from(`Bearer ${secret}`)
-  return given.length === expected.length && timingSafeEqual(given, expected)
-}
-
 export async function GET(req: NextRequest) {
-  if (!process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'CRON_SECRET belum diatur di lingkungan ini' }, { status: 503 })
-  }
-  if (!authorized(req)) {
-    return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
-  }
+  // Rahasia wajib & dibandingkan waktu-konstan (src/lib/cron-auth.ts).
+  const refused = refuseCron(req)
+  if (refused) return refused
   if (!isWorkingDay()) {
     return NextResponse.json({ ok: true, skipped: 'akhir pekan', sent: 0 })
   }
 
-  const result = await remindUnreportedDivisions({ entityIds: null, source: 'CRON' })
+  // PT yang mematikan "Pengingat laporan mingguan" di Pengingat otomatis dilewati.
+  const result = await remindUnreportedDivisions({ entityIds: await entitiesWithRuleEnabled('MINGGUAN'), source: 'CRON' })
 
   await db.auditLog.create({
     data: {
