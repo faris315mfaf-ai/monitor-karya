@@ -15,7 +15,7 @@ Spesifikasi layar: [`docs/design/peran/03-kepala-divisi.md`](../design/peran/03-
 | 1 | Sidebar dan nav khusus (Review output `n`, Laporan harian `4/5`, Proyek, Tim, Laporan mingguan) | Berbeda dari spesifikasi | `ROLE_TABS` tetap Ringkasan · Meja kerja · Capaian mingguan · Divisi. Review, tim, proyek, dan ringkasan mingguan tampil sebagai kartu di Ringkasan. `src/lib/rbac.ts` bukan milik area ini. |
 | 2 | Header: konteks divisi dan jumlah orang, tombol "Laporan mingguan M41" | Selesai | Tombolnya sekunder (tombol primer ada di hero) dan menggulir ke kartu ringkasan. Tanpa data tim, tombol kembali menjadi "Isi capaian M41". |
 | 3 | Hero: kalimat jawaban, pendukung, `ActivityRings`, 4 KPI | Selesai | Pendukung kini menyebut proyek yang terlambat atau perlu perhatian. KPI ke-4 adalah **Tepat waktu 30 hari** (lihat rumus). "Sisa waktu serah" pindah ke subjudul kartu ringkasan. |
-| 4 | Output menunggu review: chip per proyek, Terima / Minta revisi, Terima semua, jenis bukti | Sebagian | "Terima semua" tombol primer; "Terima" per baris sekunder sejak `ApprovalItem` punya `approveVariant` (F4-B). Jenis bukti ditulis sebagai jumlah berkas ("2 berkas"), belum per jenis ("Laporan uji", "Tautan desain"). |
+| 4 | Output menunggu review: chip per proyek, Terima / Minta revisi, Terima semua, jenis bukti | Selesai | "Terima semua" tombol primer; "Terima" per baris sekunder sejak `ApprovalItem` punya `approveVariant` (F4-B). Jenis bukti per output ditampilkan sejak CX 15. |
 | 5 | Laporan harian tim: lencana, sheet anggota, Ingatkan yang belum mengirim | Selesai | Orang cuti, sakit, atau izin tidak masuk penyebut, dan alasannya ditulis di `sub` cincin. |
 | 6 | Proyek divisi: `Timeline` dan legenda status | Selesai (baru) | `DivisionProjectsCard` (`src/components/kadiv/projects-card.tsx`). Di ponsel tampil sebagai `ProjectRow compact`. Baris membuka Sheet proyek. |
 | 7 | Beban kerja (`DivisionBar`, batas sehat 80), `Heatmap` 10 hari, `AreaChart` output per minggu vs target | Selesai | Batang dibatasi 100% secara visual; angka sebenarnya ditulis di meta. `AreaChart` ada di bawah peta panas. |
@@ -36,7 +36,7 @@ Spesifikasi layar: [`docs/design/peran/03-kepala-divisi.md`](../design/peran/03-
 
 ### Tepat waktu 30 hari (KPI ke-4)
 
-`src/lib/kadiv-math.ts` → `onTimeDaily`, dipanggil dari `buildTeam` (`src/lib/kadiv.ts`).
+Perhitungan historis pada `src/lib/kadiv.ts` dan `src/lib/kpi-math.ts`; lihat [hasil CX 9](../codex/CX9-HASIL.md).
 
 ```
 tepat waktu 30 hari = laporan harian tepat waktu ÷ laporan harian wajib
@@ -46,7 +46,7 @@ tepat waktu 30 hari = laporan harian tepat waktu ÷ laporan harian wajib
 - **Wajib** = setiap pasangan (proyek AKTIF divisi, hari), dihitung sejak tanggal mulai proyek (atau tanggal dibuat bila tanggal mulai kosong), selama PIC-nya tidak cuti, sakit, atau izin hari itu. Proyek tanpa PIC tidak dihitung.
 - **Tepat waktu** = laporan hari itu ada, `submittedAt` ≤ 17.00 hari itu, dan tidak bertanda `isLate`.
 - Target **85%**: tile berwarna `on` bila ≥ 85%, `risk` bila di bawahnya, dan netral ("-") bila belum ada laporan wajib.
-- Keterbatasan: daftar proyek diambil dari proyek AKTIF hari ini, jadi proyek yang sudah ditutup dalam 30 hari terakhir tidak ikut dihitung.
+- CX 9 menghitung proyek aktif pada masing-masing hari, termasuk proyek yang kini sudah ditutup. Bila riwayat tidak lengkap, pct null dan flag cakupan ditampilkan, bukan persentase optimistis.
 
 ### Ringkasan mingguan untuk Direktur
 

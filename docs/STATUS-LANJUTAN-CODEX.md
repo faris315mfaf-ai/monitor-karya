@@ -1,3 +1,16 @@
+# Status lanjutan Codex — hasil lokal terbaru
+
+6 Oktober 2026: **63 berkas/1.192 tes**, Prisma validate, TypeScript, ESLint,
+diff check, build/runtime Docker lolos; E2E lokal 14 pemeriksaan lolos.
+[Hasil CX 8–15](codex/CX8–15-HASIL.md). Backlog global B/C/D dan operator
+produksi tetap terbuka sesuai [SISA-PEKERJAAN](SISA-PEKERJAAN.md).
+
+Commit implementasi parent: `28f969f`, `0792ca1`, `b36fe91`, `8fee994`.
+Audit historis berikut dipulihkan verbatim dari baseline `89766df`; angka dan
+status gagal/tertunda di sana merupakan keadaan saat audit dahulu.
+
+## Lampiran — audit historis pengambilalihan
+
 > **Usang (6 Okt 2026 malam).** Ditulis saat workflow Claude baru 10/21 tugas selesai. Kini 21/21 selesai, CD 1–8 dan CX 1–7 sudah digabung. Keadaan terkini: [`SERAH-TERIMA-CODEX.md`](SERAH-TERIMA-CODEX.md).
 
 # Status pengambilalihan dari Claude — 6 Oktober 2026

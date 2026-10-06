@@ -43,6 +43,36 @@ Codex tidak pernah mengedit folder Claude, dan sebaliknya.
 7. **Pemeriksaan sebelum commit:** `npx tsc --noEmit`, `npx eslint src`,
    `npx vitest run`.
 
+## Koordinasi lanjutan Codex — 6 Oktober 2026
+
+Status: **gerbang lokal final lolos; commit/integrasi oleh parent**, basis awal `codex/kerja` pada `89766df`.
+Instruksi pemilik untuk putaran ini: kerja langsung di worktree Codex, zona
+terpisah, tanpa commit; parent menangani gerbang pemeriksaan dan integrasi.
+Jangan membatalkan edit agen lain. Permintaan lintas zona melalui parent.
+
+| Pemilik zona | Zona | Tanggung jawab putaran ini |
+|---|---|---|
+| Agen dokumentasi (DOCS) | `docs/**`, `README.md`, `DESIGN.md` | Rencana, catatan bukti, laporan hasil dan pembaruan dokumen usang; tidak mengubah kode produksi |
+| Parent | Pembagian zona implementasi dan gerbang integrasi | Mengalokasikan 5 agen fase poin 1–7, kemudian 5 agen CX 8–15; mengirim bukti dan tangkapan layar ke DOCS |
+| Agen implementasi | Zona kode disjoint yang ditetapkan parent | Melaporkan berkas berubah, regresi sebelum/sesudah perbaikan, tes terfokus, dan batasan; perubahan lintas zona lewat parent |
+
+Klaim DOCS aktif sebelum edit dokumentasi putaran ini. Pemetaan fase 1 dari parent: Carson (hak akses/Urungkan), Boole (atomik),
+Archimedes (PIC), Kant (guard skrip), dan Banach (Auditor/harness galat mentah).
+Rincian subzona dan status bukti dicatat pada rencana lanjutan; perubahan lintas
+zona tetap melalui parent. Tabel zona historis di bawah tidak menjadi pembagian baru. Aturan migrasi terbaru mengikuti bagian 5
+[`SERAH-TERIMA-CODEX.md`](SERAH-TERIMA-CODEX.md), menggantikan larangan lama
+Codex menulis migrasi. Untuk putaran ini, jangan seed/reset basis data persisten
+lokal port 54339 atau menghentikan server port 3200. Tidak ada operasi Supabase,
+server, push, PR, rebase, reset, atau force-push.
+
+Gerbang final lokal: 63 berkas/1.192 tes, Prisma validate, TypeScript, ESLint,
+diff check, build/runtime runner Docker lolos. HTTP/PostgreSQL lokal 14
+pemeriksaan serta tiga race lolos. Hasil final ada di laporan CX 8–15.
+Fase 2: 5 agen baru untuk CX 8 sisa; CX 9+15 dan subjudul Auditor; CX 10+12;
+CX 11 pratinjau; CX 13+14 infrastruktur/e2e. DOCS tetap pemilik dokumentasi.
+
+Rencana dan status bukti: [lanjutan poin 1–7 dan CX 8–15](codex/LANJUTAN-POIN1-7-DAN-CX8-15.md).
+
 ## Zona aktif
 
 Zona per tugas ada di `PEMBAGIAN-TUGAS.md`. Ringkasnya:

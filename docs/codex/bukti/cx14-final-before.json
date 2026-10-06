@@ -1,0 +1,906 @@
+{
+  "runId": "cx14-87cbc11719e5",
+  "phase": "before",
+  "generatedAt": "2026-10-06T14:51:59.215Z",
+  "passed": 11,
+  "failed": 0,
+  "externalPending": 1,
+  "scenarios": [
+    {
+      "id": "A2-00",
+      "name": "Sesi HTTP sungguhan dan jam server uji",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 62
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 9
+        }
+      ],
+      "evidence": [
+        "Tanggal WIB 2026-10-08; locked=false; 3 proyek PIC."
+      ]
+    },
+    {
+      "id": "A2-01",
+      "name": "PIC membuat progres 3 proyek, mengirim laporan, angka Admin konsisten",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 35
+        },
+        {
+          "method": "POST",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 15
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 12
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 12
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/my-dashboard",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "POST",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 14
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 12
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/my-dashboard",
+          "status": 200,
+          "expected": 200,
+          "ms": 3
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "POST",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 13
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 9
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "GET",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/my-dashboard",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "PUT",
+          "path": "/api/progress-reports",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "PUT",
+          "path": "/api/progress-reports",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        }
+      ],
+      "evidence": [
+        "3 laporan PostgreSQL bernilai 45%; Meja kerja dan hero Admin 3 masuk; kepatuhan 1/1 PIC setelah laporan ketiga."
+      ]
+    },
+    {
+      "id": "A2-02",
+      "name": "Penerusan membekukan laporan; Urungkan; PIC → SDM → TI membuka koreksi dan bukti",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 409,
+          "expected": 409,
+          "ms": 7
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 409,
+          "expected": 409,
+          "ms": 6
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 409,
+          "expected": 409,
+          "ms": 7
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 409,
+          "expected": 409,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "POST",
+          "path": "/api/undo",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "POST",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "POST",
+          "path": "/api/unlock-requests",
+          "status": 201,
+          "expected": 201,
+          "ms": 9
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 32
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 30
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/unlock-requests",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/unlock-requests",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 12
+        },
+        {
+          "method": "GET",
+          "path": "/api/evidence?targetType=DAILY_REPORT&targetId=cmuwsro0d005djy0dabtfbfab",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        }
+      ],
+      "evidence": [
+        "Laporan cmuwsro0d005djy0dabtfbfab: beku 409, Urungkan berhasil, buka kunci cmuwsro94006tjy0dcsv6susr, koreksi 65% dan bukti tersimpan dengan audit."
+      ]
+    },
+    {
+      "id": "A2-05",
+      "name": "Output dikirim dengan bukti, diterima kepala divisi, angka PIC dan Direktur berubah",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 31
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 32
+        },
+        {
+          "method": "POST",
+          "path": "/api/outputs",
+          "status": 201,
+          "expected": 201,
+          "ms": 7
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/outputs",
+          "status": 422,
+          "expected": 422,
+          "ms": 4
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/outputs",
+          "status": 200,
+          "expected": 200,
+          "ms": 16
+        },
+        {
+          "method": "GET",
+          "path": "/api/outputs/review?divisionId=cx14-87cbc11719e5-division",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "POST",
+          "path": "/api/outputs/review",
+          "status": 200,
+          "expected": 200,
+          "ms": 9
+        },
+        {
+          "method": "GET",
+          "path": "/api/outputs?projectId=cx14-87cbc11719e5-project1",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/ringkasan?week=2026-W41",
+          "status": 200,
+          "expected": 200,
+          "ms": 12
+        }
+      ],
+      "evidence": [
+        "Output cmuwsroek007kjy0dj1fpp0c5: DITERIMA; counts PIC=1 dan outputsDone Direktur=1; reviewerId tersimpan."
+      ]
+    },
+    {
+      "id": "A2-03",
+      "name": "Serah Kamis sebelum 17.00 dan persetujuan mingguan",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "PUT",
+          "path": "/api/weekly-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 9
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "POST",
+          "path": "/api/weekly-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        },
+        {
+          "method": "POST",
+          "path": "/api/weekly-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        },
+        {
+          "method": "GET",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        }
+      ],
+      "evidence": [
+        "Laporan cmuwsrogp007yjy0d809354xi: DRAFT → MENUNGGU_PERSETUJUAN → DISETUJUI; siap diteruskan Admin."
+      ]
+    },
+    {
+      "id": "A2-04",
+      "name": "Ringkasan kepala divisi diterima Direktur dan tanggapan dibalas",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "PUT",
+          "path": "/api/kadiv/weekly-summary",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "POST",
+          "path": "/api/kadiv/weekly-summary",
+          "status": 200,
+          "expected": 200,
+          "ms": 11
+        },
+        {
+          "method": "POST",
+          "path": "/api/kadiv/weekly-summary",
+          "status": 409,
+          "expected": 409,
+          "ms": 12
+        },
+        {
+          "method": "POST",
+          "path": "/api/weekly-comments",
+          "status": 201,
+          "expected": 201,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/weekly-comments?divisionId=cx14-87cbc11719e5-division",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "POST",
+          "path": "/api/weekly-comments",
+          "status": 201,
+          "expected": 201,
+          "ms": 8
+        },
+        {
+          "method": "GET",
+          "path": "/api/weekly-comments?weeklyReportId=cmuwsrogp007yjy0d809354xi",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        }
+      ],
+      "evidence": [
+        "Poin ringkasan tersimpan; 2 tanggapan terbaca lintas peran; kirim ulang SENT. Kemunculan poin Direktur diperiksa sesudah 17.00 pada A2-04b."
+      ]
+    },
+    {
+      "id": "A2-03b",
+      "name": "Admin meneruskan mingguan, status Direktur berubah dan isi membeku",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/inbox",
+          "status": 200,
+          "expected": 200,
+          "ms": 8
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "GET",
+          "path": "/api/weekly-reports?entityId=cx14-87cbc11719e5-pt",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "PUT",
+          "path": "/api/weekly-input",
+          "status": 409,
+          "expected": 409,
+          "ms": 3
+        },
+        {
+          "method": "POST",
+          "path": "/api/kadiv/weekly-summary",
+          "status": 409,
+          "expected": 409,
+          "ms": 5
+        }
+      ],
+      "evidence": [
+        "forwardedAt tersimpan dan terlihat di arsip Direktur; perubahan mingguan dan penarikan ringkasan ditolak 409. Lencana sent diperiksa A2-04b."
+      ]
+    },
+    {
+      "id": "A2-06",
+      "name": "Direktur menyetujui usulan tenggat dan PIC melihat tanggal baru",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/deadline-proposals",
+          "status": 201,
+          "expected": 201,
+          "ms": 10
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/deadline-proposals",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/project-progress?projectId=cx14-87cbc11719e5-project2",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        }
+      ],
+      "evidence": [
+        "Project.targetEndDate dan blok tenggat PIC sama: 22 Oktober 2026 WIB."
+      ]
+    },
+    {
+      "id": "A2-07",
+      "name": "Persetujuan cuti membuat Attendance CUTI; Urungkan menghapus efeknya",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/approval-requests",
+          "status": 201,
+          "expected": 201,
+          "ms": 9
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/approval-requests",
+          "status": 200,
+          "expected": 200,
+          "ms": 10
+        },
+        {
+          "method": "GET",
+          "path": "/api/attendance?from=2026-10-09&to=2026-10-09",
+          "status": 200,
+          "expected": 200,
+          "ms": 3
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/approval-requests",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "GET",
+          "path": "/api/attendance?from=2026-10-09&to=2026-10-09",
+          "status": 200,
+          "expected": 200,
+          "ms": 3
+        }
+      ],
+      "evidence": [
+        "1 Attendance CUTI sesudah approve; 0 sesudah undo; terbukti lewat HTTP dan PostgreSQL."
+      ]
+    },
+    {
+      "id": "A2-09",
+      "name": "Akun baru, reset dan AKUN_BARU memaksa ganti sandi",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/companies/users",
+          "status": 200,
+          "expected": 200,
+          "ms": 30
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 29
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "status": 307,
+          "expected": 307,
+          "ms": 11
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 403,
+          "expected": 403,
+          "ms": 2
+        },
+        {
+          "method": "POST",
+          "path": "/api/profile/password",
+          "status": 200,
+          "expected": 200,
+          "ms": 54
+        },
+        {
+          "method": "GET",
+          "path": "/api/auth/me",
+          "status": 200,
+          "expected": 200,
+          "ms": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 4
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/companies/users",
+          "status": 200,
+          "expected": 200,
+          "ms": 30
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 34
+        },
+        {
+          "method": "GET",
+          "path": "/",
+          "status": 307,
+          "expected": 307,
+          "ms": 7
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 403,
+          "expected": 403,
+          "ms": 3
+        },
+        {
+          "method": "POST",
+          "path": "/api/access-requests",
+          "status": 201,
+          "expected": 201,
+          "ms": 9
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/access-requests",
+          "status": 200,
+          "expected": 200,
+          "ms": 52
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/companies/users",
+          "status": 200,
+          "expected": 200,
+          "ms": 31
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 31
+        },
+        {
+          "method": "POST",
+          "path": "/api/profile/password",
+          "status": 200,
+          "expected": 200,
+          "ms": 66
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 3
+        }
+      ],
+      "evidence": [
+        "Create/reset/AKUN_BARU menghasilkan mustChangePassword; halaman / memberi 307 ke /login/ganti-sandi; API kerja 403 sampai ganti sandi; sesi baru dapat membuka Meja kerja."
+      ]
+    },
+    {
+      "id": "A2-11",
+      "name": "Peran kosong dan penolakan lintas proyek/PT",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 29
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 30
+        },
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 31
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 400,
+          "expected": 400,
+          "ms": 3
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance",
+          "status": 403,
+          "expected": 403,
+          "ms": 3
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 403,
+          "expected": 403,
+          "ms": 5
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "GET",
+          "path": "/api/admin/compliance?entityId=cx14-87cbc11719e5-other",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        }
+      ],
+      "evidence": [
+        "PIC/Kadiv kosong; Admin tanpa PT ditolak tertutup; mutasi proyek luar 403 dan data tetap. Query PT luar 200 identik dengan baseline PT sendiri: satu divisi, satu entitas, kepatuhan 1/1 PIC, tanpa ID entitas/proyek/akun luar."
+      ]
+    },
+    {
+      "id": "A2-08",
+      "name": "Unggah berkas bukti dan persetujuan ke Supabase Storage",
+      "status": "EXTERNAL_PENDING",
+      "steps": [],
+      "evidence": [
+        "Belum dijalankan: akses Supabase sungguhan tidak diotorisasi. Tautan bukti lokal diuji pada TASK, DAILY_REPORT, PROGRESS_REPORT, WEEKLY_ITEM dan OUTPUT; tidak disamakan dengan unggah berkas."
+      ]
+    }
+  ]
+}

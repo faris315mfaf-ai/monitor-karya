@@ -1,5 +1,15 @@
 # Basis data pengembangan lokal
 
+> **Kondisi mesin saat ini, 6 Oktober 2026:** port host **54329 sudah dipakai
+> layanan lain**. DB persisten Monitor Karya ada di **54339** dan server utama
+> di **3200**; keduanya dipertahankan beserta data pengguna. Perintah naik,
+> migrasi, seed, ulang/reset dan buat akun di bawah adalah panduan **setup DB
+> baru**, bukan perintah untuk dijalankan kembali pada DB yang sudah ada.
+> Jangan menghentikan layanan 54329, reset/seed DB 54339, atau menghentikan 3200.
+> CX 14 menggunakan DB terisolasi tersendiri: 54329 hanya di namespace kontainer,
+> aplikasi uji 3201/3202; [hasil dan reproduksi](CX14-HASIL.md).
+
+
 PostgreSQL 17 berjalan lewat `docker-compose.dev.yml`, hanya pada `127.0.0.1:54329`. Volume `postgres_local` menyimpan data dev. Kata sandi dalam compose adalah khusus lokal.
 
 ```bash

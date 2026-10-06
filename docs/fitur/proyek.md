@@ -65,7 +65,7 @@ Fase proyek (`phase`) berdiri terpisah dari `lifecycle`: INISIASI → PERENCANAA
 
 1. **Header dan hero.**
    - `PageHeader` dengan tombol "Ajukan proyek" dan notifikasi.
-   - `Hero` berisi kalimat jawaban dan baris dukungan "Di halaman ini": menunggu keputusan Anda, terlambat, perlu perhatian, belum ada laporan harian.
+   - `Hero` berisi kalimat jawaban dan baris dukungan berdasarkan total/ringkasan API: menunggu keputusan Anda, terlambat, perlu perhatian, belum ada laporan harian.
 2. **Saringan.**
    - Chip status lifecycle.
    - Pilihan fase (`mk-select`).
@@ -108,7 +108,7 @@ Setiap perubahan ditulis ke `AuditLog`: `PROPOSE_PROJECT`, `CREATE_PROJECT`, `AP
 
 ## Catatan terbuka
 
-- Hitungan di baris dukungan hero hanya dari halaman yang sedang dimuat, karena API berhalaman.
+- CX 9 menyediakan total/ringkasan agar baris hero tidak dibatasi halaman yang dimuat. CX 15 menangani pilihan palet menurut ID dan cakupan akun untuk membuka Sheet yang tepat.
 - Setujui, tolak, ajukan ulang, dan arsip bisa diurungkan 15 menit lewat toast "Urungkan" (lihat [urungkan.md](urungkan.md)). Arsip lewat formulir hanya membalik siklus hidup, bukan kolom lain yang diubah bersamaan. [F2-URUNGKAN]
 - Selesai (F2-ADMIN): divisi pelaksana bisa diatur dari formulir; nilainya tercatat di AuditLog. "Atur anggota" (`PUT /api/kadiv/members`) tetap bisa menautkan proyek.
 - Data contoh `/pratinjau` untuk `/api/projects` ada di `src/components/preview/mock-proyek.ts` (F3-A).

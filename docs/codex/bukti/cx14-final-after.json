@@ -1,0 +1,117 @@
+{
+  "runId": "cx14-87cbc11719e5",
+  "phase": "after",
+  "generatedAt": "2026-10-06T14:57:41.565Z",
+  "passed": 3,
+  "failed": 0,
+  "externalPending": 0,
+  "scenarios": [
+    {
+      "id": "A2-00",
+      "name": "Sesi HTTP sungguhan dan jam server uji",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 123
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 14
+        }
+      ],
+      "evidence": [
+        "Tanggal WIB 2026-10-08; locked=true; 3 proyek PIC."
+      ]
+    },
+    {
+      "id": "A2-10",
+      "name": "Setelah 17.00 WIB: tugas, laporan, bukti dan pengingat terkunci",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 32
+        },
+        {
+          "method": "PUT",
+          "path": "/api/tasks",
+          "status": 409,
+          "expected": 409,
+          "ms": 12
+        },
+        {
+          "method": "PUT",
+          "path": "/api/daily-input",
+          "status": 409,
+          "expected": 409,
+          "ms": 8
+        },
+        {
+          "method": "POST",
+          "path": "/api/evidence",
+          "status": 409,
+          "expected": 409,
+          "ms": 4
+        },
+        {
+          "method": "POST",
+          "path": "/api/work-desk",
+          "status": 409,
+          "expected": 409,
+          "ms": 3
+        },
+        {
+          "method": "GET",
+          "path": "/api/work-desk",
+          "status": 200,
+          "expected": 200,
+          "ms": 6
+        },
+        {
+          "method": "GET",
+          "path": "/api/daily-input",
+          "status": 200,
+          "expected": 200,
+          "ms": 7
+        }
+      ],
+      "evidence": [
+        "HTTP 409 untuk 4 mutasi; report.updatedAt dan jumlah notifikasi tetap; countdown.passed=true. Label cincin diuji parent di browser."
+      ]
+    },
+    {
+      "id": "A2-04b",
+      "name": "Setelah serah 17.00, Ringkasan Direktur memuat minggu berjalan dan poin kepala divisi",
+      "status": "PASS",
+      "steps": [
+        {
+          "method": "POST",
+          "path": "/api/auth/login",
+          "status": 200,
+          "expected": 200,
+          "ms": 31
+        },
+        {
+          "method": "GET",
+          "path": "/api/ringkasan",
+          "status": 200,
+          "expected": 200,
+          "ms": 27
+        }
+      ],
+      "evidence": [
+        "M41 tampil setelah Kamis 17.00; poin identik, lencana sent dan 2 tanggapan Direktur/kepala divisi."
+      ]
+    }
+  ]
+}

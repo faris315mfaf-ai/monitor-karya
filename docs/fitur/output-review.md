@@ -44,7 +44,7 @@ Kelompok relasi: `READ_RELATIONS` (semua), `PIC_WRITE_RELATIONS` (PIC, ADMIN, MA
 
 **Alur kepala divisi** (`src/components/kadiv/review-card.tsx`):
 
-1. Kartu **Output menunggu review** berisi chip per proyek dan satu baris per output: pemilik, umur, proyek, jumlah berkas.
+1. Kartu **Output menunggu review** berisi chip per proyek dan satu baris per output: pemilik, umur, proyek, jenis bukti output (CX 15).
 2. "Terima" langsung menerima. Toast "Urungkan" bisa dipakai dalam 15 menit.
 3. "Minta revisi" membuka isian catatan (wajib, minimal 5 huruf).
 4. "Terima semua" menerima seluruh antrean, atau proyek terpilih.
@@ -149,8 +149,8 @@ Tahapan bertanggal menggantikan 4 fase tetap di layar PIC (`src/components/pic/s
 
 - **Selesai [F1-D] — relasi `KADIV` per divisi.** `relationTo` (src/lib/pic-access.ts) hanya mengaitkan kepala divisi dengan proyek divisinya: `Project.divisionId`, lalu divisi PIC (`User.divisionId`), lalu divisi yang dipimpin PIC. Berlaku untuk catatan, baca, hitungan belum dibaca, dan penerima notifikasi catatan.
 - **Selesai [F1-D] — status baca per akun.** Tabel `NoteRead` (migrasi 0019) menggantikan `ProjectNote.readAt` tunggal. `readAt` lama tetap dibaca: catatan sebelum 0019 yang sudah bertanda dianggap dibaca semua pihak. Respons tetap memuat `readAt` (untuk catatan pihak lain = kapan Anda membacanya; untuk catatan Anda = kapan pertama dibaca pihak lain) dan `readCount`.
-- **Selesai [F1-D] — riwayat revisi.** Setiap "Minta revisi" disimpan di `OutputRevision` (migrasi 0019). Mengurungkan permintaan revisi memulihkan catatan putaran sebelumnya; riwayat dibaca lewat `GET /api/outputs?id=&history=1`. Migrasi 0019 belum diterapkan ke basis data; sebelum itu pencatatan riwayat gagal tanpa menggagalkan keputusan.
+- **Selesai [F1-D] — riwayat revisi.** Setiap "Minta revisi" disimpan di `OutputRevision` (migrasi 0019). Mengurungkan permintaan revisi memulihkan catatan putaran sebelumnya; riwayat dibaca lewat `GET /api/outputs?id=&history=1`. Migrasi 0019 sudah diuji lokal, belum diterapkan ke produksi; sebelum itu pencatatan riwayat gagal tanpa menggagalkan keputusan.
 - **Unggah bukti** butuh `SUPABASE_SERVICE_ROLE_KEY`. Tanpa kunci ini server menjawab 503, dan Sheet menawarkan "Tambah tautan bukti".
 - **Selesai (F2-DIREKTUR):** `ProjectSheet` pengawas punya "Kirim catatan ke PIC" (`/api/project-notes`, akses `guardNoteAccess`) dan "Tandai sudah ditinjau" (`/api/project-reviews`, Urungkan 15 menit), serta tahapan bertanggal dari `ProjectStage`.
 - **Selesai (F4-B):** kartu review kepala divisi memakai tombol per baris sekunder (`approveVariant="secondary"`); hanya "Terima semua" yang primer.
-- **Jenis bukti** di kartu review ditulis sebagai jumlah berkas ("2 berkas"), belum per jenis.
+- **Jenis bukti** di kartu review ditampilkan per output sejak CX 15.

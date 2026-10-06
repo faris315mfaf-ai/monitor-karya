@@ -1,0 +1,149 @@
+CX14 before · cx14-87cbc11719e5
+11 lulus, 0 gagal, 1 verifikasi eksternal tertunda.
+
+PASS A2-00 — Sesi HTTP sungguhan dan jam server uji
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /api/daily-input: 200 (diharapkan 200)
+  Bukti: Tanggal WIB 2026-10-08; locked=false; 3 proyek PIC.
+
+PASS A2-01 — PIC membuat progres 3 proyek, mengirim laporan, angka Admin konsisten
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/tasks: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  PUT /api/tasks: 200 (diharapkan 200)
+  PUT /api/daily-input: 200 (diharapkan 200)
+  GET /api/inbox: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/my-dashboard: 200 (diharapkan 200)
+  GET /api/admin/compliance: 200 (diharapkan 200)
+  POST /api/tasks: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  PUT /api/tasks: 200 (diharapkan 200)
+  PUT /api/daily-input: 200 (diharapkan 200)
+  GET /api/inbox: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/my-dashboard: 200 (diharapkan 200)
+  GET /api/admin/compliance: 200 (diharapkan 200)
+  POST /api/tasks: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  PUT /api/tasks: 200 (diharapkan 200)
+  PUT /api/daily-input: 200 (diharapkan 200)
+  GET /api/inbox: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/my-dashboard: 200 (diharapkan 200)
+  GET /api/admin/compliance: 200 (diharapkan 200)
+  PUT /api/progress-reports: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  PUT /api/progress-reports: 200 (diharapkan 200)
+  Bukti: 3 laporan PostgreSQL bernilai 45%; Meja kerja dan hero Admin 3 masuk; kepatuhan 1/1 PIC setelah laporan ketiga.
+
+PASS A2-02 — Penerusan membekukan laporan; Urungkan; PIC → SDM → TI membuka koreksi dan bukti
+  POST /api/inbox: 200 (diharapkan 200)
+  PUT /api/daily-input: 409 (diharapkan 409)
+  PUT /api/daily-input: 409 (diharapkan 409)
+  PUT /api/tasks: 409 (diharapkan 409)
+  POST /api/evidence: 409 (diharapkan 409)
+  GET /api/daily-input: 200 (diharapkan 200)
+  POST /api/undo: 200 (diharapkan 200)
+  POST /api/inbox: 200 (diharapkan 200)
+  POST /api/unlock-requests: 201 (diharapkan 201)
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  PATCH /api/unlock-requests: 200 (diharapkan 200)
+  PATCH /api/unlock-requests: 200 (diharapkan 200)
+  GET /api/daily-input: 200 (diharapkan 200)
+  PUT /api/tasks: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  PUT /api/daily-input: 200 (diharapkan 200)
+  GET /api/evidence?targetType=DAILY_REPORT&targetId=cmuwsro0d005djy0dabtfbfab: 200 (diharapkan 200)
+  Bukti: Laporan cmuwsro0d005djy0dabtfbfab: beku 409, Urungkan berhasil, buka kunci cmuwsro94006tjy0dcsv6susr, koreksi 65% dan bukti tersimpan dengan audit.
+
+PASS A2-05 — Output dikirim dengan bukti, diterima kepala divisi, angka PIC dan Direktur berubah
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/outputs: 201 (diharapkan 201)
+  PATCH /api/outputs: 422 (diharapkan 422)
+  POST /api/evidence: 200 (diharapkan 200)
+  PATCH /api/outputs: 200 (diharapkan 200)
+  GET /api/outputs/review?divisionId=cx14-87cbc11719e5-division: 200 (diharapkan 200)
+  POST /api/outputs/review: 200 (diharapkan 200)
+  GET /api/outputs?projectId=cx14-87cbc11719e5-project1: 200 (diharapkan 200)
+  GET /api/ringkasan?week=2026-W41: 200 (diharapkan 200)
+  Bukti: Output cmuwsroek007kjy0dj1fpp0c5: DITERIMA; counts PIC=1 dan outputsDone Direktur=1; reviewerId tersimpan.
+
+PASS A2-03 — Serah Kamis sebelum 17.00 dan persetujuan mingguan
+  PUT /api/weekly-input: 200 (diharapkan 200)
+  POST /api/evidence: 200 (diharapkan 200)
+  POST /api/weekly-input: 200 (diharapkan 200)
+  POST /api/weekly-input: 200 (diharapkan 200)
+  GET /api/inbox: 200 (diharapkan 200)
+  Bukti: Laporan cmuwsrogp007yjy0d809354xi: DRAFT → MENUNGGU_PERSETUJUAN → DISETUJUI; siap diteruskan Admin.
+
+PASS A2-04 — Ringkasan kepala divisi diterima Direktur dan tanggapan dibalas
+  PUT /api/kadiv/weekly-summary: 200 (diharapkan 200)
+  POST /api/kadiv/weekly-summary: 200 (diharapkan 200)
+  POST /api/kadiv/weekly-summary: 409 (diharapkan 409)
+  POST /api/weekly-comments: 201 (diharapkan 201)
+  GET /api/weekly-comments?divisionId=cx14-87cbc11719e5-division: 200 (diharapkan 200)
+  POST /api/weekly-comments: 201 (diharapkan 201)
+  GET /api/weekly-comments?weeklyReportId=cmuwsrogp007yjy0d809354xi: 200 (diharapkan 200)
+  Bukti: Poin ringkasan tersimpan; 2 tanggapan terbaca lintas peran; kirim ulang SENT. Kemunculan poin Direktur diperiksa sesudah 17.00 pada A2-04b.
+
+PASS A2-03b — Admin meneruskan mingguan, status Direktur berubah dan isi membeku
+  POST /api/inbox: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/weekly-reports?entityId=cx14-87cbc11719e5-pt: 200 (diharapkan 200)
+  PUT /api/weekly-input: 409 (diharapkan 409)
+  POST /api/kadiv/weekly-summary: 409 (diharapkan 409)
+  Bukti: forwardedAt tersimpan dan terlihat di arsip Direktur; perubahan mingguan dan penarikan ringkasan ditolak 409. Lencana sent diperiksa A2-04b.
+
+PASS A2-06 — Direktur menyetujui usulan tenggat dan PIC melihat tanggal baru
+  POST /api/deadline-proposals: 201 (diharapkan 201)
+  PATCH /api/deadline-proposals: 200 (diharapkan 200)
+  GET /api/project-progress?projectId=cx14-87cbc11719e5-project2: 200 (diharapkan 200)
+  Bukti: Project.targetEndDate dan blok tenggat PIC sama: 22 Oktober 2026 WIB.
+
+PASS A2-07 — Persetujuan cuti membuat Attendance CUTI; Urungkan menghapus efeknya
+  POST /api/approval-requests: 201 (diharapkan 201)
+  PATCH /api/approval-requests: 200 (diharapkan 200)
+  GET /api/attendance?from=2026-10-09&to=2026-10-09: 200 (diharapkan 200)
+  PATCH /api/approval-requests: 200 (diharapkan 200)
+  GET /api/attendance?from=2026-10-09&to=2026-10-09: 200 (diharapkan 200)
+  Bukti: 1 Attendance CUTI sesudah approve; 0 sesudah undo; terbukti lewat HTTP dan PostgreSQL.
+
+PASS A2-09 — Akun baru, reset dan AKUN_BARU memaksa ganti sandi
+  POST /api/companies/users: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /: 307 (diharapkan 307)
+  GET /api/work-desk: 403 (diharapkan 403)
+  POST /api/profile/password: 200 (diharapkan 200)
+  GET /api/auth/me: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  PATCH /api/companies/users: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /: 307 (diharapkan 307)
+  GET /api/work-desk: 403 (diharapkan 403)
+  POST /api/access-requests: 201 (diharapkan 201)
+  PATCH /api/access-requests: 200 (diharapkan 200)
+  PATCH /api/companies/users: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/profile/password: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  Bukti: Create/reset/AKUN_BARU menghasilkan mustChangePassword; halaman / memberi 307 ke /login/ganti-sandi; API kerja 403 sampai ganti sandi; sesi baru dapat membuka Meja kerja.
+
+PASS A2-11 — Peran kosong dan penolakan lintas proyek/PT
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/daily-input: 200 (diharapkan 200)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/work-desk: 400 (diharapkan 400)
+  GET /api/admin/compliance: 403 (diharapkan 403)
+  PUT /api/daily-input: 403 (diharapkan 403)
+  GET /api/admin/compliance: 200 (diharapkan 200)
+  GET /api/admin/compliance?entityId=cx14-87cbc11719e5-other: 200 (diharapkan 200)
+  Bukti: PIC/Kadiv kosong; Admin tanpa PT ditolak tertutup; mutasi proyek luar 403 dan data tetap. Query PT luar 200 identik dengan baseline PT sendiri: satu divisi, satu entitas, kepatuhan 1/1 PIC, tanpa ID entitas/proyek/akun luar.
+
+EXTERNAL_PENDING A2-08 — Unggah berkas bukti dan persetujuan ke Supabase Storage
+  Bukti: Belum dijalankan: akses Supabase sungguhan tidak diotorisasi. Tautan bukti lokal diuji pada TASK, DAILY_REPORT, PROGRESS_REPORT, WEEKLY_ITEM dan OUTPUT; tidak disamakan dengan unggah berkas.

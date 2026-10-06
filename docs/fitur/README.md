@@ -4,7 +4,7 @@ Dokumentasi kode dan penjelasan fitur untuk cabang `desain-baru` per 6 Oktober 2
 
 **Mulai dari sini:** [matriks-fungsi-peran.md](matriks-fungsi-peran.md) memuat setiap fungsi per peran beserta layar, endpoint, status, dan fasenya.
 
-> **Belum ada fungsi baru yang dicoba dengan basis data sungguhan.** Migrasi 0013–0025 belum diterapkan; sebelum 0015 dan 0018 diterapkan, cabang ini tidak bisa dipakai pada basis data sungguhan (lihat [Migrasi manual](#migrasi-manual-00130025)).
+> **Alur sudah diuji pada PostgreSQL/HTTP lokal nyata:** 11 pemeriksaan sebelum dan 3 sesudah 17.00 WIB lolos; [laporan CX 14](../codex/CX14-HASIL.md). Migrasi sampai 0026 (23 folder) lolos lokal terisolasi. Ini bukan penerapan produksi; Supabase Storage nyata tetap EXTERNAL_PENDING. [Hasil CX 8–15](../codex/CX8–15-HASIL.md) memuat status terkini.
 
 ## Keputusan produk yang berlaku
 
@@ -95,7 +95,7 @@ PRATINJAU_URL="http://localhost:3100/pratinjau?peran=" CDP_PORT=9333 \
   node docs/fitur/img/_sumber/tangkap-layar.mjs docs/fitur/img/layar
 ```
 
-Halaman pratinjau memakai data contoh di `src/components/preview/`, jadi angka dan nama di gambar itu bukan data sungguhan, dan beberapa angka tidak sama antarperan (lihat [`SISA-PEKERJAAN.md`](../SISA-PEKERJAAN.md)).
+Halaman pratinjau memakai data contoh di `src/components/preview/`, jadi angka dan nama di gambar itu bukan data sungguhan, Galeri historis di bawah mendahului katalog kanonis CX 11; gambar terbaru putaran Codex tersedia di [hasil CX 8–15](../codex/CX8–15-HASIL.md).
 
 ## Galeri tangkapan layar
 
@@ -147,7 +147,7 @@ Semua tangkapan diambil dari `/pratinjau` pada 6 Oktober 2026 (1440 × 1000 px, 
 
 ## Menjalankan di mesin lokal
 
-Prasyarat: Node.js 20 atau lebih baru dan git. Langkah lengkap ada di [`README.md`](../../README.md) dan [`SUPABASE_SETUP.md`](../../SUPABASE_SETUP.md).
+Prasyarat Node sesuai manifest: `^22.12.0 || ^24.0.0 || >=26.0.0`, dan git. Langkah lokal ada di [`README.md`](../../README.md) dan [panduan DB lokal](../codex/db-lokal.md).
 
 ```bash
 npm install
@@ -201,7 +201,7 @@ npm run test:coverage
 | Pengawas | `tests/api/approval-requests`, `weekly-comments`, `project-reviews`, `search`, `undo` | Persetujuan, tanggapan, tinjauan, ⌘K, Urungkan |
 | Keamanan | `tests/api/login`, `proxy`, `must-change-password`, `keamanan-akses`, `keamanan-galat-mentah`, `auditor-readonly` | Pembatas laju, CSRF, wajib ganti sandi, cakupan, tanpa `err.message` mentah, Auditor hanya-baca di semua route |
 
-Pada pemeriksaan terakhir (integrasi akhir, 6 Okt 2026) ada 39 berkas dan 674 tes, semuanya lolos. Tes memakai basis data tiruan (mock atau imitasi Prisma dalam memori). [`vitest.config.mts`](../../vitest.config.mts) mengarahkan `DATABASE_URL` ke alamat mati (`127.0.0.1:1`), jadi tes tidak bisa menyentuh Supabase. Tes ini memeriksa logika route, bukan kueri Prisma sungguhan.
+Pada pemeriksaan terbaru Codex (6 Okt 2026), **63 berkas dan 1.192 tes lolos**; [bukti terkini](../codex/CX8–15-HASIL.md). Tes memakai basis data tiruan (mock atau imitasi Prisma dalam memori). [`vitest.config.mts`](../../vitest.config.mts) mengarahkan `DATABASE_URL` ke alamat mati (`127.0.0.1:1`), jadi tes tidak bisa menyentuh Supabase. Tes ini memeriksa logika route, bukan kueri Prisma sungguhan.
 
 Pemeriksaan lain sebelum PR:
 
@@ -215,7 +215,7 @@ Lalu jalankan daftar periksa [`docs/design/15-checklist-review.md`](../design/15
 
 ## Migrasi manual 0013–0025
 
-> **Wajib dijalankan oleh manusia.** Sepuluh migrasi di bawah sudah ditulis tetapi **belum diterapkan** ke basis data mana pun. Tidak ada agen yang boleh menjalankannya. Prisma Client yang sudah dibuat ulang mengharapkan kolom `User.divisionId`, `User.mustChangePassword`, dan `Project.divisionId`. Selama 0015 dan 0018 belum diterapkan, kueri yang memilih semua kolom `User` atau `Project` gagal. Jangan menjalankan cabang ini terhadap basis data produksi sebelum migrasi diterapkan.
+> **Wajib dijalankan oleh manusia.** Sepuluh migrasi historis di bawah dan 0026 sudah diterapkan hanya pada DB lokal terisolasi. **Penerapan produksi belum dilakukan**; agen tidak boleh menerapkannya ke Supabase/server. Prisma Client yang sudah dibuat ulang mengharapkan kolom `User.divisionId`, `User.mustChangePassword`, dan `Project.divisionId`. Selama 0015 dan 0018 belum diterapkan, kueri yang memilih semua kolom `User` atau `Project` gagal. Jangan menjalankan cabang ini terhadap basis data produksi sebelum migrasi diterapkan.
 
 Terapkan **persis dalam urutan ini**. Nomor 0020, 0022, dan 0024 memang tidak ada; Prisma mengurutkan menurut nama folder, jadi celah nomor tidak berpengaruh.
 
@@ -234,7 +234,7 @@ Terapkan **persis dalam urutan ini**. Nomor 0020, 0022, dan 0024 memang tidak ad
 
 Setiap tabel baru memasang `ENABLE ROW LEVEL SECURITY` tanpa policy. Akses hanya lewat Prisma di server, sama dengan tabel lama. Kolom baru di `User` dan `Project` ikut RLS tabelnya sejak 0002.
 
-Pemeriksaan integrasi akhir (6 Okt 2026), luring dan tanpa menjalankan migrasi: SQL yang dihasilkan `prisma migrate diff` dari skema HEAD ke `schema.prisma` sekarang dicocokkan dengan gabungan 0013–0025. Hasilnya 16 tabel, 158 kolom (tipe, NOT NULL, default), 54 indeks, dan 19 FK sama persis, tanpa kolom atau indeks berlebih. Semua tabel di skema punya `ENABLE ROW LEVEL SECURITY`. Setiap FK hanya merujuk tabel yang sudah dibuat di migrasi yang sama atau sebelumnya. Yang **belum** dicek: menjalankan SQL ini pada Postgres sungguhan (urutan pernyataan, data lama yang melanggar CHECK/FK), dan kecocokan 0001–0012 dengan basis data (perlu shadow database).
+Pemeriksaan integrasi akhir (6 Okt 2026), luring dan tanpa menjalankan migrasi: SQL yang dihasilkan `prisma migrate diff` dari skema HEAD ke `schema.prisma` sekarang dicocokkan dengan gabungan 0013–0025. Hasilnya 16 tabel, 158 kolom (tipe, NOT NULL, default), 54 indeks, dan 19 FK sama persis, tanpa kolom atau indeks berlebih. Semua tabel di skema punya `ENABLE ROW LEVEL SECURITY`. Setiap FK hanya merujuk tabel yang sudah dibuat di migrasi yang sama atau sebelumnya. Pemeriksaan lanjutan menjalankan 23 migrasi pada PostgreSQL lokal kosong dan lolos. Data produksi lama serta kecocokan riwayat produksi belum diverifikasi; hasil lokal tidak menggantikannya.
 
 Langkah yang disarankan, dikerjakan oleh orang yang memegang akses basis data:
 

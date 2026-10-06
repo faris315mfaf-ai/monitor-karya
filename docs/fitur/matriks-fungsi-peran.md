@@ -4,7 +4,7 @@
 
 Setiap fungsi yang bisa dipakai tiap peran, beserta layar, endpoint, status, dan fase pengerjaannya. Disusun 6 Oktober 2026 setelah gerbang Fase 3 dan integrasi akhir, dari kode di cabang `desain-baru` dan laporan tiap fase.
 
-> **Belum ada yang dicoba dengan basis data sungguhan.** Migrasi 0013–0025 belum diterapkan (lihat [README](README.md#migrasi-manual-00130025)). "Selesai" di tabel ini berarti kode sudah dibangun, lolos `tsc`, `eslint`, dan `vitest` (dengan basis data tiruan), dan layarnya sudah dicoba di `/pratinjau` dengan data contoh. Fungsi yang bergantung pada tabel baru akan menjawab 503 atau tampil kosong sampai migrasinya diterapkan.
+> Keadaan terbaru: 63 berkas/1.192 tes dan E2E HTTP/PostgreSQL lokal 14 pemeriksaan lolos. Seluruh 23 migrasi diuji lokal, bukan produksi. [Hasil CX 8–15](../codex/CX8–15-HASIL.md) menjadi rujukan pemeriksaan terbaru; tabel ini juga mencatat keputusan navigasi historis yang tidak diubah.
 
 ## Cara membaca
 
@@ -58,7 +58,7 @@ Tab: Ringkasan ("Hari ini") · Meja kerja · Laporan harian · Proyek. Rincian: 
 | Laporan beku setelah diteruskan; kotak kunci di layar | `daily-input`, `dashboard` | `PUT/DELETE /api/daily-input` → 409 `frozen` | selesai | 1 |
 | Ajukan buka kunci laporan harian proyek sendiri; lihat statusnya | `daily-input` (`UnlockRequestSheet`) | `POST /api/unlock-requests` (hanya `DAILY_REPORT` proyek sendiri) | selesai | 1 |
 | Tugas harian: tambah, ubah, centang (Urungkan), hapus | `work-desk`, `daily-input` | `GET/POST/PUT/DELETE /api/tasks` | selesai | 0 → 1 |
-| Papan tugas mingguan proyek, seret-lepas | `daily-input` (Mingguan) | `GET /api/tasks?week=`, `PATCH /api/tasks` | sebagian: API menolak hari yang beku (409) dan mengirim `frozenDays`, tetapi papan belum menandai kolom beku lebih dulu | 1 |
+| Papan tugas mingguan proyek, seret-lepas | `daily-input` (Mingguan) | `GET /api/tasks?week=`, `PATCH /api/tasks` | selesai: papan memakai frozenDays, tindakan edit/pindah ditolak pada hari beku (CX 2) | 1 |
 | Lampirkan bukti: unggah, tautan, seret-lepas, "Lampirkan foto" | `daily-input` (`EvidencePanel`) | `GET/POST /api/evidence`, `POST /api/evidence/upload`, `GET/DELETE /api/evidence/[id]` | selesai. Unggah butuh `SUPABASE_SERVICE_ROLE_KEY`; tanpa itu 503 dan hanya tautan yang jalan. | 1 → 4 |
 | Bukti laporan lampau yang sedang dibuka bisa ditambah/dihapus | `daily-input` | `src/lib/evidence-access.ts` + `activeUnlockFor` | selesai | 4 |
 | Laporan kemajuan mingguan dan bulanan | `daily-input` (Mingguan/Bulanan) | `GET/PUT/DELETE /api/progress-reports` | selesai | 0 |
@@ -83,7 +83,7 @@ Tab: Ringkasan · Meja kerja · Capaian mingguan · Divisi. Rincian: [peran-kadi
 | Fungsi | Layar | Endpoint | Status | Fase |
 | --- | --- | --- | --- | --- |
 | Ringkasan: hero, 3 cincin, 4 KPI termasuk "Tepat waktu 30 hari" | `dashboard` | `GET /api/my-dashboard`, `GET /api/kadiv/team` | selesai | 0 → 2 |
-| Review output: Terima, Minta revisi dengan catatan, Terima semua, Urungkan | `dashboard`, `work-desk` (`ReviewCard`) | `GET/POST /api/outputs/review` (0013, riwayat 0019) | sebagian: jenis bukti ditulis sebagai jumlah berkas ("2 berkas"), belum per jenis | 0 → 1 → 4 |
+| Review output: Terima, Minta revisi dengan catatan, Terima semua, Urungkan | `dashboard`, `work-desk` (`ReviewCard`) | `GET/POST /api/outputs/review` (0013, riwayat 0019) | selesai: jenis bukti per output ditampilkan (CX 15) | 0 → 1 → 4 |
 | Urungkan "Minta revisi" memulihkan catatan putaran sebelumnya | `dashboard` | `POST /api/outputs/review`, `GET /api/outputs?id=&history=1` (0019) | selesai | 1 → 3 |
 | Laporan harian tim: lihat, Ingatkan yang belum, Tandai sudah dibaca (Urungkan) | `dashboard` (Sheet anggota) | `GET/POST /api/kadiv/team` (`remind`, `read`, `unread`; 0021) | selesai | 0 → 2 |
 | Atur anggota divisi dan proyek divisi | `dashboard` (Atur anggota) | `GET/PUT /api/kadiv/members` (0015) | selesai | 0 |
@@ -130,7 +130,7 @@ Tab: Ringkasan · Meja kerja · Laporan harian · Penerimaan · Proyek · Divisi
 | Meja akun terbatas PT: akun Admin PT/Kepala divisi/PIC, setel ulang kata sandi, anggota divisi | `dashboard` → Sheet akun | `/api/companies/users` | sebagian: perubahan peran langsung masih bisa tanpa permintaan (tercatat `UPDATE_ACCOUNT`); spesifikasi meminta selalu lewat persetujuan | 0 → 1 → 2 |
 | Ajukan buka kunci laporan harian/mingguan | `work-desk` | `POST /api/unlock-requests` | selesai | 0 |
 | Ajukan dan lihat eskalasi PT | `escalations` | `/api/escalations`, `/api/escalations/actions` | selesai | 0 |
-| Pencarian ⌘K (PT sendiri) | kerangka | `GET /api/search` | sebagian: palet bisa dibuka dengan ⌘K/Ctrl+K, tetapi kolom cari di header Admin belum ada | 2 |
+| Pencarian ⌘K (PT sendiri) | kerangka | `GET /api/search` | selesai: tombol cari header Admin membuka palet; cari Rina diuji browser (CX 15) | 2 |
 | Nav khusus (Kepatuhan · Akses · Pengguna · Data induk · Log · Pengingat), tab tablet | navigasi | — | belum: butuh perubahan `ROLE_TABS` dan kerangka; isinya sudah ada sebagai kartu | — |
 
 ## Direktur entitas (`DIREKTUR_ENTITAS`)
@@ -188,7 +188,7 @@ Tab: Ringkasan · Proyek · Divisi · Persetujuan · Eskalasi · Entitas · Log 
 | Log aktivitas dan Unduh CSV | `audit` | `GET /api/audit-logs`, `/export` | selesai | 2 |
 | Entitas | `entities` | `/api/entities` | selesai | 0 |
 | Pencarian ⌘K, badge Persetujuan dan Eskalasi, tab ringkas tablet/ponsel | kerangka | `/api/search`, `/api/nav-badges` | selesai | 2 |
-| Delta "Rata-rata progres +n poin" | `dashboard` | — | belum: riwayat progres mingguan tidak disimpan; tile menulis "n proyek selesai" | — |
+| Delta "Rata-rata progres +n poin" | `dashboard` | — | selesai: delta ditampilkan hanya bila ada riwayat nyata; tanpa riwayat tidak mengarang angka (CX 15) | — |
 | Tab terpisah Aktivitas dan Kehadiran; badge jumlah proyek | navigasi | — | belum: tampil sebagai kartu di Ringkasan | — |
 
 ## Tim TI (`TI`)
@@ -240,7 +240,7 @@ Tab: semua kecuali Persetujuan. Rincian: [perusahaan-akun.md](perusahaan-akun.md
 | Fungsi | Peran | Layar | Endpoint | Status | Fase |
 | --- | --- | --- | --- | --- | --- |
 | Masuk, keluar, sesi HMAC yang dimuat ulang setiap permintaan | semua | `/login` | `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` | selesai | 0 |
-| Wajib ganti kata sandi saat masuk pertama; API lain 403 `MUST_CHANGE_PASSWORD` | akun buatan/setelan ulang admin | `/login/ganti-sandi` | `POST /api/profile/password` (0018) | sebagian: belum dicoba dengan akun sungguhan; menulis kolom gagal sampai 0018 diterapkan | 1 |
+| Wajib ganti kata sandi saat masuk pertama; API lain 403 `MUST_CHANGE_PASSWORD` | akun buatan/setelan ulang admin | `/login/ganti-sandi` | `POST /api/profile/password` (0018) | selesai lokal: create/reset/AKUN_BARU, redirect dan API gate diuji HTTP/PostgreSQL nyata (CX 14); produksi belum diterapkan | 1 |
 | Profil dan ganti kata sandi sendiri (minimal 8 karakter) | semua | Pengaturan | `GET/PATCH /api/profile`, `POST /api/profile/password` | selesai | 0 → 1 |
 | Notifikasi lonceng milik sendiri, tandai dibaca | semua | header, Dock | `GET/PATCH /api/notifications` | selesai | 0 → 1 |
 | Urungkan keputusan proyek, eskalasi, ajukan ulang, arsip, penerusan (15 menit) | Admin PT, pengawas, TI, Super Admin | toast | `POST /api/undo` (0025) | selesai: tanpa 0025 toast tampil tanpa tombol Urungkan | 2 |

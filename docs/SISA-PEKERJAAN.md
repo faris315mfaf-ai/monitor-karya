@@ -1,57 +1,63 @@
-# Sisa pekerjaan — cabang `desain-baru`
+# Sisa pekerjaan — backlog global dan hasil CX
 
-Pertama dipetakan 6 Oktober 2026 dari kode, `docs/design/`, dan status git. Diperbarui 6 Oktober 2026 sore setelah Fase 1 (fondasi), Fase 2 (fungsi peran), Fase 3 (data contoh dan tes), Fase 4 (daftar periksa desain), dan integrasi akhir.
+Diperbarui 6 Oktober 2026 setelah CX 8–15. **Gerbang lokal final: 63 berkas /
+1.192 tes, Prisma validate, TypeScript, ESLint, diff check dan build/runtime
+runner Docker lolos.** E2E HTTP/PostgreSQL lokal: 11 before + 3 after lolos.
+[Hasil dan artefak CX](codex/CX8–15-HASIL.md).
 
-Daftar ini hanya memuat yang **benar-benar belum**, dikelompokkan menurut siapa yang harus bergerak. Butir yang selesai sejak pemetaan pertama dicentang di bagian terakhir sebagai catatan. Setiap butir punya kriteria selesai; butir dianggap selesai bila kriterianya terpenuhi, bukan saat kodenya ditulis.
-
-Status per fungsi dan per peran: [`docs/fitur/matriks-fungsi-peran.md`](fitur/matriks-fungsi-peran.md). Dokumentasi fitur, alur, dan endpoint: [`docs/fitur/`](fitur/README.md).
-
-## Keadaan sekarang
-
-| Pemeriksaan | Hasil (integrasi akhir, 6 Okt 2026) |
-| --- | --- |
-| `npx prisma generate` | lolos (Prisma Client 6.19.3; peringatan `package.json#prisma` usang) |
-| `npx tsc --noEmit` | 0 galat di seluruh proyek |
-| `npx eslint src` | bersih |
-| `npx vitest run` | 39 berkas, 674 tes lolos. Semua memakai basis data tiruan; tidak ada yang menyentuh Supabase. |
-| `next build` | lolos (Next 16.3.8) dengan `DATABASE_URL` tiruan; `/login/ganti-sandi` dan `/icon.svg` ada di daftar route |
-| Docker (`--target runner`, `--read-only`, `--cap-drop ALL`) | kontainer sehat; `/login` 200, `/pratinjau` 404, `/api/cron/*` tanpa rahasia 401 |
-| `/pratinjau` | 9 peran, 62 tab termuat tanpa galat konsol atau 503 |
-| Migrasi 0013–0025 | ditulis dan dicocokkan luring dengan `schema.prisma`; **belum diterapkan** |
-
----
+Hasil CX tidak menyelesaikan seluruh backlog proyek. Bagian B (keputusan
+pemilik) dan D (QA manual) dipulihkan verbatim dari baseline `89766df`; bagian C
+mempertahankan pekerjaan yang belum dituntaskan. Butir CX yang selesai tidak
+lagi menjadi pekerjaan aktif. Riwayat proses ada di
+[lampiran](codex/LANJUTAN-POIN1-7-DAN-CX8-15.md).
 
 ## A. Pemegang akses basis data dan server (manusia)
 
-Agen dilarang menjalankan perintah yang menyentuh basis data. Semua butir di bawah wajib dikerjakan orang yang memegang akses.
+Agen tidak boleh mengakses Supabase/server. Pengujian lokal terisolasi telah
+dilakukan; DB persisten 54339 dan server/data pengguna 3200 dipertahankan.
 
-### A1. Terapkan migrasi 0013–0025
+### A1. Migrasi produksi dan backfill data lama
 
-Prisma Client yang sudah dibuat ulang mengharapkan `User.divisionId`, `User.mustChangePassword`, dan `Project.divisionId`. Selama 0015 dan 0018 belum diterapkan, kueri yang memilih semua kolom `User` atau `Project` gagal: **cabang ini tidak bisa dipakai pada basis data sungguhan sebelum migrasi diterapkan.** Langkah lengkap ada di [`docs/fitur/README.md`](fitur/README.md#migrasi-manual-00130025).
+Prisma Client mengharapkan `User.divisionId`, `User.mustChangePassword`, dan
+`Project.divisionId`. **Jangan memakai cabang ini pada produksi yang belum
+mempunyai migrasi tersebut.** Seluruh 23 migrasi termasuk 0026 telah lolos pada
+DB lokal terisolasi; hal ini tidak membuktikan data/riwayat produksi sudah siap.
+Panduan [migrasi manual](fitur/README.md#migrasi-manual-00130025),
+[deploy](../deploy/README.md) dan [checklist rilis](../deploy/CHECKLIST-RILIS.md).
 
-- [ ] Cadangkan basis data, lalu jalankan `npx prisma migrate status`. Pastikan 0001–0012 tercatat dan hanya 10 folder baru yang tertunda.
-- [ ] Terapkan berurutan: 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0021, 0023, 0025.
+- [ ] Cadangkan basis data produksi, lalu operator memeriksa
+  `npx prisma migrate status`; cocokan riwayat 0001–0012 dan folder tertunda
+  yang sebenarnya, bukan mengasumsikan status lokal berlaku di produksi.
+- [ ] Terapkan migrasi tertunda berurutan: 0013, 0014, 0015, 0016, 0017, 0018,
+  0019, 0021, 0023, 0025, lalu 0026. Nomor sengaja kosong tidak perlu diisi.
 - [ ] Isi `User.divisionId` (Sheet akun "Anggota divisi" atau "Atur anggota") dan `Project.divisionId` (formulir proyek "Divisi pelaksana") untuk data lama. Sampai diisi, proyek tanpa divisi mengikuti divisi PIC-nya, dan hitungan kepatuhan per orang bisa meleset.
 
-Kriteria selesai: `migrate status` bersih dan semua tab terbuka tanpa 500 untuk tiap akun seed.
+Kriteria selesai: `migrate status` bersih dan semua tab terbuka tanpa 500 untuk
+tiap peran; backfill data lama diverifikasi pada lingkungan produksi oleh operator.
 
-### A2. Uji dengan basis data sungguhan
+### A2. Hasil alur lokal dan verifikasi eksternal
 
-Semua fungsi baru hanya diuji dengan basis data tiruan dan `/pratinjau`. Masuk dengan akun seed tiap peran dan coba lintasan antarperan (`docs/design/peran/00-alur-antarperan.md`):
+[CX 14](codex/CX14-HASIL.md) menyimpan JSON/teks 11 before dan 3 after lolos
+melalui HTTP/PostgreSQL nyata lokal. Before/after merujuk sebelum/sesudah 17.00
+WIB pada jam server uji. Ini memperbarui anggapan lama bahwa semua alur hanya mock.
 
-- [ ] PIC mengirim laporan → baris di Meja kerja dan Ringkasan Admin PT berubah ke "Masuk"; angka hero, KPI, dan kepatuhan per orang sama.
-- [ ] Admin PT meneruskan → PIC melihat "Diteruskan ke holding"; ubah/kirim ulang ditolak 409; buka kunci (ajukan PIC → setujui SDM GA → jalankan TI) membuka laporan dan bukti; Urungkan penerusan berfungsi dalam 15 menit.
-- [ ] Kepala divisi menyerahkan (Kamis 17.00), menyetujui, Admin PT meneruskan → status di Meja kerja Admin dan lencana Direktur berubah; laporan beku.
-- [ ] Kepala divisi mengirim ringkasan ke Direktur → poinnya tampil di Sheet laporan Direktur; Direktur memberi tanggapan → kepala divisi membalas di Meja kerja.
-- [ ] Kepala divisi menerima output → hero dan cincin Output PIC serta Ringkasan Direktur ikut berubah.
-- [ ] Direktur menyetujui usulan tenggat → `Project.targetEndDate` dan blok tenggat PIC berubah.
-- [ ] Persetujuan cuti → baris `Attendance` CUTI dibuat; Urungkan menghapusnya.
-- [ ] Unggah bukti dan berkas persetujuan ke Supabase Storage (butuh `SUPABASE_SERVICE_ROLE_KEY`).
-- [ ] Akun yang dibuat atau disetel ulang admin dipaksa ke `/login/ganti-sandi`; persetujuan `AKUN_BARU` memberi kata sandi acak yang harus disetel ulang admin.
-- [ ] Setelah 17.00 WIB: tombol ingatkan dan centang terkunci, cincin menulis "Terkunci · lewat n menit".
-- [ ] Akun tanpa proyek / tanpa divisi / tanpa PT melihat keadaan kosong yang benar.
+| Alur | Status bukti lokal |
+|---|---|
+| PIC kirim → Admin, angka laporan/kepatuhan konsisten | Lolos |
+| Teruskan → beku 409 → Urungkan/buka kunci PIC → SDM → TI | Lolos |
+| Mingguan serah/setujui/teruskan → beku | Lolos |
+| Ringkasan kepala divisi → Direktur dan balasan | Lolos |
+| Terima output → angka PIC/Direktur | Lolos |
+| Usulan tenggat → tanggal proyek/blok PIC | Lolos |
+| Cuti → Attendance CUTI → Urungkan | Lolos |
+| Akun buat/reset/AKUN_BARU wajib ganti sandi | Lolos; kata sandi awal lewat reset admin, isu UX tetap di C |
+| Setelah 17.00: mutasi/pengingat ditolak 409 | Lolos HTTP; pembuktian label cincin/perangkat nyata mengikuti QA |
+| Peran tanpa proyek/divisi/PT dan penolakan lintas cakupan | Lolos |
+| Unggah berkas bukti/persetujuan ke Supabase Storage nyata | **EXTERNAL_PENDING**, belum diotorisasi/dijalankan |
 
-Kriteria selesai: semua butir dicoba tanpa galat konsol atau 500.
+Tautan bukti lokal bukan unggah berkas. A2-08 tetap satu verifikasi eksternal
+tertunda; after tidak memuat A2-08 sehingga externalPending 0 pada after tidak
+menutupnya. Data lama dan lingkungan produksi tetap memerlukan verifikasi operator.
 
 ### A3. Rilis ke VPS
 
@@ -62,13 +68,6 @@ Deploy sasaran adalah VPS ([`deploy/README.md`](../deploy/README.md)); berkas bu
 - [ ] Hapus atau kosongkan `crons` di `vercel.json` bila Vercel tidak dipakai lagi, supaya tidak ada dua penjadwal.
 - [ ] Buka aplikasi produksi di peramban dan pastikan konsol bebas "Refused to execute … Content Security Policy"; periksa tema dan aksen (skrip boot butuh nonce).
 - [ ] Beri tahu pengguna bahwa semua orang perlu masuk ulang sekali setelah rilis (token lama tidak membawa sidik kata sandi).
-
-### A4. Git dan PR
-
-- [ ] Putuskan nasib perubahan `AGENTS.md` (ditambahkan ulang oleh `next dev`; panduan proyek menyarankan ikut di-commit).
-- [ ] Commit bertahap per area: sistem desain & token; kerangka & navigasi; Ringkasan per peran; Perusahaan & akun; Meja kerja; layar P1; fitur peran + migrasi; tes; keamanan; data contoh; dokumentasi.
-- [ ] Isi deskripsi PR dengan daftar periksa `docs/design/15-checklist-review.md` yang sudah dicentang (hasil F4-A/F4-B).
-- [x] Hapus komponen `src/components/ui/*` yang tidak dipakai (CD 8, 6 Okt 2026): 39 komponen UI + `use-mobile.ts`, `components/index.ts`, `stat-card.tsx`, `loading-states.tsx` (43 berkas), dan 41 paket npm tak terpakai. Yang tetap: `alert-dialog`, `button` (dipakai alert-dialog), `input`, `label`, `sonner`, `switch`, `textarea`, `toast`, `toaster`, `use-toast.ts`; paket `server-only` dan `sharp`.
 
 ---
 
@@ -91,57 +90,40 @@ Keputusan yang sudah diambil pemilik (laporan harian langsung ke Admin PT, beku 
 
 ---
 
-## C. Pengembang (kode)
+## C. Pengembang — backlog yang belum selesai
 
-### Bug kecil yang diketahui
+### Akses dan pengalaman akun
 
-- [ ] `weekly-task-board.tsx` belum memakai `frozenDays` dari `GET /api/tasks?week=`. API sudah menolak hari yang beku (409), tetapi papan tidak menandai kolomnya lebih dulu.
-- [ ] Kartu "Keputusan terbuka" Auditor (`oversight/management-dashboard.tsx` sekitar baris 479): subjudul masih menyebut materi, anggaran, cuti, pengajuan proyek, dan usulan tenggat, padahal Auditor hanya melihat eskalasi.
-- [ ] `AccessRequestsCard` menampilkan "Ajukan permintaan" untuk TI, padahal formulirnya memuat `/api/companies` yang menolak TI (403). Sembunyikan untuk TI atau ganti sumber daftar akun ke `/api/access-requests/options`.
-- [ ] Kirim ringkasan mingguan (`/api/kadiv/weekly-summary` `send`) memakai `upsert` tanpa syarat: dua kiriman bersamaan sama-sama berhasil dan memberi tahu Direktur dua kali. Kirim ulang ringkasan yang sudah terkirim saat review masih tersisa dijawab 409 `PENDING_REVIEW`, bukan 409 "sudah terkirim".
-- [ ] Usulan tenggat masih bisa disetujui setelah tanggal yang diusulkan lewat, sehingga tenggat proyek bisa mundur ke masa lalu (perlu dipastikan: bug atau boleh).
-- [ ] `PATCH /api/unlock-requests` melewati pemeriksaan cakupan bila laporan sasaran sudah tidak ada. Aman selama hanya peran grup yang memegang `unlock:approve`/`unlock:execute`.
 - [ ] Persetujuan `AKUN_BARU` membuat akun dengan kata sandi acak yang tidak ditampilkan; layar persetujuan belum memberi jalan menyerahkan kata sandi awal (kini lewat "Setel ulang kata sandi").
-- [ ] Palet ⌘K → membuka Sheet proyek → Sheet ditutup: fokus jatuh ke `body`, karena pemicu (kolom cari palet) sudah hilang. Butuh cadangan fokus di `src/components/mk/sheet.tsx`.
-- [ ] `/api/admin/overview` masih menghitung kepatuhan per anggota dengan aturan lama; tidak dipakai Ringkasan Admin lagi. Hapus bagian itu atau samakan dengan `/api/admin/compliance`.
-- [ ] KPI "Tepat waktu 30 hari" memakai proyek AKTIF hari ini, sehingga proyek yang ditutup dalam 30 hari terakhir hilang dari penyebut.
-- [ ] Baris dukungan hero Proyek dan Divisi hanya menghitung halaman yang dimuat, karena API berhalaman.
 
-### Desain dan aksesibilitas (sisa F4)
+### Desain dan fitur di luar perbaikan CX
 
-- [ ] Tab bar mengambang tablet (`.mk-tab` di `mk-tabbar--floating`, `design-system/components/bundle.css`) setinggi 40 px, di bawah target sentuh 44 px. Tombol Dock dan tab bar ponsel 38×38; batang AreaChart di ponsel 38 px.
-- [ ] Nilai batang `BarChart` (`.mk-bars__val`) transparan sampai disorot/dipilih. Daftar periksa meminta angka tertulis di layar.
-- [ ] Pilihan `mk-choice` di Sheet progres (`task-dialog`) adalah tab stop terpisah tanpa navigasi panah seperti radiogroup.
-- [ ] Grafik: tiap batang/titik satu tab stop, tanpa navigasi panah di dalam grafik.
 - [ ] Peta panas Admin di ponsel: label 3 huruf belum ada (nama lengkap digeser ke samping). Tablet Admin: kartu divisi 2 kolom belum.
 - [ ] Log aktivitas Auditor di ponsel memakai baris kartu log, belum `ActivityItem` (spesifikasi 08).
-- [ ] Sheet akun di `AccountManager` dipasang/dilepas tanpa animasi keluar.
-- [ ] Ganti `alert-dialog`, `input`, `textarea`, dan `switch` yang tersisa dengan versi `mk`, lalu hapus alias palet Tailwind lama di `globals.css`.
 - [ ] Putuskan `views/management-charts.tsx` (`/api/management-charts`), `dashboard/compliance-treemap.tsx` (`/api/compliance-map`), dan `dashboard/kpi-trend-chart.tsx` (`/api/kpi-trends`): pasang di layar, atau hapus beserta API-nya.
+- [ ] Tab Log aktivitas untuk Direktur entitas (kapabilitas `audit:read` sudah ada, tab belum di `ROLE_TABS`); menunggu keputusan pemilik.
 
-### Fitur yang belum dibangun
-
-- [ ] Delta "Rata-rata progres +n poin" di Ringkasan Manajemen: butuh riwayat progres mingguan yang disimpan.
-- [ ] Jenis bukti per output di kartu review ("Laporan uji", "Tautan desain"); kini ditulis sebagai jumlah berkas.
-- [ ] Kolom cari di header Admin PT (palet ⌘K sudah bisa dibuka dengan pintasan).
-- [ ] Tab Log aktivitas untuk Direktur entitas (kapabilitas `audit:read` sudah ada, tab belum di `ROLE_TABS`).
-
-### Data contoh `/pratinjau`
-
-- [ ] Angka dan nama tidak sama antarperan: Direktur melihat divisi berbeda di Ringkasan, tab Divisi, dan Sheet entitas; nama proyek berbeda antara Ringkasan dan Proyek; skor kepatuhan PT Ratu Karya 91% di pohon dan 88% di Sheet; ⌘K tidak menemukan "rina". Butir daftar periksa "angka sama lintas peran" tidak bisa lolos di pratinjau.
-- [ ] Tiruan `/api/search` (`mock-oversight.ts`) mengembalikan hasil seluruh grup untuk setiap peran; route sungguhan membatasi PIC, Kepala divisi, dan Admin PT.
-- [ ] `mock-pic.ts` mengisi `reportDateKey`/`todayKey` dari `desk.today.slice(0, 10)` (tanggal UTC dari tengah malam WIB), jadi satu hari lebih awal. Pengajuan buka kunci PIC di pratinjau tidak mengubah status di layar PIC (`unlock: null`).
-- [ ] Buka kunci di pratinjau tidak pernah dijalankan (`mock-admin`/`mock-group` tidak punya `execute`), jadi jalur "laporan dibuka" belum terlihat di pratinjau.
-- [ ] `mock-pic.ts` dan `mock-kadiv.ts` masih memodelkan `readAt` tunggal dan mengosongkan catatan saat Urungkan revisi; server kini memakai `NoteRead` dan `OutputRevision`.
+Perbaikan Heatmap/footer responsif CX 10 tidak menutup permintaan label 3 huruf
+atau kartu Admin dua kolom. Ketiga grafik/API sengaja dipertahankan; cleanup
+komponen/dependensi tidak memutuskan nasibnya.
 
 ### Infrastruktur dan keamanan
 
 - [ ] Pembatas laju global: kini di memori per instans. Butuh penyimpanan bersama (mis. Redis) bila aplikasi berjalan lebih dari satu instans.
 - [ ] Pencabutan token saat keluar butuh tabel sesi.
-- [ ] Sisa temuan `npm audit` butuh naik versi mayor: `deepmerge-ts` via CLI `prisma` (perbaikannya menurunkan CLI ke 6.12 yang tidak cocok dengan `@prisma/client` 6.19.3), `sharp`, `js-yaml`, `prismjs`, `braces`.
-- [ ] `npm install` melaporkan skrip instal yang tidak tercakup `allowScripts` (prisma, esbuild, sharp, @swc/core). Periksa `prisma generate` di mesin baru; mungkin perlu `npm install-scripts approve`.
-- [ ] Pindahkan pengaturan `package.json#prisma` (usang) ke `prisma.config.ts`.
-- [ ] Migrasi lama 0001–0012 berbeda tipis dengan `schema.prisma` (indeks tangan yang tidak dideklarasikan skema; `Project.approvalChain` NOT NULL). `prisma migrate dev` berikutnya bisa mengusulkan menghapus indeks itu. Beberapa FK baru tanpa indeks: `Output.reviewerId`, `DeadlineProposal.decidedById`, `AccessRequest.decidedById`.
+- [ ] Audit lockfile terbaru setelah cleanup: **9 paket terdampak tingkat high, 0 critical**, bukan sembilan advisori independen. Rantai `braces`/ESLint, `deepmerge-ts`/Prisma CLI, dan `sharp` masih tercatat. Saran otomatis mencakup penurunan `eslint-config-next` ke 14.2.35 dan Prisma CLI ke 6.12.0, serta kenaikan `sharp` ke 0.35.5; belum diterapkan karena memerlukan pemeriksaan kompatibilitas tersendiri. Bukti: [npm audit final](codex/bukti/npm-audit-final.json). Status ini menggantikan daftar advisori historis; cleanup 47 paket tidak menutup backlog keamanan dependensi.
+- [ ] Migrasi lama 0001–0012 berbeda tipis dengan `schema.prisma` (indeks tangan yang tidak dideklarasikan skema; `Project.approvalChain` NOT NULL). `prisma migrate dev` berikutnya bisa mengusulkan menghapus indeks itu. Uji 23 migrasi lokal tidak membuktikan drift lama sudah diselesaikan.
+
+### Infrastruktur yang selesai dalam CX, bukan backlog aktif
+
+- [x] Peringatan skrip instal yang tidak tercakup `allowScripts`: konfigurasi
+  eksplisit tersedia, memakai npm **11.19.1** untuk setup/build yang diperiksa.
+  Mesin baru tetap mengikuti versi npm dan prosedur setup terdokumentasi.
+- [x] `package.json#prisma` dipindahkan ke `prisma.config.ts`; peringatan usang
+  tidak muncul pada build final.
+- [x] Indeks FK `Output.reviewerId`, `DeadlineProposal.decidedById`, dan
+  `AccessRequest.decidedById`: SQL 0026 dan tiga @@index schema, lolos lokal.
+  Ini tidak menutup drift migrasi 0001–0012 di atas.
 
 ---
 
@@ -157,58 +139,15 @@ Audit otomatis F4-A/F4-B memeriksa semua layar di 1440, 834, 390 px, 720 px (pen
 
 ---
 
-## Sudah selesai sejak pemetaan pertama
+## Selesai dalam lingkup CX 8–15
 
-Dicatat agar riwayatnya tidak hilang. Rinciannya di [`docs/fitur/`](fitur/README.md).
+Bug Auditor/TI, atomisitas ringkasan, target buka kunci, kepatuhan Admin, tenggat
+WIB, metrik historis/total berhalaman, fokus/keyboard/target sentuh/Sheet akun,
+data contoh, primitif MK/alias palet/cleanup 47 dependencies, Prisma/indeks FK,
+alur lokal, cari Admin/PIC, jenis bukti dan delta dengan riwayat nyata sudah
+memiliki hasil dalam [laporan CX](codex/CX8–15-HASIL.md). FrozenDays CX 2 juga
+bukan pekerjaan aktif. Ini bukan pernyataan semua bagian B/C/D selesai.
 
-**Desain (P1, P3, F4)**
-
-- [x] Semua layar memakai komponen `src/components/mk` dan token; kriteria `grep` palet lama hanya menemukan pemakaian yang diizinkan.
-- [x] Daftar periksa desain otomatis untuk semua layar peran (F4-A: PIC, Kepala divisi, Admin PT; F4-B: Direktur, Manajemen, SDM GA, TI, Auditor, Super Admin, login, ⌘K): luapan, kontras, target sentuh, cincin fokus, Sheet (fokus masuk/terkunci/Esc/kembali), satu tombol primer per kartu, maksimal 4 KPI.
-- [x] Cincin fokus primitif `ui` (outline Tailwind v4) diperbaiki di sumber; juga di `projects-view.tsx` dan `escalations-view.tsx`.
-- [x] `ApprovalItem` punya `approveVariant`; antrean keputusan (review output kepala divisi, Persetujuan, keputusan Manajemen, proyek, permintaan akses) memakai tombol per baris sekunder.
-- [x] Log aktivitas tidak lagi bergulir ke samping; teks informasi `ink-3` diganti `ink-2`; periode entitas ditulis "Oktober 2026".
-- [x] Tombol dev Next.js dimatikan (`devIndicators: false`); lonceng header disembunyikan di mode Dock; toast di atas tab bar (`--z-toast`); `Chip` 44 px; `DivisionBar` menampilkan beban > 100%.
-- [x] Teks Bahasa Indonesia, sentence case, tanpa tanda seru.
-
-**Alur laporan (F1-A, F1-B, integrasi)**
-
-- [x] Laporan harian dikirim langsung ke Admin PT; tombol "Kirim laporan"; spesifikasi disesuaikan.
-- [x] Laporan harian beku setelah diteruskan (409 dengan pesan jelas); penerusan juga mengisi `isLocked`.
-- [x] Kolom Kendala & Rencana besok selalu tampil; tombol "Lampirkan foto".
-- [x] PIC bisa mengajukan buka kunci laporan harian proyeknya; `GET /api/unlock-requests` untuk PIC dan Kepala divisi hanya mengembalikan pengajuan sendiri.
-- [x] Buka kunci berefek di `/api/daily-input`, `/api/tasks`, `/api/weekly-input`, dan bukti (`evidence-access.ts`).
-- [x] Persetujuan mingguan hanya dari `MENUNGGU_PERSETUJUAN`; serah hanya dari `DRAFT`; perubahan status bersyarat.
-- [x] Tenggat mingguan serah Kamis 17.00 / kunci Jumat 17.00 di kode, spesifikasi, data contoh, dan teks UI.
-- [x] "Ingatkan" Direktur mengingatkan satu divisi untuk minggu yang tampil; toast membedakan "sudah diingatkan hari ini" dan "tanpa kepala divisi".
-- [x] Penerusan mingguan bersyarat (klik ganda → 409).
-
-**Keamanan akun (F1-C, F3-D)**
-
-- [x] Kata sandi minimal 8 di semua jalur; `mustChangePassword` + `/login/ganti-sandi`; seed tanpa "1234".
-- [x] `GET /api/notifications` hanya milik sendiri; `recipient` notifikasi seragam email.
-- [x] Akses sementara yang berakhir mengembalikan `Division.headUserId`.
-- [x] Tidak ada route yang mengembalikan `err.message` mentah pada 500 (`serverError`, dijaga `tests/api/keamanan-galat-mentah.test.ts`).
-- [x] `next` 16.3.8; blok `@transform_port_query` dihapus dari `Caddyfile`.
-- [x] Auditor benar-benar hanya-baca di semua route (`tests/api/auditor-readonly.test.ts`); `POST /api/access-requests` menolak peran hanya-baca.
-
-**Utang teknis (F1-D)**
-
-- [x] Urungkan "Minta revisi" memulihkan catatan sebelumnya (`OutputRevision`); status baca catatan per akun (`NoteRead`); relasi kepala divisi per divisi.
-- [x] Pengingat PIC manual dan otomatis satu fungsi (`remindPicDaily`); aturan otomatis untuk PT, UNIT, dan SUB_HOLDING; eskalasi otomatis memakai divisi proyek dulu.
-- [x] `KpiSnapshot` diperbarui cron `kpi-snapshot`; `timelineFrame` memakai WIB; label audit lengkap; `/api/roles` sentence case; `useMedia` selaras dengan CSS.
-
-**Fungsi peran (F2)**
-
-- [x] PIC: laporan di layar Hari ini, progres dibanding rencana, tenggat terdekat, riwayat 6 hari, "Tanya kepala divisi" dari Sheet, seret berkas ke output.
-- [x] Kepala divisi: ringkasan mingguan untuk Direktur, KPI tepat waktu 30 hari, proyek divisi, Tandai sudah dibaca laporan anggota.
-- [x] Admin PT: kepatuhan per orang dan divisi, Ingatkan per orang/divisi, Hubungi kepala divisi, peta panas, Unduh log, log aktivitas PT, permintaan akses dari Kepala divisi/PIC, divisi pelaksana di formulir proyek, anggota divisi di Sheet akun.
-- [x] Direktur & Manajemen: tab Persetujuan, persetujuan materi/anggaran/cuti dengan berkas, Beri tanggapan, Hubungi kepala divisi, tinjauan proyek dan catatan ke PIC, ⌘K, badge nav, tab ringkas tablet/ponsel, kehadiran Terlambat; ringkasan kepala divisi tampil di `/api/ringkasan`.
-- [x] Peran grup: panel SDM GA, ringkas teknis TI/Super Admin, panel Auditor, konsol Sistem & akses diperluas, saringan log peran/tanggal.
-- [x] Urungkan untuk keputusan proyek, eskalasi, ajukan ulang, arsip, dan penerusan (`UndoToken`, `POST /api/undo`).
-
-**Data contoh dan tes (F3)**
-
-- [x] Data contoh `/pratinjau` untuk semua endpoint yang dipakai layar (termasuk `/api/daily-input`, `/api/inbox`, `/api/projects`, `/api/escalations`, `/api/weekly-reports`, `/api/entities`, `/api/audit-logs`, `/api/system`, `/api/profile`); endpoint tanpa data dicatat di `window.__pratinjauMiss`.
-- [x] Tes route PIC, Kepala divisi, Admin PT, dan peran grup (F3-C, F3-D); `vitest.config.mts` tanpa peringatan ESM.
-- [x] Build produksi: `/pratinjau` 404 (dicoba di kontainer Docker), data contoh tidak masuk chunk JavaScript.
+Commit implementasi parent: `28f969f`, `0792ca1`, `b36fe91`, `8fee994`.
+Dokumentasi disimpan dalam commit lokal terpisah; push/PR tetap memerlukan
+otorisasi tersendiri. Daftar periksa PR: [review desain](design/15-checklist-review.md).

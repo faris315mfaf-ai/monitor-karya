@@ -2,7 +2,7 @@
 
 Spesifikasi layar: [`01-manajemen.md`](../design/peran/01-manajemen.md) dan [`02-direktur.md`](../design/peran/02-direktur.md). Dokumen ini mencatat apa yang sudah dibangun untuk setiap butir spesifikasi, endpoint yang dipakai, dan aturan aksesnya. Pembaruan terakhir: 6 Oktober 2026, fase F2. Wilayah skemanya `[F2-DIREKTUR]` dan migrasinya `0023_oversight_more`.
 
-> **Migrasi 0023 belum diterapkan** ke basis data. Sampai migrasi diterapkan, endpoint baru menjawab bacaan dengan daftar kosong ditambah `pendingMigration: true`, dan menjawab tulisan dengan 503 "Fitur ini menunggu pembaruan basis data. Hubungi Tim TI." Dasbor tetap tampil tanpa bagian yang memakai tabel baru. Semua uji memakai basis data tiruan (mock); belum ada yang diuji dengan basis data sungguhan.
+> **Migrasi 0023 belum diterapkan** ke basis data. Sampai migrasi diterapkan, endpoint baru menjawab bacaan dengan daftar kosong ditambah `pendingMigration: true`, dan menjawab tulisan dengan 503 "Fitur ini menunggu pembaruan basis data. Hubungi Tim TI." Dasbor tetap tampil tanpa bagian yang memakai tabel baru. Alur sudah diuji pada HTTP/PostgreSQL lokal nyata (CX 14); pernyataan migrasi pending di atas hanya berlaku untuk produksi.
 
 | Persetujuan (Direktur) | Persetujuan, tema gelap |
 | --- | --- |
@@ -73,7 +73,7 @@ Setiap mutasi dicatat di AuditLog: `COMMENT_WEEKLY_REPORT`, `UNDO_WEEKLY_COMMENT
 | M1 | Sidebar: Ringkasan · Proyek `24` · Tim & divisi · Persetujuan `n` · Aktivitas · Kehadiran | Sebagian | Tab: Ringkasan · Eskalasi · Proyek · **Tim & divisi** · **Persetujuan** (baru) · Entitas · Log aktivitas. Badge Persetujuan dan Eskalasi sudah ada. Angka jumlah proyek di nav tidak dibuat karena bukan angka yang perlu ditindaklanjuti. Kehadiran tampil sebagai kartu di Ringkasan, bukan tab. |
 | M2 | Header: tanggal dan minggu, sapaan, SearchField ⌘K, periode Minggu/Bulan/Kuartal, notifikasi berbadge | Selesai | Tombol "Cari ⌘K" membuka palet. Di bawah 1024 px tombol ini disembunyikan karena ikon cari sudah ada di pojok kanan atas. |
 | M3 | Hero: kalimat, pendukung, "Tinjau yang mendesak", "Lihat semua proyek", `ActivityRings` | Selesai | |
-| M4 | 4 KPI: Output selesai (gradien, sparkline, ikut periode) · Rata-rata progres · Persetujuan menunggu (risk, "n lewat 24 jam") · Kehadiran | Selesai | Persetujuan menunggu kini menghitung materi/anggaran/cuti, pengajuan proyek, dan usulan tenggat. Delta Rata-rata progres ditulis sebagai "n proyek selesai", karena riwayat progres per minggu belum disimpan. |
+| M4 | 4 KPI: Output selesai (gradien, sparkline, ikut periode) · Rata-rata progres · Persetujuan menunggu (risk, "n lewat 24 jam") · Kehadiran | Selesai | Persetujuan menunggu kini menghitung materi/anggaran/cuti, pengajuan proyek, dan usulan tenggat. Delta Rata-rata progres hanya ditampilkan bila ada riwayat nyata (CX 15); tanpa riwayat tidak mengarang angka. |
 | M5 | Output selesai (BarChart 8 batang) dan Perlu perhatian | Selesai | |
 | M6 | Timeline proyek prioritas dan Donut status yang menyaring tabel | Selesai | |
 | M7 | Proyek prioritas (chip + `ProjectRow`) dan Kinerja divisi (`DivisionBar`, target 85) | Selesai | |

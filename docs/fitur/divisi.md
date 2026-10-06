@@ -74,7 +74,7 @@ Isian minggu berjalan: lihat [capaian-mingguan.md](capaian-mingguan.md).
 
 ## Catatan terbuka
 
-- Hero hanya menghitung halaman yang sedang dimuat, karena API berhalaman.
+- CX 9 memakai total/ringkasan API untuk hero, bukan hanya halaman yang dimuat.
 - Data lama belum punya `divisionId`. Sampai Admin PT atau kepala divisi mengisinya, tim kepala divisi diturunkan dari proyek yang PIC-nya adalah kepala divisi itu sendiri, sehingga tim bisa terlihat kosong.
 - Bagi Direktur, tab Divisi membawa badge jumlah laporan mingguan minggu laporan yang sudah masuk tetapi belum ditandai dibaca (`/api/nav-badges`).
 - Data contoh `/pratinjau` untuk `/api/weekly-reports` ada (F3-A). Layar ini sudah melewati audit desain otomatis F4 di 1440/834/390 px.

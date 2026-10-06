@@ -1,0 +1,20 @@
+Monitor Karya — pemeriksaan final lokal, 6 Oktober 2026
+Sumber: laporan parent; log tes/build/runtime/migrasi dibaca DOCS.
+Vitest: 63 berkas, 1192 tes lolos; /private/tmp/cx-final-tests.log
+Prisma validate: PASS (parent)
+TypeScript --incremental false: PASS (parent)
+ESLint src: PASS (parent)
+Diff check: PASS (parent, diulang DOCS untuk dokumentasi)
+Docker runner build: PASS; monitor-karya:cx-final; /private/tmp/cx-final-build.log
+Docker base: node:22.23.3-bookworm-slim (log build)
+Runtime: uid1000; /login200; /pratinjau404; /api/cron/kpi-snapshot401
+Runtime log: /private/tmp/cx-final-runtime.log
+Migrasi lokal: 23, tidak ada pending; /private/tmp/cx-final-migrate.log
+Shell DOCS fresh: Node v26.8.2; npm11.19.1
+E2E before11/11 dan after3/3 PASS; lihat empat laporan CX14.
+EXTERNAL_PENDING: A2-08 unggah berkas Supabase Storage nyata.
+Commit implementasi parent: 28f969f, 0792ca1, b36fe91, 8fee994.
+Commit dokumentasi tercatat pada riwayat Git cabang codex/kerja.
+
+npm audit --package-lock-only: exit1, high9, critical0; npm-audit-final.json.
+Audit dependensi belum bersih; tidak mengubah hasil tes/build.

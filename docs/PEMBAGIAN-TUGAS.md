@@ -27,7 +27,7 @@ Cara memakai:
 | TUGAS CD 5 | Dokumentasi akhir & matriks fungsi per peran | Claude | selesai | CD 4 |
 | TUGAS CD 6 | Commit bertahap cabang `desain-baru` | Claude | selesai | CD 5 |
 | TUGAS CD 7 | Gabungkan hasil Codex + tulis migrasi dari usulan skema | Claude | selesai | CD 6, semua CX selesai |
-| TUGAS CD 8 | Hapus 43 berkas UI tak terpakai & 41 paket npm-nya | Claude | selesai | CD 7 |
+| TUGAS CD 8 | Pembersihan berkas UI; cleanup dependensi belum terbukti pada tracked HEAD (koreksi parent) | Claude | berkas UI selesai menurut serah terima; paket dilanjutkan CX 12 | CD 7 |
 | TUGAS CX 1 | Buka kunci berlaku untuk bukti (unggah/hapus) | Codex | selesai | — |
 | TUGAS CX 2 | Papan task mingguan menandai hari yang dibekukan | Codex | selesai | — |
 | TUGAS CX 3 | CI GitHub Actions | Codex | selesai | — |

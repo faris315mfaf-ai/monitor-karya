@@ -1,4 +1,11 @@
-# Hasil CX 1–7
+# Laporan Codex
+
+Hasil putaran terbaru: [CX 8–15](CX8–15-HASIL.md), **63 berkas/1.192 tes lolos**
+dan E2E lokal 11 before + 3 after lolos. Bukti build/UI serta batas eksternal
+ada di laporan tersebut. Riwayat CX 1–7 di bawah dipertahankan sebagai arsip;
+angka pemeriksaan lama bukan hasil terbaru.
+
+# Arsip hasil CX 1–7
 
 Implementasi selesai di worktree `/Users/godam/PROYEK/monitor-karya-codex`, cabang `codex/kerja`, pada 6 Oktober 2026. Tidak digabungkan ke worktree Claude; tidak ada akses Supabase, migrasi database nyata, atau deployment VPS.
 

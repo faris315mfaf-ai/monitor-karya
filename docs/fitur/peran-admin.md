@@ -98,7 +98,7 @@ Tidak ada migrasi baru. Kolom `Project.divisionId`, `User.divisionId`, dan `User
 
 ## Belum
 
-- Tab atau sidebar khusus Admin (Kepatuhan, Permintaan akses, Pengguna, Data induk, Log, Pengingat) dan kolom cari di header.
+- Tab atau sidebar khusus Admin (Kepatuhan, Permintaan akses, Pengguna, Data induk, Log, Pengingat) . Kolom cari header sudah ditambahkan dan diuji browser pada CX 15.
 - Label peta panas 3 huruf di ponsel.
-- Uji dengan basis data sungguhan, terutama hitungan per orang setelah `User.divisionId` dan `Project.divisionId` diisi untuk data lama.
+- Alur HTTP/PostgreSQL lokal nyata sudah lolos (CX 14); pengisian/verifikasi data produksi lama tetap pekerjaan operator.
 - ~~`ApprovalItem` merender "Setujui" primer di setiap baris.~~ Selesai (F4-B): `approveVariant="secondary"` dipakai di `AccessRequestsCard`.
