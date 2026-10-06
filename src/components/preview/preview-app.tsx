@@ -8,9 +8,14 @@ import * as mockAdmin from '@/components/preview/mock-admin'
 import * as mockOversight from '@/components/preview/mock-oversight'
 import * as mockGroup from '@/components/preview/mock-group' // [F2-GRUP]
 import * as mockSistem from '@/components/preview/mock-sistem' // [F3-B]
+import * as mockLaporan from '@/components/preview/mock-laporan' // [F3-A]
+import * as mockProyek from '@/components/preview/mock-proyek' // [F3-A]
 
 // [F2-GRUP] mockGroup di depan: antrean buka kunci/cuti peran grup menimpa data Admin hanya untuk peran grup.
-const AREA_MOCKS = [mockGroup, mockPic, mockKadiv, mockAdmin, mockOversight, mockSistem]
+// [F3-A] mockLaporan paling depan: laporan harian non-PIC, task, bukti, penerimaan, dan efek samping
+// buka kunci (mengembalikan null untuk yang ditangani mock lain). mockProyek di belakang: proyek,
+// eskalasi, arsip mingguan; /api/deadline-proposals tetap milik mockPic/mockOversight.
+const AREA_MOCKS = [mockLaporan, mockGroup, mockPic, mockKadiv, mockAdmin, mockOversight, mockSistem, mockProyek]
 
 const ROLES: Record<string, { name: string; dash: unknown }> = {
   MANAJEMEN: { name: 'Ris Hartanto', dash: { kind: 'OVERSIGHT' } },
