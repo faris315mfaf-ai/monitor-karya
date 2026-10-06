@@ -13,10 +13,17 @@ SRC="${1:?berkas .dump.age}"
 TARGET="${2:?nama database tujuan}"
 IDENTITY="${3:?berkas identitas age (kunci rahasia)}"
 OWNER="${4:-postgres}"
+umask 077
+[[ "$TARGET" =~ ^[a-z][a-z0-9_]{1,40}$ && "$OWNER" =~ ^[a-z][a-z0-9_]{1,44}$ ]] || { echo "Nama database atau role tidak sah."; exit 1; }
+[[ -f "$SRC" && -r "$IDENTITY" ]] || { echo "Berkas cadangan atau identitas tidak terbaca."; exit 1; }
 
-if sudo -u postgres psql -Atc "SELECT 1 FROM pg_database WHERE datname='$TARGET'" | grep -q 1; then
+EXISTS="$(sudo -u postgres psql -v ON_ERROR_STOP=1 -v target="$TARGET" -At <<'SQL'
+SELECT 1 FROM pg_database WHERE datname = :'target';
+SQL
+)"
+if [[ "$EXISTS" == "1" ]]; then
   echo "Database $TARGET sudah ada. Pakai nama lain atau hapus manual dulu."; exit 1
 fi
 sudo -u postgres createdb -O "$OWNER" "$TARGET"
-age -d -i "$IDENTITY" "$SRC" | sudo -u postgres pg_restore --no-owner --no-privileges --role="$OWNER" -d "$TARGET" --exit-on-error
+age -d -i "$IDENTITY" "$SRC" | sudo -u postgres pg_restore --no-owner --no-privileges --role="$OWNER" -d "$TARGET" --exit-on-error --single-transaction
 echo "Dipulihkan ke $TARGET dengan pemilik $OWNER. Periksa isinya sebelum dipakai."

@@ -26,7 +26,15 @@ COPY . .
 # Variabel NEXT_PUBLIC_* dibakukan ke bundel saat build.
 ARG NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-RUN npx prisma generate && npx next build
+# Build tidak boleh menerima URL atau rahasia basis data produksi.
+RUN DATABASE_URL=postgresql://build:build@127.0.0.1:1/build \
+    DIRECT_URL=postgresql://build:build@127.0.0.1:1/build \
+    AUTH_SECRET=build-only-placeholder-secret-at-least-32-characters \
+    npx prisma generate \
+ && DATABASE_URL=postgresql://build:build@127.0.0.1:1/build \
+    DIRECT_URL=postgresql://build:build@127.0.0.1:1/build \
+    AUTH_SECRET=build-only-placeholder-secret-at-least-32-characters \
+    npx next build
 
 FROM base AS migrate
 COPY --from=deps /app/node_modules ./node_modules

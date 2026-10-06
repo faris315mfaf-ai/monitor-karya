@@ -84,15 +84,19 @@ Umumkan jam pemeliharaan (hentikan pengisian laporan), lalu:
 ```bash
 SUPABASE_URL='postgresql://...:5432/postgres' sudo -E bash deploy/db-vps/migrate-from-supabase.sh monitor_karya
 ```
-Tabel `_prisma_migrations` ikut terbawa (0001–0012 sudah tercatat), sehingga langkah 8 hanya
-menjalankan migrasi baru 0013–0017.
+Tabel `_prisma_migrations` ikut terbawa. Bandingkan riwayatnya dengan berkas
+migrasi pada commit rilis; jangan menyimpulkan migrasi tertunda dari nomor contoh.
 
 ### 8. Rilis pertama (VPS aplikasi)
 ```bash
 bash deploy/app-vps/deploy.sh origin/main
 docker exec proxy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
-`deploy.sh` meminta konfirmasi "ya" sebelum menjalankan migrasi. Pastikan cadangan langkah 4 terbaru.
+`deploy.sh` mensyaratkan pohon kerja bersih dan meminta konfirmasi "ya" sebelum
+menjalankan `migrate deploy` (termasuk ketika status tidak bersih). Periksa
+diagnostik status, koneksi, dan cadangan langkah 4 sebelum menjawab.
+Rollback hanya memulihkan image aplikasi, bukan skema database.
+Gunakan [checklist rilis](CHECKLIST-RILIS.md) sebelum rilis.
 
 ### 9. Cron
 Tempel tiga baris dari kepala `deploy/app-vps/cron.sh` (pengingat divisi, aturan pengingat, KPI harian) ke `crontab -e` user admin.
@@ -115,7 +119,8 @@ Jadwal cron harian lama di `vercel.json` tidak berlaku lagi di VPS.
 Cadangan otomatis mencakup semua database baru tanpa perubahan apa pun.
 
 ## Hal yang belum ditangani paket ini
-- **Berkas bukti** tetap di Supabase Storage (gratis s.d. 1 GB). Memindahkannya ke R2/MinIO perlu perubahan `src/lib/storage.ts`.
+- **Berkas bukti** memakai Supabase Storage sebagai bawaan (`STORAGE_DRIVER=supabase`).
+  Driver S3/MinIO memerlukan konfigurasi terpisah dan uji penyimpanan sebelum diaktifkan.
 - **Point-in-time recovery**: cadangan harian berarti paling banyak 24 jam data bisa hilang. Bila perlu lebih rapat, tambahkan pgBackRest/WAL-G dengan arsip WAL ke R2.
 - **Pemantauan**: pasang Uptime Kuma atau pemantau eksternal untuk `/login` dan ruang disk kedua VPS.
 - Pembatas laju login disimpan di memori kontainer: cukup untuk satu kontainer; bila aplikasi diskalakan ke beberapa replika, pindahkan ke Redis.

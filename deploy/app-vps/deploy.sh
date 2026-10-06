@@ -1,55 +1,60 @@
 #!/usr/bin/env bash
-# Rilis Monitor Karya di VPS aplikasi. Jalankan sebagai user admin dari
-# /srv/apps/monitor-karya:
-#   bash deploy/app-vps/deploy.sh [git-ref]      # bawaan: origin/main
-#
-# Urutan: ambil kode → bangun image bertag commit → migrasi DB → ganti kontainer
-# → cek kesehatan. Bila cek gagal, kontainer dikembalikan ke image sebelumnya.
-# Catatan: migrasi tidak bisa dibatalkan otomatis; karena itu backup DB
-# diambil tepat sebelum migrasi bila ada migrasi baru.
+# Hanya untuk operator VPS; jangan jalankan pada worktree pengembangan.
+# bash deploy/app-vps/deploy.sh [git-ref] (bawaan origin/main)
+# Migrasi selalu perlu konfirmasi; rollback hanya mengembalikan image aplikasi.
 set -euo pipefail
+umask 077
 cd "$(dirname "$0")/../.."
 REF="${1:-origin/main}"
+[[ "$REF" != -* ]] || { echo "Ref git tidak sah."; exit 1; }
 COMPOSE=(docker compose -f deploy/app-vps/docker-compose.yml --env-file .env.production)
-
-[[ -f .env.production ]] || { echo ".env.production belum ada."; exit 1; }
+# Env layanan harus sama dengan env interpolasi, bukan override dari shell.
+APP_ENV_FILE="$(pwd)/.env.production"
+export APP_ENV_FILE
+[[ -f .env.production && ! -L .env.production ]] || { echo ".env.production biasa belum ada."; exit 1; }
 [[ "$(stat -c %a .env.production)" == "600" ]] || { echo "chmod 600 .env.production dulu."; exit 1; }
-
-PREV_IMAGE="$(docker inspect --format '{{.Config.Image}}' monitor-karya-monitor-karya-1 2>/dev/null || true)"
+[[ -z "$(git status --porcelain)" ]] || { echo "Pohon kerja belum bersih; rilis dibatalkan."; exit 1; }
+# Cegah dua rilis berjalan bersamaan (Ubuntu: util-linux).
+exec 9>"$(git rev-parse --git-path deploy.lock)"
+flock -n 9 || { echo "Rilis lain sedang berjalan."; exit 1; }
+PREV_ID="$("${COMPOSE[@]}" ps -aq monitor-karya)"
+PREV_IMAGE=""
+if [[ -n "$PREV_ID" ]]; then
+  PREV_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$PREV_ID")"
+  [[ "$PREV_IMAGE" == monitor-karya:* ]] || { echo "Image sebelumnya tidak dikenali."; exit 1; }
+fi
 PREV_TAG="${PREV_IMAGE##*:}"
-
 git fetch --prune origin
+git rev-parse --verify "${REF}^{commit}" >/dev/null
 git checkout --detach "$REF"
-TAG="$(git rev-parse --short HEAD)"
+TAG="$(git rev-parse HEAD)"
 export IMAGE_TAG="$TAG"
 echo ">> rilis $TAG (sebelumnya: ${PREV_TAG:-tidak ada})"
-
 "${COMPOSE[@]}" --profile migrate build --pull monitor-karya migrate
-
-echo ">> status migrasi"
-# `migrate status` keluar dengan kode bukan-nol bila ada migrasi tertunda, jadi tangkap teksnya dulu.
-STATUS="$("${COMPOSE[@]}" --profile migrate run --rm migrate npx prisma migrate status 2>&1 || true)"
-echo "$STATUS" | tail -5
-if echo "$STATUS" | grep -qE "not yet been applied|failed"; then
-  echo ">> ada migrasi baru: pastikan backup DB terbaru sudah ada (pg-backup di VPS database)."
-  read -r -p "Lanjutkan migrasi? [ketik ya] " ok
-  [[ "$ok" == "ya" ]] || { echo "Dibatalkan."; exit 1; }
-  "${COMPOSE[@]}" --profile migrate run --rm migrate
+# Status bukan sumber keputusan: Prisma juga mengembalikan nonzero untuk
+# koneksi gagal atau migrasi tertunda. migrate deploy sendiri wajib berhasil.
+if ! "${COMPOSE[@]}" --profile migrate run --rm migrate npx prisma migrate status; then
+  echo ">> Status belum bersih; periksa diagnostik di atas sebelum melanjutkan."
 fi
-
-"${COMPOSE[@]}" up -d --no-deps monitor-karya
-
+echo ">> Pastikan backup terbaru dan uji pemulihan tersedia. Rollback image tidak membatalkan migrasi."
+read -r -p "Jalankan migrate deploy? [ketik ya] " ok
+[[ "$ok" == "ya" ]] || { echo "Dibatalkan."; exit 1; }
+"${COMPOSE[@]}" --profile migrate run --rm migrate
+"${COMPOSE[@]}" up -d --no-deps --no-build --pull never monitor-karya
 echo ">> menunggu sehat"
-for i in $(seq 1 30); do
-  st="$(docker inspect --format '{{.State.Health.Status}}' monitor-karya-monitor-karya-1 2>/dev/null || echo starting)"
-  [[ "$st" == "healthy" ]] && { echo ">> sehat: $TAG"; docker image prune -f --filter "until=168h" >/dev/null; exit 0; }
+for ((attempt=1; attempt<=30; attempt++)); do
+  ID="$("${COMPOSE[@]}" ps -aq monitor-karya)"
+  st="starting"
+  if [[ -n "$ID" ]]; then
+    st="$(docker inspect --format '{{.State.Health.Status}}' "$ID" 2>/dev/null || echo starting)"
+  fi
+  [[ "$st" == "healthy" ]] && { echo ">> sehat: $TAG"; exit 0; }
   sleep 4
 done
-
-echo "!! tidak sehat dalam 2 menit."
+echo "Tidak sehat dalam 2 menit."
 if [[ -n "$PREV_TAG" ]]; then
-  echo ">> kembali ke $PREV_TAG"
-  IMAGE_TAG="$PREV_TAG" "${COMPOSE[@]}" up -d --no-deps monitor-karya
+  echo ">> kembali ke $PREV_TAG (skema DB tetap versi baru)"
+  IMAGE_TAG="$PREV_TAG" "${COMPOSE[@]}" up -d --no-deps --no-build --pull never monitor-karya
 fi
 "${COMPOSE[@]}" logs --tail 80 monitor-karya
 exit 1
