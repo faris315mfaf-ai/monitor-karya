@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Card, ErrorNote, FlowDiagram, Skeleton, StatusBadge, useIsPhone, type FlowStep } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { formatTime } from '@/lib/format'
 import { postJson } from './use-kadiv'
 import type { WeeklySummaryView } from './types'

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Avatar, Button, DivisionBar, EmptyNote, ErrorNote, SegmentedControl, Sheet, Skeleton, StatusBadge } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { ROLE_LABELS } from '@/lib/constants'
 import { firstName, formatRelative, formatTime } from '@/lib/format'
 import { TASK_STATUS_LABEL, loadTone, ReportBadge } from './parts'

@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { BrandLogo } from '@/components/brand-logo'
 import { Button, Icon, LogoMark } from '@/components/mk'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Input } from '@/components/mk/forms'
+import { Label } from '@/components/mk/forms'
 
 /**
  * Masuk dengan username (atau email) dan kata sandi — satu-satunya jalur sejak

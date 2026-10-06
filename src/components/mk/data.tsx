@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { useRovingFocus } from './keyboard'
 import {
   Avatar, Button, GradStops, Icon, ProgressBar, STATUS, StatusBadge,
   clamp, cx, fmtID, smoothPath, tone, useCtl, useUid,
@@ -134,12 +135,14 @@ export function BarChart({
   className?: string
 }) {
   const [sel, set] = useCtl(selectedIndex, defaultSelectedIndex ?? data.length - 1, onSelect)
+  const keyboard = useRovingFocus(data.length, sel ?? 0)
   const max = Math.max(0, ...data.map((d) => d.value))
   const fmt = formatValue || ((v: number) => String(fmtID(v)))
   const H = height
   return (
     <div className={cx('mk-bars', className)}>
-      <div className="mk-bars__plot" style={{ height: H }} role="group" aria-label={label || 'Grafik batang'}>
+      <div className="mk-chart-scroll"><div className="mk-chart-width" style={{ minWidth: `calc(var(--touch-min) * ${data.length} + var(--space-3) * ${Math.max(0, data.length - 1)})` }}>
+      <div className="mk-bars__plot" style={{ height: H }} role="group" aria-label={label || 'Grafik batang'} onKeyDown={keyboard.onKeyDown}>
         {data.map((d, i) => {
           const on = i === sel
           const bh = max ? Math.max(6, Math.round((d.value / max) * (H - 28))) : 6
@@ -148,6 +151,7 @@ export function BarChart({
               key={i}
               type="button"
               className={cx('mk-bars__col', on && 'is-on')}
+                {...keyboard.item(i)}
               aria-pressed={on}
               aria-label={d.label + ': ' + fmt(d.value) + (unit ? ' ' + unit : '')}
               onClick={() => set(i)}
@@ -167,6 +171,7 @@ export function BarChart({
           </span>
         ))}
       </div>
+      </div></div>
     </div>
   )
 }
@@ -217,10 +222,12 @@ export function AreaChart({
   const cmp: [number, number][] | null = compare ? compare.map((v, i) => [x(i), y(v)]) : null
   const line = smoothPath(pts)
   const sel = clamp(selRaw ?? n - 1, 0, Math.max(0, n - 1))
+  const keyboard = useRovingFocus(n, sel)
   const sp = pts[sel] || [W / 2, H / 2]
   const left = n <= 1 ? 50 : (sel / (n - 1)) * 100
   return (
     <div className={cx('mk-area', className)}>
+      <div className="mk-chart-scroll"><div className="mk-chart-width" style={{ minWidth: `calc(var(--touch-min) * ${n})` }}>
       <div className="mk-area__plot" style={{ height: H }}>
         <svg className="mk-area__svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H} aria-hidden>
           <defs>
@@ -247,7 +254,7 @@ export function AreaChart({
             {fmt(data[sel].value) + (unit ? ' ' + unit : '')}
           </span>
         ) : null}
-        <div className="mk-area__hits" role="group" aria-label={seriesLabel || 'Grafik tren'}>
+        <div className="mk-area__hits" role="group" aria-label={seriesLabel || 'Grafik tren'} onKeyDown={keyboard.onKeyDown}>
           {data.map((d, i) => {
             const u = unit ? ' ' + unit : ''
             const c = compare && compare[i] !== undefined ? `, ${compareLabel || 'pembanding'} ${fmt(compare[i])}${u}` : ''
@@ -256,6 +263,7 @@ export function AreaChart({
                 key={i}
                 type="button"
                 className="mk-area__hit"
+                {...keyboard.item(i)}
                 aria-pressed={i === sel}
                 aria-label={d.label + ': ' + fmt(d.value) + u + c}
                 onClick={() => set(i)}
@@ -271,6 +279,7 @@ export function AreaChart({
           </span>
         ))}
       </div>
+      </div></div>
       {compare && compareLabel ? (
         <div className="mk-area__legend">
           <span>
@@ -323,6 +332,7 @@ export function DonutChart({
   const total = data.reduce((a, s) => a + s.value, 0) || 1
   const gap = data.filter((d) => d.value > 0).length > 1 ? (gapProp ?? 4) : 0
   const [sel, set] = useCtl<number | null>(selectedIndex, null, onSelect)
+  const keyboard = useRovingFocus(data.length, sel ?? 0)
   const uid = useUid()
   const fmt = formatValue || ((v: number) => String(fmtID(v)))
   const offsets = data.reduce<number[]>((acc, s, i) => {
@@ -377,7 +387,7 @@ export function DonutChart({
         </div>
       </div>
       {showLegend === false ? null : (
-        <div className="mk-donut__legend" role="group" aria-label={label || 'Komposisi'}>
+        <div className="mk-donut__legend" role="group" aria-label={label || 'Komposisi'} onKeyDown={keyboard.onKeyDown}>
           {data.map((s, i) => {
             const tc = tone(s.tone)
             return (
@@ -387,6 +397,7 @@ export function DonutChart({
                 aria-pressed={sel === i}
                 aria-label={`${s.label}: ${fmt(s.value)}, ${Math.round((s.value / total) * 100)}%`}
                 className={cx('mk-donut__item', sel === i && 'is-on')}
+                {...keyboard.item(i)}
                 onClick={() => set(sel === i ? null : i)}
               >
                 <span className="mk-donut__swatch" aria-hidden style={{ background: `linear-gradient(135deg, ${tc[0]}, ${tc[1]})` }} />
@@ -555,32 +566,39 @@ export function Heatmap({
         </table>
       </div>
       <div
-        className="mk-heat__grid"
-        aria-hidden
-        style={{ gridTemplateColumns: `auto repeat(${cols}, ${cell}px)`, gridAutoRows: cell + 'px' }}
+        className="mk-heat__scroll"
+        role="region"
+        aria-label={`${label || 'Peta panas'} · geser untuk melihat semua kolom`}
+        tabIndex={0}
       >
-        <span />
-        {Array.from({ length: cols }).map((_, j) => (
-          <span key={'c' + j} className="mk-heat__col">
-            {colLabels[j] || ''}
-          </span>
-        ))}
-        {data.map((row, i) => (
-          <React.Fragment key={i}>
-            <span className="mk-heat__row">{rowLabels[i] || ''}</span>
-            {row.map((v, j) => {
-              const pct = v === null || v === undefined ? -1 : Math.round(clamp(v / max, 0, 1) * 100)
-              return (
-                <span
-                  key={i + '-' + j}
-                  className={cx('mk-heat__cell', pct < 0 && 'is-empty')}
-                  title={[rowLabels[i], colLabels[j]].filter(Boolean).join(' ') + ': ' + cellText(v)}
-                  style={pct < 0 ? undefined : { background: mix(pct) }}
-                />
-              )
-            })}
-          </React.Fragment>
-        ))}
+        <div
+          className="mk-heat__grid"
+          aria-hidden
+          style={{ gridTemplateColumns: `max-content repeat(${cols}, ${cell}px)`, gridTemplateRows: 'auto', gridAutoRows: `minmax(${cell}px, auto)` }}
+        >
+          <span />
+          {Array.from({ length: cols }).map((_, j) => (
+            <span key={'c' + j} className="mk-heat__col">
+              {colLabels[j] || ''}
+            </span>
+          ))}
+          {data.map((row, i) => (
+            <React.Fragment key={i}>
+              <span className="mk-heat__row">{rowLabels[i] || ''}</span>
+              {row.map((v, j) => {
+                const pct = v === null || v === undefined ? -1 : Math.round(clamp(v / max, 0, 1) * 100)
+                return (
+                  <span
+                    key={i + '-' + j}
+                    className={cx('mk-heat__cell', pct < 0 && 'is-empty')}
+                    title={[rowLabels[i], colLabels[j]].filter(Boolean).join(' ') + ': ' + cellText(v)}
+                    style={pct < 0 ? undefined : { background: mix(pct) }}
+                  />
+                )
+              })}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
       {showLegend === false ? null : (
         <div className="mk-heat__legend" aria-hidden>
@@ -617,6 +635,7 @@ export function Timeline({
   className?: string
 }) {
   const [sel, set] = useCtl<string | null>(selectedId, null, onSelect)
+  const keyboard = useRovingFocus(rows.length, Math.max(0, rows.findIndex((row) => row.id === sel)))
   const pct = (v: number) => clamp((v / span) * 100, 0, 100)
   return (
     <div className={cx('mk-tl', className)}>
@@ -635,8 +654,8 @@ export function Timeline({
           ) : null}
         </div>
       </div>
-      <div className="mk-tl__body" role="group" aria-label={title || 'Linimasa'}>
-        {rows.map((rw) => {
+      <div className="mk-tl__body" role="group" aria-label={title || 'Linimasa'} onKeyDown={keyboard.onKeyDown}>
+        {rows.map((rw, i) => {
           const st = rw.status || 'on'
           const tc = tone(st)
           const on = sel === rw.id
@@ -645,6 +664,7 @@ export function Timeline({
               key={rw.id}
               type="button"
               className={cx('mk-tl__row', on && 'is-on')}
+              {...keyboard.item(i)}
               aria-pressed={on}
               aria-label={[rw.label, rw.sub, rw.range, `progres ${rw.progress || 0}%`, STATUS[st]?.label].filter(Boolean).join(', ')}
               onClick={() => set(on ? null : rw.id)}

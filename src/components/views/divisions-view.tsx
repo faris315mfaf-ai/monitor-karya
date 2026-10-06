@@ -55,6 +55,7 @@ type WeeklyReport = {
 }
 
 type WeeklyListData = {
+  summary?: { waiting: number; late: number }
   items: WeeklyReport[]
   total: number
   page: number
@@ -104,8 +105,8 @@ export function DivisionsView() {
   const filtered = statusHeader !== 'ALL' || search.trim() !== ''
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
 
-  const waiting = reports.filter((r) => r.statusHeader === 'MENUNGGU_PERSETUJUAN').length
-  const late = reports.filter((r) => r.isLate).length
+  const waiting = data?.summary?.waiting ?? 0
+  const late = data?.summary?.late ?? 0
   const answer = !data
     ? ''
     : data.total === 0
@@ -115,7 +116,7 @@ export function DivisionsView() {
       : `${formatNumber(data.total)} laporan mingguan divisi${filtered ? ' cocok dengan saringan' : ' tercatat'}.`
   const supportParts = [waiting ? `${waiting} menunggu persetujuan` : null, late ? `${late} terlambat` : null].filter(Boolean)
   const support = supportParts.length
-    ? `Di halaman ini: ${supportParts.join(', ')}.`
+    ? `${supportParts.join(', ')}.`
     : reports.length
       ? 'Ketuk laporan untuk membaca butir, capaian, dan kendalanya.'
       : undefined

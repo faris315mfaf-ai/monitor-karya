@@ -12,6 +12,8 @@ import { toast } from 'sonner'
 import { ApprovalItem, Button, Card, EmptyNote, ErrorNote, Skeleton, StatusBadge } from '@/components/mk'
 import { formatDateShort, formatRelative } from '@/lib/format'
 import { initialsOf } from '@/lib/accounts'
+import { canManageAccounts } from '@/lib/rbac'
+import { useApp } from '@/components/app-provider'
 import type { AccessRequestItem, AccessRequestList } from '@/lib/admin-meta'
 import { AccessRequestSheet } from './access-request-sheet'
 import { send, useFetch } from './use-fetch'
@@ -31,6 +33,8 @@ export function AccessRequestsCard({
   /** [F2-ADMIN] dipanggil setelah keputusan tersimpan (mis. muat ulang log aktivitas). */
   onChanged?: () => void
 }) {
+  const { user } = useApp()
+  const canRequest = canManageAccounts(user.role)
   const { data, setData, error, loading, reload } = useFetch<AccessRequestList>('/api/access-requests?status=all')
   const [local, setLocal] = useState<Record<string, Decision>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -114,11 +118,11 @@ export function AccessRequestsCard({
             ? `${pending.length} menunggu keputusan · perubahan peran selalu lewat persetujuan`
             : 'Akun baru, akses sementara, dan pindah peran'
       }
-      action={
+      action={canRequest ? (
         <Button size="sm" variant="secondary" icon="tambah" onClick={() => setCreating(true)}>
           Ajukan permintaan
         </Button>
-      }
+      ) : undefined}
     >
       {loading && !data ? (
         <div className="flex flex-col gap-3">
@@ -165,11 +169,13 @@ export function AccessRequestsCard({
           })}
         </div>
       )}
-      <AccessRequestSheet
-        open={creating}
-        onOpenChange={setCreating}
-        onCreated={(item) => setData((d) => (d ? { ...d, items: [item, ...d.items], pending: d.pending + 1 } : d))}
-      />
+      {canRequest && (
+        <AccessRequestSheet
+          open={creating}
+          onOpenChange={setCreating}
+          onCreated={(item) => setData((d) => (d ? { ...d, items: [item, ...d.items], pending: d.pending + 1 } : d))}
+        />
+      )}
     </Card>
   )
 }

@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
     const entityId = sp.get('entityId') || undefined
     const statusHeader = sp.get('statusHeader') || undefined
+    const search = sp.get('search')?.trim()
     const isoYearStr = sp.get('isoYear')
     const isoWeekStr = sp.get('isoWeek')
 
@@ -25,12 +26,17 @@ export async function GET(req: NextRequest) {
     const where: Prisma.WeeklyDivisionReportWhereInput = {
       ...(entityId ? { entityId } : {}),
       ...(statusHeader ? { statusHeader } : {}),
+      ...(search ? { OR: [
+        { division: { name: { contains: search, mode: 'insensitive' as const } } },
+        { entity: { name: { contains: search, mode: 'insensitive' as const } } },
+        { entity: { region: { contains: search, mode: 'insensitive' as const } } },
+      ] } : {}),
       ...(isoYear ? { isoYear } : {}),
       ...(isoWeek ? { isoWeek } : {}),
       ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
     }
 
-    const [items, total] = await Promise.all([
+    const [items, total, waiting, late] = await Promise.all([
       db.weeklyDivisionReport.findMany({
         where,
         skip: (page - 1) * pageSize,
@@ -49,9 +55,11 @@ export async function GET(req: NextRequest) {
         },
       }),
       db.weeklyDivisionReport.count({ where }),
+      db.weeklyDivisionReport.count({ where: { AND: [where, { statusHeader: 'MENUNGGU_PERSETUJUAN' }] } }),
+      db.weeklyDivisionReport.count({ where: { AND: [where, { isLate: true }] } }),
     ])
 
-    return NextResponse.json({ items, total, page, pageSize })
+    return NextResponse.json({ items, total, page, pageSize, summary: { waiting, late } })
   } catch (err) {
     // Pesan galat mentah (Prisma, koneksi) tidak dikirim ke klien.
     console.error('[weekly-reports] gagal memuat', err instanceof Error ? err.message : err)

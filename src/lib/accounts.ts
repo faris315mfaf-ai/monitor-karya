@@ -77,9 +77,9 @@ function randomInitialPassword(): string {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
 }
 
-export const field = 'bg-white/80 h-11 text-base'
+export const field = 'bg-surface/80 h-11 text-base'
 export const selectClass =
-  'h-11 w-full rounded-md border border-slate-200 bg-white/80 px-3 text-base text-slate-800 disabled:opacity-70'
+  'h-11 w-full rounded-md border border-line bg-surface/80 px-3 text-base text-ink disabled:opacity-70'
 
 // `sm:max-w-none` mengalahkan `sm:max-w-lg` bawaan DialogContent — tanpa itu
 // lembar ini tertahan 512 px di desktop.

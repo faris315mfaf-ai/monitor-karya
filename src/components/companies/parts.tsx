@@ -7,11 +7,8 @@
 
 import * as React from 'react'
 import { useCallback, useRef, useState } from 'react'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Switch } from '@/components/ui/switch'
+import { ConfirmDialog } from '@/components/mk/confirm-dialog'
+import { Switch } from '@/components/mk/forms'
 import { Avatar, Button, Icon, cx, type IconName, type Tone } from '@/components/mk'
 import { initialsOf, type Company, type UserRow } from '@/lib/accounts'
 
@@ -265,36 +262,28 @@ type ConfirmOpts = {
 export function useConfirm() {
   const [state, setState] = useState<(ConfirmOpts & { resolve: (v: boolean) => void }) | null>(null)
 
+  const [open, setOpen] = useState(false)
   const ask = useCallback(
-    (opts: ConfirmOpts) => new Promise<boolean>((resolve) => setState({ ...opts, resolve })),
+    (opts: ConfirmOpts) => new Promise<boolean>((resolve) => { setState({ ...opts, resolve }); setOpen(true) }),
     []
   )
 
   const close = (v: boolean) => {
     state?.resolve(v)
-    setState(null)
+    setOpen(false)
   }
 
   const element = (
-    <AlertDialog open={!!state} onOpenChange={(o) => !o && close(false)}>
-      <AlertDialogContent className="sm:max-w-md">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{state?.title}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="t-body text-ink-2">{state?.description}</div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => close(false)}>Batal</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => close(true)}
-            className={state?.destructive ? 'bg-bahaya-soft text-bahaya shadow-none hover:bg-bahaya-soft hover:brightness-95' : undefined}
-          >
-            {state?.confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={(o) => !o && close(false)}
+      title={state?.title}
+      description={state?.description}
+      confirmLabel={state?.confirmLabel}
+      destructive={state?.destructive}
+      onCancel={() => close(false)}
+      onConfirm={() => close(true)}
+    />
   )
 
   return [element, ask] as const

@@ -68,6 +68,7 @@ export function TaskSection({
   locked: lockedProp,
   prominent = false,
   date,
+  onChanged,
 }: {
   projectId: string
   projectName: string
@@ -76,13 +77,15 @@ export function TaskSection({
   prominent?: boolean
   /** Hari lampau yang sedang dibuka ("YYYY-MM-DD"); kosong = hari ini. */
   date?: string
+  /** Memuat ulang ringkasan laporan yang dihitung dari tugas dan buktinya. */
+  onChanged?: () => void
 }) {
   const { data, loading, error, reload } = useResource<Data>(
     `/api/tasks?projectId=${encodeURIComponent(projectId)}${date ? `&date=${date}` : ''}`
   )
   const locked = lockedProp || Boolean(data?.locked)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<TaskRecord | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [escalating, setEscalating] = useState<TaskRecord | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -92,6 +95,12 @@ export function TaskSection({
   const tasks = [...(data?.tasks ?? [])].sort(
     (a, b) => (URGENCY_RANK[a.urgency] ?? 2) - (URGENCY_RANK[b.urgency] ?? 2)
   )
+  const editing = tasks.find((t) => t.id === editingId) ?? null
+  function refresh() {
+    setOverride({})
+    reload()
+    onChanged?.()
+  }
   const isDone = (t: TaskRow) => override[t.id] ?? t.status === 'SELESAI'
   const done = tasks.filter(isDone).length
   const blocked = tasks.filter((t) => t.status === 'TERKENDALA' || t.status === 'MENUNGGU_KEPUTUSAN')
@@ -117,7 +126,7 @@ export function TaskSection({
         setActionError(json.error || 'Progress belum terhapus')
         return
       }
-      reload()
+      refresh()
     } catch {
       setActionError('Tidak dapat menghubungi server.')
     } finally {
@@ -163,14 +172,14 @@ export function TaskSection({
         progressPct: next ? 100 : Math.min(t.progressPct, 90),
         subtasks: t.subtasks.map((s) => ({ ...s, isDone: next ? true : s.isDone })),
       })
-      reload()
+      refresh()
       toast(next ? `${t.title} ditandai selesai` : `${t.title} dibuka kembali`, {
         action: {
           label: 'Urungkan',
           onClick: () => {
             setOverride((o) => ({ ...o, [t.id]: t.status === 'SELESAI' }))
             putTask(t, { status: t.status, progressPct: t.progressPct, subtasks: t.subtasks })
-              .then(reload)
+              .then(refresh)
               .catch((e: Error) => toast.error(e.message))
           },
         },
@@ -184,7 +193,7 @@ export function TaskSection({
   }
 
   function openAdd() {
-    setEditing(null)
+    setEditingId(null)
     setDialogOpen(true)
   }
 
@@ -342,7 +351,7 @@ export function TaskSection({
                       <Button
                         size="sm"
                         onClick={() => {
-                          setEditing(t)
+                          setEditingId(t.id)
                           setDialogOpen(true)
                         }}
                       >
@@ -381,9 +390,9 @@ export function TaskSection({
         </p>
       )}
 
-      {dialogOpen && (
+      {dialogOpen && (editingId === null || editing) && (
         <TaskDialog
-          key={editing?.id ?? 'baru'}
+          key={editingId ?? 'baru'}
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           projectId={projectId}
@@ -392,10 +401,7 @@ export function TaskSection({
           task={editing}
           locked={locked}
           workDate={date}
-          onSaved={() => {
-            setOverride({})
-            reload()
-          }}
+          onSaved={refresh}
         />
       )}
 
@@ -405,7 +411,7 @@ export function TaskSection({
           onClose={() => setEscalating(null)}
           onDone={() => {
             setEscalating(null)
-            reload()
+            refresh()
           }}
         />
       )}

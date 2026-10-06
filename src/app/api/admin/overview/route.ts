@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isGlobalRole, refuseUnscoped, requireApiUser, scopeEntityIds, scopeUserIds } from '@/lib/auth'
 import { ROLE_LABELS } from '@/lib/constants'
-import { startOfWibDay } from '@/lib/lock'
+import { loadCompliance, resolveEntityScope } from '@/lib/admin-compliance-server'
 import { reminderDesk } from '@/lib/reminder-rules'
 import type { AdminOverview } from '@/lib/admin-meta'
 import { serverError } from '@/lib/api-error' // [F3-D]
@@ -13,10 +13,8 @@ import { serverError } from '@/lib/api-error' // [F3-D]
  * jumlah buka kunci. Admin PT / Direktur entitas: subtree PT-nya; peran grup:
  * seluruh grup atau ?entityId=.
  *
- * Kepatuhan per orang memakai keanggotaan divisi (User.divisionId, area P2-B).
- * Yang dihitung "wajib lapor" adalah anggota aktif yang memegang proyek aktif
- * sebagai PIC; ia "sudah lapor" bila semua proyeknya sudah terkirim hari ini.
- * Anggota yang tercatat CUTI/SAKIT/IZIN hari ini tidak masuk penyebut.
+ * Kepatuhan memakai pemuat yang sama dengan /api/admin/compliance, lalu
+ * diproyeksikan ke bentuk respons lama agar konsumen overview tetap cocok.
  */
 
 export const dynamic = 'force-dynamic'
@@ -33,13 +31,9 @@ export async function GET(req: NextRequest) {
   if (unscoped) return unscoped
 
   try {
-    let entityIds = await scopeEntityIds(user)
-    const requested = req.nextUrl.searchParams.get('entityId')
-    if (entityIds === null && requested) {
-      const e = await db.entity.findUnique({ where: { id: requested }, select: { path: true } })
-      if (!e) return NextResponse.json({ error: 'Perusahaan tidak ditemukan' }, { status: 404 })
-      entityIds = (await db.entity.findMany({ where: { path: { startsWith: e.path } }, select: { id: true } })).map((x) => x.id)
-    }
+    const requested = (req.nextUrl.searchParams.get('entityId') || '').slice(0, 64) || null
+    const entityIds = await resolveEntityScope(await scopeEntityIds(user), requested)
+    if (entityIds === 'NOT_FOUND') return NextResponse.json({ error: 'Perusahaan tidak ditemukan' }, { status: 404 })
     const inEntities = entityIds ? { in: entityIds } : undefined
     // Peran grup yang memilih ?entityId= tidak punya cakupan sendiri (scopeUserIds = null);
     // hitungan buka kunci harus tetap terbatas pada akun di PT yang dipilih.
@@ -47,7 +41,6 @@ export async function GET(req: NextRequest) {
       ? null
       : ((await scopeUserIds(user)) ??
         (await db.user.findMany({ where: { scopeEntityId: { in: entityIds } }, select: { id: true } })).map((u) => u.id))
-    const today = startOfWibDay(new Date())
 
     const [entities, divisionsCount, projects, activeProjects, users, activeUsers, templates, byRole, entity, unlockPending, unlockApproved] = await Promise.all([
       db.entity.count({ where: { type: 'PT', isActive: true, ...(inEntities ? { id: inEntities } : {}) } }),
@@ -63,64 +56,26 @@ export async function GET(req: NextRequest) {
       db.unlockRequest.count({ where: { status: 'DISETUJUI', ...(userIds ? { requestedById: { in: userIds } } : {}) } }),
     ])
 
-    // ---- Kepatuhan per orang ----
-    const divisions = await db.division.findMany({
-      where: { isActive: true, ...(inEntities ? { entityId: inEntities } : {}) },
-      select: {
-        id: true,
-        name: true,
-        headUser: { select: { name: true } },
-        members: { where: { isActive: true }, select: { id: true, name: true, role: true } },
-      },
-      orderBy: { name: 'asc' },
-    })
-    const memberIds = divisions.flatMap((d) => d.members.map((m) => m.id))
-    const hasMembership = memberIds.length > 0
-    const [picProjects, leave] = hasMembership
-      ? await Promise.all([
-          db.project.findMany({
-            where: { lifecycle: 'AKTIF', picUserId: { in: memberIds } },
-            select: {
-              id: true,
-              picUserId: true,
-              dailyReports: { where: { submittedAt: { not: null } }, orderBy: { reportDate: 'desc' }, take: 1, select: { reportDate: true, submittedAt: true } },
-            },
-          }),
-          db.attendance.findMany({ where: { userId: { in: memberIds }, date: today, status: { in: ['CUTI', 'SAKIT', 'IZIN'] } }, select: { userId: true } }),
-        ])
-      : [[], []]
-    const onLeave = new Set(leave.map((l) => l.userId))
-    const projectsOf = new Map<string, { reportedToday: boolean; last: Date | null }[]>()
-    for (const p of picProjects) {
-      const last = p.dailyReports[0]
-      const list = projectsOf.get(p.picUserId!) ?? []
-      list.push({ reportedToday: !!last && last.reportDate.getTime() === today.getTime(), last: last?.submittedAt ?? null })
-      projectsOf.set(p.picUserId!, list)
-    }
-
+    const [dailyCompliance, memberDivisions] = await Promise.all([
+      loadCompliance(entityIds, { canRemind: false }),
+      // Pertahankan penanda keanggotaan respons lama, termasuk anggota tanpa proyek.
+      db.division.count({ where: {
+        isActive: true,
+        ...(inEntities ? { entityId: inEntities } : {}),
+        members: { some: { isActive: true } },
+      } }),
+    ])
     const compliance: AdminOverview['compliance'] = {
-      hasMembership,
-      divisions: divisions.map((d) => {
-        let expected = 0
-        let reported = 0
-        let leaveCount = 0
-        const missing: AdminOverview['compliance']['divisions'][number]['missing'] = []
-        for (const m of d.members) {
-          const mine = projectsOf.get(m.id)
-          if (!mine?.length) continue
-          if (onLeave.has(m.id)) {
-            leaveCount += 1
-            continue
-          }
-          expected += 1
-          if (mine.every((x) => x.reportedToday)) reported += 1
-          else {
-            const last = mine.map((x) => x.last).filter((x): x is Date => !!x).sort((a, b) => b.getTime() - a.getTime())[0]
-            missing.push({ id: m.id, name: m.name, role: ROLE_LABELS[m.role] ?? m.role, lastReportAt: last?.toISOString() ?? null })
-          }
-        }
-        return { id: d.id, name: d.name, head: d.headUser?.name ?? null, expected, reported, onLeave: leaveCount, missing }
-      }),
+      hasMembership: memberDivisions > 0,
+      divisions: dailyCompliance.divisions.map((d) => ({
+        id: d.id,
+        name: d.name,
+        head: d.head?.name ?? null,
+        expected: d.expected,
+        reported: d.reported,
+        onLeave: d.onLeave,
+        missing: d.missing.map(({ id, name, role, lastReportAt }) => ({ id, name, role, lastReportAt })),
+      })),
     }
 
     const body: AdminOverview = {

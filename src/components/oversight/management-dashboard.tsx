@@ -22,6 +22,7 @@ import { ESCALATION_NEEDED_LABELS } from '@/lib/constants'
 import { divisionTone } from '@/lib/division-tone'
 import { can, canSeeTab } from '@/lib/rbac'
 import { toastWithUndo } from '@/lib/undo-client' // [F2-URUNGKAN]
+import type { ProgressComparison } from '@/lib/kpi-math'
 import { formatDateShort, formatNumber, formatRelative, initials } from '@/lib/format'
 import { DeadlineProposalItems, RejectDeadlineSheet, useDeadlineDecisions } from './deadline-decisions'
 // [F2-DIREKTUR] persetujuan materi/anggaran/cuti, pencarian ⌘K, sheet laporan mingguan
@@ -47,7 +48,12 @@ const PERIODS: { value: Period; label: string; sub: string; kpi: string }[] = [
 ]
 const HOUR = 3600000
 
-export function ManagementDashboard({ data, reload }: { data: RingkasanData; reload: () => void }) {
+type ManagementData = Omit<RingkasanData, 'projects'> & {
+  projects: (Omit<OversightProject, 'pic'> & { pic: string | null })[]
+  progressComparison?: ProgressComparison | null
+}
+
+export function ManagementDashboard({ data, reload }: { data: ManagementData; reload: () => void }) {
   const { user, setActiveTab } = useApp()
   const phone = useIsPhone()
   const [period, setPeriod] = useState<Period>('week')
@@ -62,9 +68,12 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
   const [report, setReport] = useState<DivisionSummary | null>(null)
   const reportWeekKey = data.reportWeek ? `${data.reportWeek.isoYear}-W${String(data.reportWeek.isoWeek).padStart(2, '0')}` : undefined
   const weekly = useWeeklyActions((d) => d.entityId, reportWeekKey)
+  const projects = useMemo(() => data.projects.map((p) => ({
+    ...p, pic: p.pic?.trim() || 'PIC belum ditentukan', picInitials: p.pic?.trim() ? initials(p.pic) : '—',
+  })), [data.projects])
   useSearchSelection((hit) => {
     if (hit.kind === 'project') {
-      const p = data.projects.find((x) => x.id === hit.id)
+      const p = projects.find((x) => x.id === hit.id)
       if (p) setOpen(p)
       return Boolean(p)
     }
@@ -76,7 +85,6 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
     return false
   })
 
-  const projects = data.projects
   const counts = { on: 0, risk: 0, late: 0, done: 0, neutral: 0 }
   for (const p of projects) counts[p.status]++
   const total = projects.length
@@ -269,7 +277,7 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
               trend={deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}
               spark={series.map((s) => s.value)}
             />
-            <StatTile label="Rata-rata progres" value={`${avgProgress}%`} delta={`${counts.done} proyek selesai`} tone="neutral" />
+            <StatTile label="Rata-rata progres" value={`${avgProgress}%`} delta={data.progressComparison ? `${data.progressComparison.delta > 0 ? '+' : ''}${data.progressComparison.delta} poin vs akhir minggu lalu` : `${counts.done} proyek selesai`} tone="neutral" />
             <StatTile
               label={approvals || !data.escalations.length ? 'Persetujuan menunggu' : 'Eskalasi terbuka'}
               value={approvals || data.escalations.length}
@@ -422,7 +430,7 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
                   division={p.divisionName ? `${p.divisionName} · ${p.entityCode}` : p.entityName}
                   divisionTone={p.divisionName ? divisionTone(p.divisionName) : seriesTone(data.byEntity.findIndex((e) => e.id === p.entityId))}
                   pic={p.pic}
-                  initials={initials(p.pic)}
+                  initials={p.picInitials}
                   progress={p.progress}
                   due={p.targetEndDate ? formatDateShort(p.targetEndDate) : '—'}
                   status={p.status}
@@ -476,7 +484,7 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
           <Card
             className="flex-1"
             title={approvals || data.decisions.length || proposals.length || requests.length ? 'Persetujuan menunggu' : 'Keputusan terbuka'}
-            subtitle={decides ? 'Materi, anggaran, cuti, pengajuan proyek, usulan tenggat, dan eskalasi' : 'Materi, anggaran, cuti, pengajuan proyek, dan usulan tenggat'}
+            subtitle={user.role === 'AUDITOR' ? 'Eskalasi terbuka' : decides ? 'Materi, anggaran, cuti, pengajuan proyek, usulan tenggat, dan eskalasi' : 'Materi, anggaran, cuti, pengajuan proyek, dan usulan tenggat'}
             action={
               data.escalations.length > 0 && seesEscalations ? (
                 <Button size="sm" variant="secondary" onClick={() => setActiveTab('escalations')}>
@@ -544,7 +552,7 @@ export function ManagementDashboard({ data, reload }: { data: RingkasanData; rel
       </div>
 
       {/* [F2-GRUP] panel khusus SDM GA / TI / Super Admin / Auditor */}
-      <GroupRolePanel data={data} />
+      <GroupRolePanel data={{ ...data, projects }} />
 
       <EntityActivityBoard />
 

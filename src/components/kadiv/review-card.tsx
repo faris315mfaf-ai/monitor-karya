@@ -7,18 +7,29 @@
  * Minta revisi membuka Sheet kecil karena catatan wajib untuk PIC.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ComponentProps } from 'react'
 import { toast } from 'sonner'
 import { ApprovalItem, Button, Card, Chip, EmptyNote, ErrorNote, Sheet, Skeleton, type Tone } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
+import { useResource } from '@/hooks/use-resource'
 import { formatRelative } from '@/lib/format'
 import { postJson, type KadivDataCtl } from './use-kadiv'
 import type { ReviewOutput } from './types'
 
 const TONES: Tone[] = ['data-1', 'data-2', 'data-4', 'data-5', 'data-3', 'data-6']
 
-function evidenceLabel(n: number) {
-  return n === 0 ? 'Tanpa bukti' : `${n} berkas`
+type ReviewEvidence = { fileName: string; mime: string }
+
+function ReviewOutputItem({ output, ...props }: ComponentProps<typeof ApprovalItem> & { output: ReviewOutput }) {
+  // Endpoint lama sudah menjaga akses OUTPUT; hanya baris yang tampak dimuat.
+  const { data, loading, error } = useResource<{ items: ReviewEvidence[] }>(output.evidenceCount
+    ? `/api/evidence?targetType=OUTPUT&targetId=${encodeURIComponent(output.id)}` : null)
+  const type = (mime: string) => mime === 'text/uri-list' ? 'Tautan' : mime === 'application/pdf' ? 'Dokumen PDF' :
+    mime.startsWith('image/') ? 'Gambar' : mime.startsWith('video/') ? 'Video' : mime.startsWith('audio/') ? 'Audio' : 'Berkas'
+  const evidence = !output.evidenceCount ? 'Tanpa bukti' : loading ? `${output.evidenceCount} bukti · memuat jenis bukti…` :
+    error || !data ? `${output.evidenceCount} bukti · jenis bukti belum termuat` :
+      data.items.map((e) => `${type(e.mime)}: ${e.fileName}`).join(' · ') || 'Tanpa bukti'
+  return <ApprovalItem {...props} amount={`${output.project.name} · ${evidence}`} />
 }
 
 export function useReviewActions(ctl: KadivDataCtl) {
@@ -134,14 +145,14 @@ export function ReviewOutputCard({ ctl, className, limit = 8, id }: { ctl: Kadiv
           )}
           <div className="flex flex-col">
             {visible.map((o) => (
-              <ApprovalItem
-                key={o.id}
+              <ReviewOutputItem
+                key={`${o.id}:${o.evidenceCount}:${o.submittedAt}`}
+                output={o}
                 title={o.title}
                 requester={o.owner.name}
                 initials={o.owner.initials}
                 tone={tone(o.project.id)}
                 time={formatRelative(o.submittedAt)}
-                amount={`${o.project.name} · ${evidenceLabel(o.evidenceCount)}`}
                 state={o.status === 'DITERIMA' ? 'approved' : o.status === 'PERLU_REVISI' ? 'rejected' : 'pending'}
                 approveLabel="Terima"
                 approveVariant="secondary"

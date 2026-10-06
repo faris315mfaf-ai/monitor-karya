@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { Toaster as SonnerToaster } from "@/components/mk/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PREFS_BOOT_SCRIPT } from "@/lib/tampilan-boot";
 
@@ -60,7 +59,6 @@ export default async function RootLayout({
           nonce={nonce}
         >
           {children}
-          <Toaster />
           {/* [F1-D] Toast bergaya token: latar surface (wrapper bawaan memakai
               --popover yang tidak ada di tokens.css → toast tembus pandang),
               jarak atas --toast-top agar tidak tertutup tab bar mengambang /

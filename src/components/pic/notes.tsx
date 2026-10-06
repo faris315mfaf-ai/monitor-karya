@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { Card, EmptyNote, ErrorNote, IconButton, Skeleton, cx } from '@/components/mk'
 import { useResource } from '@/hooks/use-resource'
 import { firstName, formatDateShort, formatTime } from '@/lib/format'

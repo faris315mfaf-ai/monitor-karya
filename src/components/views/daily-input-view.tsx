@@ -648,7 +648,7 @@ function ReportForm({
       ) : null}
 
       {/* Progress (task) — tindakan utama */}
-      <TaskSection projectId={project.id} projectName={project.name} projects={projects} locked={locked} prominent={single && !locked} date={dateKey} />
+      <TaskSection projectId={project.id} projectName={project.name} projects={projects} locked={locked} prominent={single && !locked} date={dateKey} onChanged={onSaved} />
 
       {/* Ringkasan hari */}
       {project.derived ? (

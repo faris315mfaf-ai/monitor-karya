@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useApp } from '@/components/app-provider'
+import { useSearchSelection } from '@/components/search/command-palette'
 import { useResource } from '@/hooks/use-resource'
 import { NotificationButton } from '@/components/shell'
 import {
@@ -44,11 +45,13 @@ type ProjectItem = {
   approvedByName: string | null
   noApproval: boolean
   entity: { id: string; name: string; code: string; region: string | null }
-  latestReport: { status: string; progressPct: number; reportDate: string; isLate: boolean } | null
+  latestReport: { status: string; progressPct: number; reportDate: string; isLate: boolean; obstacle?: string | null; needsEscalation?: boolean } | null
   permissions: { manage: boolean; setLifecycle: boolean; approve: boolean; resubmit: boolean }
 }
 
-type ProjectListData = { items: ProjectItem[]; total: number; page: number; pageSize: number }
+type ProjectSummary = { running: number; waiting: number; resubmit: number; late: number; risk: number; silent: number }
+
+type ProjectListData = { summary?: ProjectSummary; items: ProjectItem[]; total: number; page: number; pageSize: number }
 
 type Options = {
   entity: { id: string; code: string; name: string } | null
@@ -111,7 +114,7 @@ function projectState(p: ProjectItem): { status: Status; label?: string; reason:
   const r = p.latestReport
   const d = deriveProjectStatus(
     { lifecycle: p.lifecycle, targetEndDate: p.targetEndDate ? new Date(p.targetEndDate) : null },
-    r ? { status: r.status, progressPct: r.progressPct, obstacle: null, needsEscalation: false, reportDate: new Date(r.reportDate) } : null
+    r ? { status: r.status, progressPct: r.progressPct, obstacle: r.obstacle ?? null, needsEscalation: r.needsEscalation ?? false, reportDate: new Date(r.reportDate) } : null
   )
   if (p.lifecycle === 'DIARSIPKAN') return { status: 'neutral', label: 'Diarsipkan', reason: null, progress: d.progress }
   if (p.lifecycle === 'DITUTUP') return { status: 'done', label: 'Ditutup', reason: null, progress: d.progress }
@@ -154,23 +157,17 @@ function answerFor(lifecycle: string, total: number, filtered: boolean): string 
   }
 }
 
-function supportFor(items: ProjectItem[]): string | undefined {
-  if (!items.length) return undefined
-  const waiting = items.filter((p) => p.lifecycle === 'DIUSULKAN' && p.permissions.approve).length
-  const resubmit = items.filter((p) => p.permissions.resubmit).length
-  const running = items.filter((p) => p.lifecycle === 'AKTIF')
-  const states = running.map(projectState)
-  const late = states.filter((s) => s.status === 'late').length
-  const risk = states.filter((s) => s.status === 'risk').length
-  const silent = running.filter((p) => !p.latestReport).length
+function supportFor(summary?: ProjectSummary): string | undefined {
+  if (!summary) return undefined
+  const { waiting, resubmit, late, risk, silent, running } = summary
   const parts: string[] = []
   if (waiting) parts.push(`${waiting} pengajuan menunggu keputusan Anda`)
   if (resubmit) parts.push(`${resubmit} pengajuan bisa Anda ajukan ulang`)
   if (late) parts.push(`${late} terlambat`)
   if (risk) parts.push(`${risk} perlu perhatian`)
   if (silent) parts.push(`${silent} belum punya laporan harian`)
-  if (parts.length) return `Di halaman ini: ${parts.join(', ')}.`
-  if (running.length) return 'Semua proyek aktif di halaman ini sesuai jadwal.'
+  if (parts.length) return `${parts.join(', ')}.`
+  if (running) return 'Semua proyek aktif sesuai jadwal.'
   return undefined
 }
 
@@ -193,6 +190,8 @@ export function ProjectsView() {
   const [detail, setDetail] = useState<{ id: string; snapshot: ProjectItem; decide: Decision | null; n: number } | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [approving, setApproving] = useState<string | null>(null)
+  const searchRequest = useRef(0)
+  useEffect(() => () => { searchRequest.current++ }, [])
 
   const params = new URLSearchParams({ page: String(page), pageSize: '12', lifecycle })
   if (search) params.set('search', search)
@@ -202,6 +201,25 @@ export function ProjectsView() {
   const mayPropose = can(user.role, 'project:propose')
   const filtered = search.trim() !== '' || phase !== 'ALL'
   const items = useMemo(() => data?.items ?? [], [data])
+
+  // Ambil pending pilihan palet saat layar baru terpasang, termasuk proyek di
+  // halaman/filter lain. Validasi ID respons; respons lama tidak boleh membuka
+  // proyek setelah pengguna memilih proyek lain atau meninggalkan layar.
+  useSearchSelection((hit) => {
+    if (hit.kind !== 'project') return false
+    const request = ++searchRequest.current
+    const cached = items.find((p) => p.id === hit.id)
+    if (cached) openDetail(cached)
+    else void (async () => {
+      const res = await call(`/api/projects?id=${encodeURIComponent(hit.id)}&lifecycle=ALL&pageSize=1`, 'GET')
+      if (request !== searchRequest.current) return
+      const found = (res.json.items as ProjectItem[] | undefined)?.find((p) => p.id === hit.id)
+      if (res.ok && found) openDetail(found)
+      else toast.error(res.error ?? 'Proyek tidak ditemukan dalam cakupan Anda.')
+    })()
+    return true
+  })
+
 
   // Warna seri per PT, urut kemunculan, supaya titik di baris konsisten.
   const entityTone = useMemo(() => {
@@ -216,10 +234,12 @@ export function ProjectsView() {
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
 
   function openForm(mode: 'create' | 'edit', project?: ProjectItem) {
+    searchRequest.current++
     setForm((f) => ({ mode, project, n: (f?.n ?? 0) + 1 }))
     setFormOpen(true)
   }
   function openDetail(p: ProjectItem, decide: Decision | null = null) {
+    searchRequest.current++
     setDetail((d) => ({ id: p.id, snapshot: p, decide, n: (d?.n ?? 0) + 1 }))
     setDetailOpen(true)
   }
@@ -274,7 +294,7 @@ export function ProjectsView() {
         <Hero
           eyebrow={[LIFECYCLES.find((l) => l.value === lifecycle)?.label, phase !== 'ALL' ? PROJECT_PHASE_LABELS[phase] : null].filter(Boolean).join(' · ')}
           answer={answerFor(lifecycle, data.total, filtered)}
-          support={supportFor(items)}
+          support={supportFor(data.summary)}
         />
       ) : null}
 
@@ -461,7 +481,7 @@ export function ProjectsView() {
           open={detailOpen}
           project={detailProject!}
           initialDecision={detail.decide}
-          onClose={() => setDetailOpen(false)}
+          onClose={() => { searchRequest.current++; setDetailOpen(false) }}
           onChanged={reload}
           onEdit={(p) => {
             setDetailOpen(false)

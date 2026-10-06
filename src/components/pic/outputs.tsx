@@ -6,10 +6,10 @@
  * catatan revisi, daftar bukti, area unggah, dan aksi kirim.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import {
   Button, Card, Chip, EmptyNote, ErrorNote, Icon, IconButton, Sheet, Skeleton, StatusBadge, cx,
 } from '@/components/mk'
@@ -43,13 +43,16 @@ function metaLine(o: OutputItem): string {
 }
 
 /** Mengirim output untuk review, dengan toast "Urungkan" yang menarik kiriman. */
-async function submitWithUndo(o: OutputItem, reload: () => void) {
+async function submitWithUndo(o: OutputItem, reload: () => void, isActive: () => boolean = () => true) {
   await call('/api/outputs', 'PATCH', { id: o.id, action: 'submit' })
+  if (!isActive()) return
   reload()
   toast.success(`${o.title} dikirim untuk review`, {
     action: {
       label: 'Urungkan',
       onClick: () => {
+        // Toast tetap hidup setelah Sheet ditutup; tindakan eksplisit ini
+        // tetap menargetkan output asal. Reload milik induk membaca kunci terbaru.
         call('/api/outputs', 'PATCH', { id: o.id, action: 'withdraw' })
           .then(() => {
             reload()
@@ -61,7 +64,11 @@ async function submitWithUndo(o: OutputItem, reload: () => void) {
   })
 }
 
-export function OutputsCard({
+export function OutputsCard(props: { projectId: string; projectName?: string; res: OutputsRes; className?: string }) {
+  return <ProjectOutputsCard key={props.projectId} {...props} />
+}
+
+function ProjectOutputsCard({
   projectId,
   projectName,
   res,
@@ -82,7 +89,7 @@ export function OutputsCard({
   const fileRef = useRef<HTMLInputElement>(null)
   const pending = useRef<OutputItem | null>(null)
 
-  const items = data?.items ?? []
+  const items = !loading ? (data?.items ?? []).filter((o) => o.projectId === projectId) : []
   const counts = data?.counts
   const filtered = filter === 'ALL' ? items : items.filter((o) => o.status === filter)
   // "Terdekat": yang perlu disentuh dulu di atas, yang sudah diterima di bawah.
@@ -90,8 +97,18 @@ export function OutputsCard({
   const sorted = filter === 'ALL' ? [...filtered].sort((a, b) => rank[a.status] - rank[b.status]) : filtered
   const shown = showAll ? sorted : sorted.slice(0, NEAREST)
   const open = items.find((o) => o.id === openId) ?? null
+  const current = useRef<{ projectId: string; loading: boolean; items: OutputItem[] } | null>(null)
+  useLayoutEffect(() => {
+    current.current = { projectId, loading, items }
+    return () => { current.current = null }
+  }, [projectId, loading, items])
+  function isCurrent(o: OutputItem, forEdit = true) {
+    const live = current.current
+    return !!live && !live.loading && o.projectId === live.projectId && live.items.some((item) => item.id === o.id && (!forEdit || editable(item)))
+  }
 
   function pickFor(o: OutputItem) {
+    if (!isCurrent(o)) return
     pending.current = o
     fileRef.current?.click()
   }
@@ -99,12 +116,17 @@ export function OutputsCard({
   async function onFiles(files: FileList | null, target?: OutputItem) {
     const o = target ?? pending.current
     pending.current = null
-    if (!o || !files?.length) return
+    if (!o || !files?.length || !isCurrent(o)) return
     setBusyId(o.id)
     try {
-      for (const f of Array.from(files)) await uploadOutputEvidence(o.id, f)
-      await submitWithUndo(o, reload)
+      for (const f of Array.from(files)) {
+        if (!isCurrent(o)) return
+        await uploadOutputEvidence(o.id, f)
+      }
+      if (!isCurrent(o)) return
+      await submitWithUndo(o, reload, () => isCurrent(o, false))
     } catch (e) {
+      if (!isCurrent(o)) return
       toast.error(e instanceof Error ? e.message : 'Bukti belum terunggah')
       reload()
     } finally {
@@ -125,13 +147,13 @@ export function OutputsCard({
       title="Output saya"
       subtitle={subtitle}
       action={
-        <Button size="sm" variant="secondary" icon="tambah" onClick={() => setCreating(true)}>
+        <Button size="sm" variant="secondary" icon="tambah" disabled={loading} onClick={() => !loading && setCreating(true)}>
           Tambah output
         </Button>
       }
     >
       <input ref={fileRef} type="file" accept={ACCEPT} multiple hidden onChange={(e) => onFiles(e.target.files)} />
-      {loading && !data ? (
+      {loading ? (
         <div className="flex flex-col gap-3">
           <Skeleton h={36} />
           <Skeleton h={48} />
@@ -252,11 +274,12 @@ export function OutputsCard({
       {open ? (
         <OutputSheet key={open.id} output={open} projectId={projectId} onClose={() => setOpenId(null)} onChanged={reload} />
       ) : null}
-      {creating ? (
+      {creating && !loading ? (
         <OutputFormSheet
           projectId={projectId}
           onClose={() => setCreating(false)}
           onSaved={() => {
+            if (!current.current || current.current.loading) return
             setCreating(false)
             reload()
           }}
@@ -276,7 +299,12 @@ function fmtSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
 }
 
-export function OutputSheet({
+export function OutputSheet(props: { output: OutputItem; projectId: string; onClose: () => void; onChanged: () => void }) {
+  if (props.output.projectId !== props.projectId) return null
+  return <ProjectOutputSheet key={`${props.projectId}-${props.output.id}`} {...props} />
+}
+
+function ProjectOutputSheet({
   output: o,
   projectId,
   onClose,
@@ -312,9 +340,19 @@ export function OutputSheet({
   }, [asking])
 
   const m = OUTPUT_META[o.status]
-  const canEdit = editable(o)
-  const evidence = ev.data?.items ?? []
+  const canEdit = editable(o) && !ev.loading
+  const evidence = !ev.loading ? ev.data?.items ?? [] : []
+  const active = useRef<{ output: OutputItem; loading: boolean; evidence: EvidenceItem[] } | null>(null)
+  useLayoutEffect(() => {
+    active.current = { output: o, loading: ev.loading, evidence }
+    return () => { active.current = null }
+  }, [o, ev.loading, evidence])
+  const isCurrent = (forEdit = false) => {
+    const live = active.current
+    return !!live && live.output.id === o.id && live.output.projectId === projectId && !live.loading && (!forEdit || editable(live.output))
+  }
   const refresh = () => {
+    if (!isCurrent()) return
     ev.reload()
     onChanged()
   }
@@ -323,18 +361,23 @@ export function OutputSheet({
     const list = files ? Array.from(files) : []
     const thenSubmit = submitAfter.current
     submitAfter.current = false
-    if (!list.length) return
+    if (!list.length || !canEdit || !isCurrent(true)) return
     setBusy('upload')
     try {
-      for (const f of list) await uploadOutputEvidence(o.id, f)
+      for (const f of list) {
+        if (!isCurrent(true)) return
+        await uploadOutputEvidence(o.id, f)
+      }
+      if (!isCurrent()) return
       toast.success(list.length === 1 ? 'Bukti terunggah' : `${list.length} bukti terunggah`)
       if (thenSubmit) {
-        await submitWithUndo(o, onChanged)
-        onClose()
+        await submitWithUndo(o, onChanged, () => isCurrent())
+        if (isCurrent()) onClose()
         return
       }
       refresh()
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Bukti belum terunggah')
       refresh()
     } finally {
@@ -346,15 +389,17 @@ export function OutputSheet({
   /** "Tanya kepala divisi": pertanyaan masuk ke percakapan catatan proyek ini. */
   async function ask() {
     const text = question.trim()
-    if (text.length < 3) return
+    if (text.length < 3 || !isCurrent()) return
     setBusy('ask')
     try {
       await call('/api/project-notes', 'POST', { projectId, body: text })
+      if (!isCurrent()) return
       setAsking(false)
       setQuestion('')
       notesChanged(projectId)
       toast.success('Pertanyaan terkirim ke kepala divisi', { description: 'Balasannya muncul di Catatan kepala divisi.' })
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Pertanyaan belum terkirim')
     } finally {
       setBusy(null)
@@ -380,14 +425,17 @@ export function OutputSheet({
     : {}
 
   async function addLink() {
+    if (!canEdit || !isCurrent(true)) return
     setBusy('link')
     try {
       await call('/api/evidence', 'POST', { targetType: 'OUTPUT', targetId: o.id, fileName: link.name, url: link.url })
+      if (!isCurrent()) return
       setLink({ name: '', url: '' })
       setLinkOpen(false)
       toast.success('Tautan bukti ditambahkan')
       refresh()
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Tautan belum tersimpan')
     } finally {
       setBusy(null)
@@ -395,28 +443,34 @@ export function OutputSheet({
   }
 
   async function openEvidence(e: EvidenceItem) {
+    if (!isCurrent() || ev.loading || !evidence.some((item) => item.id === e.id)) return
     try {
       const j = await call<{ url: string }>(`/api/evidence/${e.id}`, 'GET')
+      if (!isCurrent()) return
       window.open(j.url, '_blank', 'noopener,noreferrer')
     } catch (err) {
+      if (!isCurrent()) return
       toast.error(err instanceof Error ? err.message : 'Bukti belum bisa dibuka')
     }
   }
 
   async function removeEvidence(e: EvidenceItem) {
+    if (!canEdit || !isCurrent(true) || !active.current?.evidence.some((item) => item.id === e.id)) return
     const ok = await confirm({
       title: 'Hapus bukti ini?',
       description: `${e.fileName} akan dihapus permanen dari output ini.`,
       confirmLabel: 'Hapus bukti',
       destructive: true,
     })
-    if (!ok) return
+    if (!ok || !isCurrent(true)) return
     setBusy(e.id)
     try {
       await call(`/api/evidence/${e.id}`, 'DELETE')
+      if (!isCurrent()) return
       toast.success('Bukti dihapus')
       refresh()
     } catch (err) {
+      if (!isCurrent()) return
       toast.error(err instanceof Error ? err.message : 'Bukti belum terhapus')
     } finally {
       setBusy(null)
@@ -424,6 +478,7 @@ export function OutputSheet({
   }
 
   async function submit() {
+    if (!canEdit || !isCurrent(true)) return
     if (!evidence.length) {
       submitAfter.current = true
       fileRef.current?.click()
@@ -431,9 +486,10 @@ export function OutputSheet({
     }
     setBusy('submit')
     try {
-      await submitWithUndo(o, onChanged)
-      onClose()
+      await submitWithUndo(o, onChanged, () => isCurrent())
+      if (isCurrent()) onClose()
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Output belum terkirim')
     } finally {
       setBusy(null)
@@ -441,12 +497,14 @@ export function OutputSheet({
   }
 
   async function withdraw() {
+    if (!isCurrent() || ev.loading || active.current?.output.status !== 'MENUNGGU_REVIEW') return
     setBusy('withdraw')
     try {
       await call('/api/outputs', 'PATCH', { id: o.id, action: 'withdraw' })
       toast('Pengiriman dibatalkan')
       refresh()
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Pengiriman belum dibatalkan')
     } finally {
       setBusy(null)
@@ -454,19 +512,22 @@ export function OutputSheet({
   }
 
   async function remove() {
+    if (!canEdit || !isCurrent(true)) return
     const ok = await confirm({
       title: 'Hapus output ini?',
       description: `${o.title} akan dihapus permanen.`,
       confirmLabel: 'Hapus output',
       destructive: true,
     })
-    if (!ok) return
+    if (!ok || !isCurrent(true)) return
     try {
       await call(`/api/outputs?id=${encodeURIComponent(o.id)}`, 'DELETE')
+      if (!isCurrent()) return
       toast.success('Output dihapus')
       onChanged()
       onClose()
     } catch (e) {
+      if (!isCurrent()) return
       toast.error(e instanceof Error ? e.message : 'Output belum terhapus')
     }
   }
@@ -528,11 +589,12 @@ export function OutputSheet({
           </section>
         ) : null}
 
-        {editing ? (
+        {editing && canEdit ? (
           <OutputForm
             output={o}
             projectId={projectId}
             onDone={(saved) => {
+              if (!isCurrent()) return
               setEditing(false)
               if (saved) onChanged()
             }}
@@ -563,7 +625,7 @@ export function OutputSheet({
               </Button>
             ) : null}
           </div>
-          {ev.loading && !ev.data ? (
+          {ev.loading ? (
             <Skeleton h={44} />
           ) : ev.error ? (
             <ErrorNote message={ev.error} onRetry={ev.reload} />
@@ -685,6 +747,11 @@ function OutputForm({
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const id = output?.id ?? 'baru'
+  const active = useRef(false)
+  useLayoutEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
 
   async function save(e?: React.FormEvent) {
     e?.preventDefault()
@@ -696,13 +763,16 @@ function OutputForm({
     try {
       if (output) {
         await call('/api/outputs', 'PATCH', { id: output.id, action: 'update', title, description, dueDate: due || null })
+        if (!active.current) return
         toast.success('Output diperbarui')
       } else {
         await call('/api/outputs', 'POST', { projectId, title, description, dueDate: due || null })
+        if (!active.current) return
         toast.success('Output ditambahkan')
       }
       onDone(true)
     } catch (e2) {
+      if (!active.current) return
       setErr(e2 instanceof Error ? e2.message : 'Output belum tersimpan')
     } finally {
       setSaving(false)

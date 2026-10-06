@@ -387,6 +387,43 @@ describe('/api/deadline-proposals', () => {
     expect((await patch({ id: 'dp-1', action: 'approve' })).status).toBe(409)
   })
 
+  it.each([
+    ['2026-10-05', '2026-10-06T10:00:00'],
+    ['2026-10-06', '2026-10-07T00:00:00'],
+    ['2026-10-06', '2026-10-07T00:00:01'],
+  ])('CX8.6: usulan %s yang sudah lewat saat %s WIB ditolak 422 tanpa efek samping', async (date, now) => {
+    seed({ id: 'dp-1', proposedDate: wib(`${date}T00:00:00`) })
+    vi.setSystemTime(wib(now))
+    asUser('dir-a')
+    const res = await patch({ id: 'dp-1', action: 'approve' })
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ error: expect.stringMatching(/tenggat.*lewat/i) })
+    expect(prop('dp-1')).toMatchObject({ status: 'DIAJUKAN', decidedById: null })
+    expect(db.$transaction).not.toHaveBeenCalled()
+    expect(db.project.update).not.toHaveBeenCalled()
+    expect(world.audits).toHaveLength(0)
+    expect(world.notifications).toHaveLength(0)
+  })
+
+  it.each(['2026-10-06T00:00:00', '2026-10-06T23:59:59'])('CX8.6: tenggat hari ini masih boleh disetujui pada %s WIB', async (now) => {
+    const proposedDate = wib('2026-10-06T00:00:00')
+    seed({ id: 'dp-1', proposedDate })
+    vi.setSystemTime(wib(now))
+    asUser('dir-a')
+    expect((await patch({ id: 'dp-1', action: 'approve' })).status).toBe(200)
+    expect(db.project.update).toHaveBeenCalledWith({ where: { id: 'p-1' }, data: { targetEndDate: proposedDate } })
+  })
+
+  it('CX8.6: usulan kedaluwarsa tetap boleh ditolak atau ditarik', async () => {
+    seed({ id: 'dp-1', proposedDate: wib('2026-10-01T00:00:00') })
+    asUser('dir-a')
+    expect((await patch({ id: 'dp-1', action: 'reject', note: 'Ajukan tenggat baru' })).status).toBe(200)
+    seed({ id: 'dp-2', proposedDate: wib('2026-10-01T00:00:00') })
+    asUser('pic-1')
+    expect((await patch({ id: 'dp-2', action: 'withdraw' })).status).toBe(200)
+    expect(db.project.update).not.toHaveBeenCalled()
+  })
+
   it('menolak wajib alasan', async () => {
     seed({ id: 'dp-1' })
     asUser('dir-a')

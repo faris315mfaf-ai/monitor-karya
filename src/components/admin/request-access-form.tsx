@@ -11,10 +11,11 @@
  * pengaju (src/lib/access-requesters.ts).
  */
 
+import { ChoiceGroup } from '@/components/mk/forms'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import { Button, Card, EmptyNote, ErrorNote, Sheet, Skeleton, StatusBadge, cx } from '@/components/mk'
 import { Field, selectCls } from '@/components/companies/parts'
 import { formatDateShort, formatRelative } from '@/lib/format'
@@ -190,7 +191,7 @@ export function RequestAccessSheet({
         </div>
       ) : (
         <div className="mk-formsec">
-          <div className="mk-choices" role="radiogroup" aria-label="Jenis permintaan">
+          <ChoiceGroup aria-label="Jenis permintaan">
             {(Object.keys(ACCESS_REQUEST_LABELS) as AccessRequestType[]).map((t) => (
               <button
                 key={t}
@@ -213,7 +214,7 @@ export function RequestAccessSheet({
                 </span>
               </button>
             ))}
-          </div>
+          </ChoiceGroup>
 
           <div className="mk-formgrid">
             {type === 'AKUN_BARU' ? (

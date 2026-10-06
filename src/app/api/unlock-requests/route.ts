@@ -146,8 +146,9 @@ export async function PATCH(req: NextRequest) {
   if (!row) return NextResponse.json({ error: 'Pengajuan tidak ditemukan' }, { status: 404 })
   const type = normalizeTarget(row.targetType)
   const target = type ? await resolveTarget(type, row.targetId) : null
+  if (!target) return NextResponse.json({ error: 'Laporan yang dituju sudah tidak ada.' }, { status: 404 })
   const readable = await scopeEntityIds(user)
-  if (target && readable !== null && !readable.includes(target.entityId)) {
+  if (readable !== null && !readable.includes(target.entityId)) {
     return NextResponse.json({ error: 'Laporan ini di luar cakupan Anda.' }, { status: 403 })
   }
   if ((action === 'approve' || action === 'reject') && row.requestedById === user.id) {
@@ -158,7 +159,6 @@ export async function PATCH(req: NextRequest) {
   if (row.status !== expected || (action === 'relock' && row.reLockedAt)) {
     return NextResponse.json({ error: 'Status pengajuan sudah berubah. Muat ulang lalu coba lagi.' }, { status: 409 })
   }
-  if (action === 'execute' && !target) return NextResponse.json({ error: 'Laporan yang dituju sudah tidak ada.' }, { status: 404 })
 
   const now = new Date()
   const hoursRaw = typeof body?.hours === 'number' ? body.hours : DEFAULT_UNLOCK_HOURS

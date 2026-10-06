@@ -18,7 +18,7 @@ vi.mock('next/headers', async () => {
   }
 })
 
-import { AUTH_SECRET_FOR_TESTS, cookie, one, rows, seed, world } from './admin-fake-db'
+import { AUTH_SECRET_FOR_TESTS, cookie, db, one, rows, seed, world } from './admin-fake-db'
 import { createSessionToken } from '@/lib/auth'
 import { startOfWibDay } from '@/lib/lock'
 import type { AdminOverview, ReminderRuleView } from '@/lib/admin-meta'
@@ -51,6 +51,16 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(T0)
   world()
+  // Pemuat bersama memakai _max; fixture umum hanya menyediakan _count.
+  const reportsDb = db.dailyProjectReport as { groupBy(args: { where?: Record<string, unknown> }): Promise<unknown[]> }
+  vi.spyOn(reportsDb, 'groupBy').mockImplementation(async (args) => {
+    const reports = rows('dailyProjectReport', args.where as Record<string, unknown>)
+    const ids = [...new Set(reports.map((r) => r.projectId as string))]
+    return ids.map((projectId) => ({ projectId, _max: {
+      submittedAt: reports.filter((r) => r.projectId === projectId)
+        .map((r) => r.submittedAt as Date).sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
+    } }))
+  })
   cookie.value = undefined
   seed('unlockRequest', [
     { targetType: 'DAILY_REPORT', targetId: 'x-1', reason: 'Alasan A', status: 'DIAJUKAN', requestedById: 'u-admin-a' },

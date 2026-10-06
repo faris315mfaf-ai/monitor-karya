@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Card, EmptyNote, ErrorNote, SegmentedControl, Sheet, Skeleton, StatusBadge, type Status } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { Field, selectCls } from '@/components/companies/parts'
 import { formatDateShort, formatRelative, formatTime } from '@/lib/format'
 import type { UnlockItem } from '@/lib/admin-meta'

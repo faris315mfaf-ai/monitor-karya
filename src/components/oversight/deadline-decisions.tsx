@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { ApprovalItem, Button, Sheet } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { refreshNavBadges } from '@/components/pic/nav-badges'
 import { formatDateShort, formatRelative, initials } from '@/lib/format'
 import type { DeadlineProposalLite } from './types'

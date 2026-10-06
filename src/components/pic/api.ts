@@ -112,7 +112,10 @@ export type ProposalItem = {
 export type ProposalsData = { items: ProposalItem[]; canDecide: boolean }
 
 export function useOutputs(projectId: string | null) {
-  return useResource<OutputsData>(projectId ? `/api/outputs?projectId=${encodeURIComponent(projectId)}` : null)
+  const res = useResource<OutputsData>(projectId ? `/api/outputs?projectId=${encodeURIComponent(projectId)}` : null)
+  // useResource mempertahankan snapshot sebelumnya saat kunci berubah.
+  const data = !res.loading && projectId && res.data?.items.every((o) => o.projectId === projectId) ? res.data : null
+  return { ...res, data }
 }
 export function useStages(projectId: string | null) {
   return useResource<StagesData>(projectId ? `/api/project-stages?projectId=${encodeURIComponent(projectId)}` : null)

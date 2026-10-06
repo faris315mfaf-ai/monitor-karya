@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Button, Icon, LogoMark } from '@/components/mk'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Input } from '@/components/mk/forms'
+import { Label } from '@/components/mk/forms'
 
 /**
  * Formulir wajib ganti kata sandi (F1-C). Memakai /api/profile/password yang

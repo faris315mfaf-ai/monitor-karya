@@ -22,8 +22,7 @@
 
 /* ============================================================
    Warna Tailwind → token. Nama mengikuti design-system/tailwind.preset.cjs.
-   Palet bawaan Tailwind (slate, blue, rose, …) dipetakan ke token supaya kode
-   lama ikut tema & aksen; kode baru memakai nama token secara langsung.
+   Seluruh layar memakai nama token semantik secara langsung.
    ============================================================ */
 @theme inline {
   /* Token desain */
@@ -94,93 +93,6 @@
   --color-sidebar-accent-foreground: var(--accent);
   --color-sidebar-border: var(--line);
   --color-sidebar-ring: var(--focus);
-
-  /* Netral lama → permukaan & tinta */
-  --color-slate-50: var(--surface-2);
-  --color-slate-100: var(--fill-1);
-  --color-slate-200: var(--fill-2);
-  --color-slate-300: var(--ink-3);
-  --color-slate-400: var(--ink-3);
-  --color-slate-500: var(--ink-2);
-  --color-slate-600: var(--ink-2);
-  --color-slate-700: var(--ink);
-  --color-slate-800: var(--ink);
-  --color-slate-900: var(--ink);
-  --color-slate-950: var(--ink);
-  --color-zinc-300: var(--ink-3);
-  --color-zinc-500: var(--ink-2);
-  --color-zinc-700: var(--ink);
-  --color-gray-100: var(--fill-1);
-  --color-gray-500: var(--ink-2);
-
-  /* Biru lama = aksen aktif */
-  --color-blue-50: var(--accent-soft);
-  --color-blue-100: var(--accent-soft);
-  --color-blue-200: var(--accent-soft);
-  --color-blue-300: var(--accent);
-  --color-blue-400: var(--accent-fill);
-  --color-blue-500: var(--accent-fill);
-  --color-blue-600: var(--accent-fill);
-  --color-blue-700: var(--accent);
-  --color-blue-800: var(--accent);
-  --color-blue-900: var(--accent);
-  --color-blue-950: var(--accent);
-
-  /* Informasi */
-  --color-sky-300: var(--info);
-  --color-sky-400: var(--info);
-  --color-sky-500: var(--info);
-  --color-sky-700: var(--info);
-  --color-cyan-200: var(--info-soft);
-  --color-cyan-300: var(--info);
-  --color-cyan-400: var(--info);
-  --color-cyan-500: var(--info);
-  --color-cyan-600: var(--info);
-  --color-cyan-700: var(--info);
-
-  /* Sukses */
-  --color-emerald-300: var(--sukses);
-  --color-emerald-400: var(--sukses);
-  --color-emerald-500: var(--sukses);
-  --color-emerald-600: var(--sukses);
-  --color-emerald-700: var(--sukses);
-  --color-emerald-800: var(--sukses);
-  --color-green-400: var(--sukses);
-  --color-teal-400: var(--data-6);
-  --color-teal-500: var(--data-6);
-
-  /* Waspada */
-  --color-amber-200: var(--waspada-soft);
-  --color-amber-300: var(--waspada);
-  --color-amber-400: var(--waspada);
-  --color-amber-500: var(--waspada);
-  --color-amber-600: var(--waspada);
-  --color-amber-700: var(--waspada);
-  --color-amber-800: var(--waspada);
-  --color-yellow-400: var(--waspada);
-  --color-orange-700: var(--data-5);
-
-  /* Bahaya */
-  --color-rose-300: var(--bahaya);
-  --color-rose-400: var(--bahaya);
-  --color-rose-500: var(--bahaya);
-  --color-rose-600: var(--bahaya);
-  --color-rose-700: var(--bahaya);
-  --color-rose-800: var(--bahaya);
-  --color-red-50: var(--bahaya-soft);
-  --color-red-300: var(--bahaya);
-  --color-red-400: var(--bahaya);
-  --color-pink-400: var(--data-3);
-
-  /* Ungu */
-  --color-violet-300: var(--ungu);
-  --color-violet-400: var(--ungu);
-  --color-violet-500: var(--ungu-fill);
-  --color-violet-600: var(--ungu-fill);
-  --color-violet-700: var(--ungu);
-  --color-purple-400: var(--ungu);
-  --color-indigo-500: var(--ungu-fill);
-  --color-indigo-600: var(--ungu-fill);
 
   /* Radius, bayangan, huruf */
   --radius-xs: var(--radius-xs);

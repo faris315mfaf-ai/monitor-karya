@@ -229,6 +229,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Tulis alasan penolakan untuk PIC' }, { status: 422 })
   }
   const now = new Date()
+  // Keputusan bawaan CX8: hari ini masih valid; tanggal sebelum hari ini WIB ditolak.
+  if (action === 'approve' && current.proposedDate < startOfWibDay(now)) {
+    return NextResponse.json({ error: 'Tanggal tenggat yang diusulkan sudah lewat. Ajukan tanggal baru.' }, { status: 422 })
+  }
   const status = action === 'approve' ? 'DISETUJUI' : 'DITOLAK'
 
   const ok = await db.$transaction(async (tx) => {

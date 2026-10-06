@@ -1,5 +1,6 @@
 'use client'
 
+import { ChoiceGroup } from '@/components/mk/forms'
 import { useState } from 'react'
 import { Button, Chip, Icon, IconButton, Sheet, cx, type Status } from '@/components/mk'
 import { EvidencePanel, type EvidenceItem } from '@/components/evidence-panel'
@@ -455,7 +456,7 @@ export function TaskDialog({
 
       <section className="mk-formsec">
         <SectionTitle icon="peringatan">Urgensi</SectionTitle>
-        <div className="mk-choices" role="radiogroup" aria-label="Urgensi">
+        <ChoiceGroup aria-label="Urgensi">
           {URGENCIES.map((u) => {
             const m = URGENCY_META[u]
             const active = urgency === u
@@ -482,7 +483,7 @@ export function TaskDialog({
               </button>
             )
           })}
-        </div>
+        </ChoiceGroup>
       </section>
 
       {needsObstacle && (

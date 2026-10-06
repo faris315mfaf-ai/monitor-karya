@@ -502,7 +502,7 @@ export function KadivDashboard({ data }: { data: KadivData }) {
               <StatTile
                 label="Tepat waktu 30 hari"
                 value={onTime?.pct === null || onTime?.pct === undefined ? '-' : `${onTime.pct}%`}
-                delta={onTime && onTime.total ? `Target ${onTime.target}% · ${onTime.ok} dari ${onTime.total} laporan` : `Target ${onTime?.target ?? 85}%`}
+                delta={onTime?.historyComplete === false ? `Riwayat belum lengkap · ${onTime.unknownProjects ?? 0} proyek` : onTime && onTime.total ? `Target ${onTime.target}% · ${onTime.ok} dari ${onTime.total} laporan` : `Target ${onTime?.target ?? 85}%`}
                 tone={onTime?.pct === null || onTime?.pct === undefined ? 'neutral' : onTime.pct >= onTime.target ? 'on' : 'risk'}
               />
             </>

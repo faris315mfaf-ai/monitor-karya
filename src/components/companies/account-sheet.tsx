@@ -6,9 +6,10 @@
  * kata sandi, status, sampai hapus — kolomnya sama dari mana pun dibuka.
  */
 
+import { ChoiceGroup } from '@/components/mk/forms'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
+import { Input } from '@/components/mk/forms'
 import { Button, Icon, Sheet, StatusBadge, cx } from '@/components/mk'
 import { DEFAULT_PASSWORD, call, isEntityRole, positionsFor, slugify, type Company, type UserRow } from '@/lib/accounts'
 import { formatRelative } from '@/lib/format'
@@ -282,7 +283,7 @@ function AccountForm({
           </Field>
         ) : null}
 
-        <div className="mk-choices" role="radiogroup" aria-label="Posisi">
+        <ChoiceGroup aria-label="Posisi">
           {options.map((o) => (
             <button
               key={o.role}
@@ -299,7 +300,7 @@ function AccountForm({
               </span>
             </button>
           ))}
-        </div>
+        </ChoiceGroup>
 
         {company && role === 'KEPALA_DIVISI' ? (
           <Field label="Divisi yang dipimpin" htmlFor="ac-div" hint="Kepala divisi menyerahkan capaian mingguan divisinya.">

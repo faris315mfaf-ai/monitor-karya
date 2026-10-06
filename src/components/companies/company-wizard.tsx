@@ -8,8 +8,8 @@
 
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import { Button, Icon, SegmentedControl, Sheet, StatusBadge, cx } from '@/components/mk'
 import { HOLDING_POSITION_OPTIONS, POSITION_OPTIONS } from '@/lib/constants'
 import { DEFAULT_PASSWORD, call, slugify, type Company } from '@/lib/accounts'

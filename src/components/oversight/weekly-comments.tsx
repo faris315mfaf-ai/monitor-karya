@@ -15,7 +15,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Card, EmptyNote, ErrorNote, Skeleton, cx } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
 import { formatDateShort, formatTime } from '@/lib/format'
 import { COMMENT_MAX } from '@/lib/oversight-shared'

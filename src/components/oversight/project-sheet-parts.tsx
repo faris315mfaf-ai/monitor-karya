@@ -15,7 +15,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, FlowDiagram, Skeleton, cx, type FlowStep } from '@/components/mk'
-import { Textarea } from '@/components/ui/textarea'
+import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
 import { formatDateShort, formatRelative, formatTime } from '@/lib/format'
 import type { NotesData, StagesData, StageItem } from '@/components/pic/api'

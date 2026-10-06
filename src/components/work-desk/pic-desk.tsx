@@ -272,11 +272,17 @@ function AgendaCard({ project, projects, locked, onChanged }: { project: PicProj
   const { data, loading, error, reload } = useResource<TasksData>(`/api/tasks?projectId=${project.id}`)
   const [busy, setBusy] = useState<string | null>(null)
   const [override, setOverride] = useState<Record<string, boolean>>({})
-  const [dialog, setDialog] = useState<{ task: TaskRecord | null } | null>(null)
+  const [dialog, setDialog] = useState<{ taskId: string | null } | null>(null)
   const isLocked = locked || Boolean(data?.locked)
   const options = useMemo(() => projects.map((p) => ({ id: p.id, code: p.code, name: p.name })), [projects])
 
   const tasks = data?.tasks ?? []
+  const editing = tasks.find((t) => t.id === dialog?.taskId) ?? null
+  function refresh() {
+    setOverride({})
+    reload()
+    onChanged()
+  }
   const entries: AgendaEntry[] = tasks.map((t) => {
     const done = override[t.id] ?? t.status === 'SELESAI'
     const blocked = t.status === 'TERKENDALA' || t.status === 'MENUNGGU_KEPUTUSAN'
@@ -331,8 +337,7 @@ function AgendaCard({ project, projects, locked, onChanged }: { project: PicProj
         setOverride((o) => ({ ...o, [t.id]: !next }))
         toast.error(json.error || 'Task belum tersimpan')
       } else {
-        reload()
-        onChanged()
+        refresh()
       }
     } catch {
       setOverride((o) => ({ ...o, [t.id]: !next }))
@@ -348,7 +353,7 @@ function AgendaCard({ project, projects, locked, onChanged }: { project: PicProj
       title="Agenda hari ini"
       subtitle={tasks.length ? `${doneCount} dari ${tasks.length} task selesai · ${project.name}` : project.name}
       action={
-        <Button size="sm" variant="secondary" icon="tambah" disabled={isLocked} onClick={() => setDialog({ task: null })}>
+        <Button size="sm" variant="secondary" icon="tambah" disabled={isLocked} onClick={() => setDialog({ taskId: null })}>
           Tambah task
         </Button>
       }
@@ -362,7 +367,7 @@ function AgendaCard({ project, projects, locked, onChanged }: { project: PicProj
       ) : error ? (
         <ErrorNote message={error} onRetry={reload} />
       ) : entries.length === 0 ? (
-        <EmptyNote icon="kalender" action={!isLocked ? <Button size="sm" variant="plain" onClick={() => setDialog({ task: null })}>Tambah task pertama</Button> : undefined}>
+        <EmptyNote icon="kalender" action={!isLocked ? <Button size="sm" variant="plain" onClick={() => setDialog({ taskId: null })}>Tambah task pertama</Button> : undefined}>
           Belum ada task untuk hari ini.
         </EmptyNote>
       ) : (
@@ -373,25 +378,22 @@ function AgendaCard({ project, projects, locked, onChanged }: { project: PicProj
             busyId={busy}
             locked={isLocked}
             onToggle={toggle}
-            onOpen={(e) => setDialog({ task: tasks.find((t) => t.id === e.id) ?? null })}
+            onOpen={(e) => setDialog({ taskId: e.id })}
           />
           {isLocked && <p className="t-footnote text-ink-2 mt-3">Laporan hari ini sudah terkunci; centang tidak bisa diubah.</p>}
         </>
       )}
-      {dialog && (
+      {dialog && (dialog.taskId === null || editing) && (
         <TaskDialog
+          key={dialog.taskId ?? 'baru'}
           open
           onOpenChange={(o) => !o && setDialog(null)}
           projectId={project.id}
           projectName={project.name}
           projects={options}
-          task={dialog.task}
+          task={editing}
           locked={isLocked}
-          onSaved={() => {
-            setDialog(null)
-            reload()
-            onChanged()
-          }}
+          onSaved={refresh}
         />
       )}
     </Card>

@@ -7,8 +7,8 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import {
   AttentionItem, Button, EmptyNote, Icon, ProgressBar, SegmentedControl, Sheet, StatTile, StatusBadge, cx,
 } from '@/components/mk'

@@ -111,7 +111,7 @@ export type KadivTeam = {
    * terkirim sebelum tenggat ÷ laporan wajib, 30 hari terakhir. Rumus:
    * src/lib/kadiv-math.ts (onTimeDaily). pct null = belum ada laporan wajib.
    */
-  onTime30: { pct: number | null; ok: number; total: number; target: number; days: number }
+  onTime30: { pct: number | null; ok: number; total: number; target: number; days: number; historyComplete?: boolean; unknownProjects?: number }
   summary: {
     members: number
     present: number

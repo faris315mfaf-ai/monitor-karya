@@ -16,7 +16,7 @@ import { useApp } from '@/components/app-provider'
 import { SettingsDialog } from '@/components/settings-dialog'
 import { Dock, type DockItem, type DockLayout } from '@/components/dock'
 import { switchNav } from '@/lib/nav-transition'
-import { Switch } from '@/components/ui/switch'
+import { Switch } from '@/components/mk/forms'
 import { setPrefs, usePrefs, type NavMode } from '@/lib/tampilan'
 import {
   AccentPicker, Avatar, Button, IconButton, LogoMark, NavItem, SegmentedControl, Sheet, TabBar, cx,
@@ -657,7 +657,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* tabIndex -1: sasaran tautan lompat; bukan kontrol, jadi tanpa cincin fokus. */}
-      <main className="mk-app__main focus-visible:outline-none" id="isi" tabIndex={-1}>
+      <main className="mk-app__main focus-visible:outline-none" id="isi" tabIndex={-1} data-sheet-focus-fallback>
         {children}
       </main>
 

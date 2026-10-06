@@ -19,6 +19,7 @@ import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { useApp } from '@/components/app-provider'
 import { ActivityRings, AttentionItem, Button, Card, DivisionBar, EmptyNote, Hero, StatTile } from '@/components/mk'
+import { SearchButton } from '@/components/search/command-palette'
 import { DashHeader } from '@/components/views/dash-common'
 import type { AdminData } from '@/components/views/role-dashboards'
 import { DAILY_CUTOFF_LABEL } from '@/lib/lock'
@@ -120,7 +121,7 @@ export function AdminSummary({ data }: { data: AdminData }) {
 
   return (
     <>
-      <DashHeader context={data.entity?.name ?? 'Entitas Anda'} />
+      <DashHeader context={data.entity?.name ?? 'Entitas Anda'} tools={<SearchButton />} />
 
       <Hero
         eyebrow="Kepatuhan pelaporan · hari ini"

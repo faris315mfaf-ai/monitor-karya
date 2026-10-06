@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
+import { historicalOnTimeDaily } from '@/lib/kpi-math'
 import type { SessionUser } from '@/lib/auth'
 import { isMasterRole } from '@/lib/rbac'
 import { initials } from '@/lib/format'
@@ -9,7 +10,7 @@ import {
   weeklyDeadlines, wibIsoDay,
 } from '@/lib/lock'
 import { deriveProjectStatus } from '@/lib/project-status'
-import { ON_TIME_TARGET, draftPoints, lockedWorkdays, onTimeDaily, summaryBlock, type SummaryFacts } from '@/lib/kadiv-math'
+import { ON_TIME_TARGET, draftPoints, lockedWorkdays, summaryBlock, type SummaryFacts } from '@/lib/kadiv-math'
 import type {
   AttendanceStatus, KadivProject, KadivTeam, TeamActivity, TeamMember, WeeklySummaryStats, WeeklySummaryView,
 } from '@/components/kadiv/types'
@@ -84,7 +85,7 @@ export async function canManageDivision(user: SessionUser, divisionId: string) {
   })
   if (!d || !d.isActive) return null
   const ok =
-    d.headUserId === user.id ||
+    (user.role === 'KEPALA_DIVISI' && d.headUserId === user.id) ||
     isMasterRole(user.role) ||
     (user.role === 'ADMIN_PT' && user.scopeEntityId === d.entityId)
   return ok ? { id: d.id, name: d.name, entityId: d.entityId, entityName: d.entity.name, headUserId: d.headUserId } : null
@@ -96,11 +97,12 @@ export async function canManageDivision(user: SessionUser, divisionId: string) {
  * 2. bila kosong: PIC-nya anggota divisi ini (`User.divisionId`);
  * 3. bila PIC juga tanpa divisi: PIC-nya kepala divisi ini.
  * Cadangan 2–3 hanya untuk proyek di PT yang sama dengan divisinya.
+ * `historical` menyertakan semua lifecycle untuk KPI; operasi tim tetap hanya AKTIF.
  */
-export async function divisionProjects(div: LedDivision) {
+export async function divisionProjects(div: LedDivision, historical = false) {
   return db.project.findMany({
     where: {
-      lifecycle: 'AKTIF',
+      ...(historical ? {} : { lifecycle: 'AKTIF' }),
       OR: [
         { divisionId: div.id },
         { divisionId: null, entityId: div.entityId, picUser: { divisionId: div.id } },
@@ -109,7 +111,7 @@ export async function divisionProjects(div: LedDivision) {
     },
     select: {
       id: true, code: true, name: true, picUserId: true, picName: true, phase: true, lifecycle: true,
-      startDate: true, targetEndDate: true, createdAt: true, picUser: { select: { name: true } },
+      startDate: true, targetEndDate: true, createdAt: true, approvedAt: true, picUser: { select: { name: true } },
     },
     orderBy: { code: 'asc' },
   })
@@ -268,14 +270,17 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
   if (!div) {
     return {
       ...base, division: null, projects: [], members: [], days: [], heat: [], trend: [], activity: [],
-      onTime30: { pct: null, ok: 0, total: 0, target: ON_TIME_TARGET, days: 0 },
+      onTime30: { pct: null, ok: 0, total: 0, target: ON_TIME_TARGET, days: 0, historyComplete: true, unknownProjects: 0 },
       summary: { members: 0, present: 0, absent: 0, absentNames: [], reporters: 0, reported: 0, outputsAccepted: 0, outputsTarget: 0, pendingReview: 0, avgLoad: null, overloaded: 0 },
     }
   }
 
-  const projects = await divisionProjects(div)
+  const historicalProjects = await divisionProjects(div, true)
+  const projects = historicalProjects.filter((p) => p.lifecycle === 'AKTIF')
   const projectIds = projects.map((p) => p.id)
+  const historicalIds = historicalProjects.map((p) => p.id)
   const ids = await teamUserIds(div, projects)
+  const attendanceIds = [...new Set([...ids, ...historicalProjects.flatMap((p) => p.picUserId ? [p.picUserId] : [])])]
   const days = lastWorkingDays(today)
   const weekStart = isoWeekStart(now)
   const weekEnd = new Date(weekStart.getTime() + 5 * DAY) // Sabtu 00.00 WIB
@@ -294,7 +299,7 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
       orderBy: { name: 'asc' },
     }),
     db.attendance.findMany({
-      where: { userId: { in: ids }, date: { gte: attFrom, lte: restDays[restDays.length - 1] ?? today } },
+      where: { userId: { in: attendanceIds }, date: { gte: attFrom, lte: restDays[restDays.length - 1] ?? today } },
       select: { userId: true, date: true, status: true, note: true },
     }),
     db.dailyProjectReport.findMany({
@@ -336,9 +341,9 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
 
   // [F2-KADIV] Data tambahan: laporan 30 hari (KPI tepat waktu & status proyek),
   // rekap output & tahapan per proyek (Sheet proyek), tanda baca laporan hari ini.
-  const [recentReports, outputGroups, openOutputDue, stages, reads] = await Promise.all([
+  const [recentReports, outputGroups, openOutputDue, stages, reads, lifecycleHistory] = await Promise.all([
     db.dailyProjectReport.findMany({
-      where: { projectId: { in: projectIds }, reportDate: { gte: onTimeFrom } },
+      where: { projectId: { in: historicalIds }, reportDate: { gte: onTimeFrom, lte: today } },
       select: { projectId: true, reportDate: true, submittedAt: true, isLate: true, status: true, progressPct: true, obstacle: true, needsEscalation: true },
       orderBy: { reportDate: 'desc' },
     }),
@@ -359,6 +364,11 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
         select: { dailyReportId: true, readAt: true },
       }),
     ),
+    db.auditLog.findMany({
+      where: { targetType: 'PROJECT', targetId: { in: historicalIds }, at: { lte: now } },
+      select: { targetId: true, at: true, action: true, beforeData: true, afterData: true },
+      orderBy: [{ at: 'asc' }, { id: 'asc' }],
+    }),
   ])
   const readOf = new Map(reads.map((r) => [r.dailyReportId, r.readAt]))
 
@@ -463,10 +473,11 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
 
   const activity = await teamActivity(ids)
 
-  // [F2-KADIV] Tepat waktu 30 hari (src/lib/kadiv-math.ts → onTimeDaily).
-  const onTime = onTimeDaily({
+  // CX9: kewajiban per hari berdasarkan interval lifecycle yang tercatat.
+  const onTime = historicalOnTimeDaily({
     days: onTimeDays,
-    projects: projects.map((p) => ({ id: p.id, picUserId: p.picUserId, startDate: p.startDate, createdAt: p.createdAt })),
+    projects: historicalProjects,
+    history: lifecycleHistory,
     reports: recentReports,
     lockAt: dailyLockAt,
     absent: (uid, d) => ABSENT.has(attOn(uid, d)?.status ?? 'HADIR'),

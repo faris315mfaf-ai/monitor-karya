@@ -2,10 +2,10 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import {
-  dailyRequiresEvidence, isDailyLocked, isoWeekOf, startOfWibDay, weeklyDeadlines, weeklyRequiresEvidence,
+  dailyLockAt, dailyRequiresEvidence, isDailyLocked, isoWeekOf, startOfWibDay, weeklyDeadlines, weeklyRequiresEvidence,
 } from '@/lib/lock'
 import {
-  complianceScore, monthBounds, monthKeyOf, pct, previousMonthKey, workdaysBetween, type Ratio,
+  complianceScore, historicalOnTimeDaily, monthBounds, monthKeyOf, pct, previousMonthKey, workdaysBetween, type Ratio,
 } from '@/lib/kpi-math'
 import { reportingEntities } from '@/lib/reminder-rules'
 
@@ -45,30 +45,39 @@ async function computeEntityMonth(entityId: string, monthKey: string, now: Date)
   const days = lastDay >= start ? workdaysBetween(start, lastDay) : []
 
   const [projects, totalProjects, divisions] = await Promise.all([
-    db.project.findMany({ where: { entityId, lifecycle: 'AKTIF' }, select: { id: true, startDate: true } }),
+    db.project.findMany({ where: { entityId }, select: { id: true, lifecycle: true, picUserId: true, startDate: true, createdAt: true, approvedAt: true } }),
     db.project.count({ where: { entityId, lifecycle: { not: 'DIARSIPKAN' } } }),
     db.division.count({ where: { entityId, isActive: true } }),
   ])
-  const activeIds = projects.map((p) => p.id)
+  const activeIds = projects.filter((p) => p.lifecycle === 'AKTIF').map((p) => p.id)
+  const projectIds = projects.map((p) => p.id)
 
   // ---- Laporan harian tepat waktu
-  let expected = 0
-  for (const p of projects) {
-    const from = p.startDate ? startOfWibDay(p.startDate) : start
-    expected += days.filter((d) => d >= from).length
-  }
-  const [onTime, dailyEv] = await Promise.all([
-    days.length
-      ? db.dailyProjectReport.count({
-          where: { entityId, projectId: { in: activeIds }, reportDate: { in: days }, submittedAt: { not: null }, isLate: false },
-        })
-      : 0,
+  const [reports, history, attendance, dailyEv] = await Promise.all([
+    db.dailyProjectReport.findMany({
+      where: { entityId, projectId: { in: projectIds }, reportDate: { in: days } },
+      select: { projectId: true, reportDate: true, submittedAt: true, isLate: true },
+    }),
+    db.auditLog.findMany({
+      where: { targetType: 'PROJECT', targetId: { in: projectIds }, at: { lte: now } },
+      select: { targetId: true, at: true, action: true, beforeData: true, afterData: true },
+      orderBy: [{ at: 'asc' }, { id: 'asc' }],
+    }),
+    db.attendance.findMany({
+      where: { userId: { in: projects.flatMap((p) => p.picUserId ? [p.picUserId] : []) }, date: { in: days }, status: { in: ['CUTI', 'SAKIT', 'IZIN'] } },
+      select: { userId: true, date: true },
+    }),
     db.dailyProjectReport.findMany({
       where: { entityId, reportDate: { gte: start, lt: end }, submittedAt: { not: null } },
       select: { status: true, evidenceCount: true },
     }),
   ])
-  const daily: Ratio = { num: onTime, den: expected }
+  const absent = new Set(attendance.map((a) => `${a.userId}|${a.date.getTime()}`))
+  const onTime = historicalOnTimeDaily({ days, projects, history, reports, lockAt: dailyLockAt, absent: (id, d) => absent.has(`${id}|${d.getTime()}`) })
+  // Snapshot lama tidak memiliki kolom null/coverage. Jangan terbitkan angka
+  // pengganti bila kewajiban historis belum dapat dibuktikan. Cron melaporkan failed.
+  if (!onTime.historyComplete) throw new Error(`Riwayat lifecycle ${onTime.unknownProjects} proyek belum lengkap`)
+  const daily: Ratio = { num: onTime.ok, den: onTime.total }
 
   // ---- Laporan mingguan: minggu yang Seninnya jatuh di bulan ini dan tenggat serahnya lewat
   const weeks: { isoYear: number; isoWeek: number }[] = []

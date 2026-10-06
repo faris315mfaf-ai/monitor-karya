@@ -5,6 +5,7 @@ import { approvalChainFor, can, canSignSlot, isMasterRole, pendingSlot } from '@
 import { NO_APPROVAL_LABEL } from '@/lib/constants'
 import { Prisma } from '@prisma/client'
 import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
+import { deriveProjectStatus } from '@/lib/project-status'
 import { serverError } from '@/lib/api-error' // [F3-D]
 
 /**
@@ -34,7 +35,7 @@ const PROJECT_INCLUDE = {
   },
   relatedEntities: { select: { entity: { select: { id: true, name: true, code: true } } } },
   dailyReports: {
-    select: { status: true, progressPct: true, reportDate: true, isLate: true },
+    select: { status: true, progressPct: true, reportDate: true, isLate: true, obstacle: true, needsEscalation: true },
     orderBy: { reportDate: 'desc' },
     take: 1,
   },
@@ -104,7 +105,7 @@ function format(p: ProjectRow, user: SessionUser) {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     entity: p.entity,
-    latestReport: r ? { status: r.status, progressPct: r.progressPct, reportDate: r.reportDate, isLate: r.isLate } : null,
+    latestReport: r ? { status: r.status, progressPct: r.progressPct, reportDate: r.reportDate, isLate: r.isLate, obstacle: r.obstacle, needsEscalation: r.needsEscalation } : null,
     permissions: {
       manage: canManage(user, p),
       setLifecycle: canSetLifecycle(user, p),
@@ -171,6 +172,7 @@ export async function GET(req: NextRequest) {
 
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
+    const id = sp.get('id') || undefined
     const entityId = sp.get('entityId') || undefined
     const phase = sp.get('phase') || undefined
     const lifecycle = sp.get('lifecycle') || 'AKTIF'
@@ -186,13 +188,14 @@ export async function GET(req: NextRequest) {
     if (entityId) and.push({ OR: [{ entityId }, { relatedEntities: { some: { entityId } } }] })
 
     const where: Prisma.ProjectWhereInput = {
+      ...(id ? { id } : {}),
       ...(phase ? { phase } : {}),
       ...(lifecycle === 'ALL' ? {} : { lifecycle }),
       ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
       ...(and.length ? { AND: and } : {}),
     }
 
-    const [items, total] = await Promise.all([
+    const [items, total, all] = await Promise.all([
       db.project.findMany({
         where,
         skip: (page - 1) * pageSize,
@@ -201,9 +204,33 @@ export async function GET(req: NextRequest) {
         include: PROJECT_INCLUDE,
       }),
       db.project.count({ where }),
+      // Ringkasan seluruh hasil dalam cakupan yang sama, tanpa kolom detail atau pagination.
+      db.project.findMany({
+        where,
+        select: {
+          lifecycle: true, entityId: true, proposedById: true, targetEndDate: true, approvalChain: true,
+          approvals: PROJECT_INCLUDE.approvals, dailyReports: PROJECT_INCLUDE.dailyReports,
+        },
+      }),
     ])
 
-    return NextResponse.json({ items: items.map((p) => format(p, user)), total, page, pageSize })
+    const summary = { running: 0, waiting: 0, resubmit: 0, late: 0, risk: 0, silent: 0 }
+    const now = new Date()
+    for (const p of all) {
+      if (p.lifecycle === 'DIUSULKAN') {
+        const slot = pendingSlot(p.approvalChain, p.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role))
+        if (slot && canSignSlot(user, slot, p.entityId)) summary.waiting++
+      }
+      if (p.lifecycle === 'DITOLAK' && canManage(user, p)) summary.resubmit++
+      if (p.lifecycle !== 'AKTIF') continue
+      summary.running++
+      const report = p.dailyReports[0] ?? null
+      const state = deriveProjectStatus(p, report, now).status
+      if (state === 'late') summary.late++
+      if (state === 'risk') summary.risk++
+      if (!report) summary.silent++
+    }
+    return NextResponse.json({ items: items.map((p) => format(p, user)), total, page, pageSize, summary })
   } catch (err) {
     // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
     return serverError(err, 'Proyek belum termuat. Coba lagi.', 'projects GET')

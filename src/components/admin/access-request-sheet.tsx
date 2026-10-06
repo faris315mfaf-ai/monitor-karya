@@ -6,10 +6,11 @@
  * akun baru memakai sandi awal yang bisa disetel ulang di meja akun.
  */
 
+import { ChoiceGroup } from '@/components/mk/forms'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import { Button, Sheet, cx } from '@/components/mk'
 import { Field, selectCls } from '@/components/companies/parts'
 import { positionsFor, roleLabel, type CompaniesData } from '@/lib/accounts'
@@ -105,7 +106,7 @@ export function AccessRequestSheet({
       }
     >
       <div className="mk-formsec">
-        <div className="mk-choices" role="radiogroup" aria-label="Jenis permintaan">
+        <ChoiceGroup aria-label="Jenis permintaan">
           {(Object.keys(ACCESS_REQUEST_LABELS) as AccessRequestType[]).map((t) => (
             <button
               key={t}
@@ -127,7 +128,7 @@ export function AccessRequestSheet({
               </span>
             </button>
           ))}
-        </div>
+        </ChoiceGroup>
 
         {companies.length > 1 ? (
           <Field label="Perusahaan" htmlFor="ar-company">

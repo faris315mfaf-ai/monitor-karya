@@ -19,8 +19,8 @@ import { toast } from 'sonner'
 import {
   ApprovalItem, Button, Card, EmptyNote, ErrorNote, SegmentedControl, Sheet, Skeleton, StatusBadge, type Status,
 } from '@/components/mk'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/mk/forms'
+import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
 import { refreshNavBadges } from '@/components/pic/nav-badges'
 import { formatDateShort, formatRelative, initials } from '@/lib/format'

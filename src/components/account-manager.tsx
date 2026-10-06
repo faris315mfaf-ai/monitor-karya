@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
-import { AccountDialog, ResetPasswordDialog } from '@/components/account-dialog'
+import { ResetPasswordDialog } from '@/components/account-dialog'
 import { Button, EmptyNote, ErrorNote, IconButton, SearchField, Skeleton, StatusBadge, cx } from '@/components/mk'
+import { AccountSheet } from '@/components/companies/account-sheet'
 import { UserAvatar, selectCls, useConfirm } from '@/components/companies/parts'
 import { ALL_ROLES } from '@/lib/rbac'
 import { formatRelative } from '@/lib/format'
@@ -243,18 +244,15 @@ export function AccountManager({ className }: { className?: string }) {
         )}
       </div>
 
-      {dialog ? (
-        <AccountDialog
-          companies={data?.companies ?? []}
-          company={dialog.company ?? onlyCompany}
-          user={dialog.user}
-          me={data?.me}
-          lockCompany={scoped}
-          allowedRoles={allowedRoles}
-          onClose={() => setDialog(null)}
-          onSaved={reload}
-        />
-      ) : null}
+      <AccountSheet
+        target={dialog}
+        companies={data?.companies ?? []}
+        me={data?.me ?? ''}
+        lockCompany={scoped}
+        allowedRoles={allowedRoles}
+        onClose={() => setDialog(null)}
+        onSaved={reload}
+      />
       {resetting ? <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} onSaved={reload} /> : null}
       {confirmEl}
     </div>

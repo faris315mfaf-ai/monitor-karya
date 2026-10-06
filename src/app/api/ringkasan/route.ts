@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { compareProgress } from '@/lib/kpi-math'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, scopeUserIds } from '@/lib/auth'
 import { can, canSignSlot, pendingSlot } from '@/lib/rbac'
@@ -173,6 +174,18 @@ export async function GET() {
     const reportWk = reportWeekOf(now)
     const reportDl = { handoverBy: reportWk.handoverBy }
     const projectIds = projects.map((p) => p.id)
+    // As-of akhir minggu lalu: hanya laporan terkirim yang belum diubah lagi
+    // sesudah batas tersebut. Tanpa bukti penuh untuk kohor yang sama: null.
+    const progressHistory = projectIds.length ? await db.dailyProjectReport.findMany({
+      where: {
+        ...inScope, projectId: { in: projectIds }, reportDate: { lt: weekStart },
+        submittedAt: { not: null, lt: weekStart }, updatedAt: { lt: weekStart },
+      },
+      select: { projectId: true, progressPct: true, reportDate: true, submittedAt: true, updatedAt: true },
+      orderBy: [{ reportDate: 'desc' }, { id: 'desc' }],
+      distinct: ['projectId'],
+    }) : []
+
     const quarterFrom = wibMonthStart(now, 9 + (new Date(now.getTime() + WIB_MS).getUTCMonth() % 3))
 
     const [divisionRows, reportWeekly, projectDivs, outputs, deadline] = await Promise.all([
@@ -617,6 +630,11 @@ export async function GET() {
         reviewedByMeAt: myReview.get(r.id) ?? null,
       })),
       counts,
+      progressComparison: compareProgress(
+        rows.map((r) => ({ id: r.id, progress: r.progress, submittedAt: projects.find((p) => p.id === r.id)?.dailyReports[0]?.submittedAt ?? null })),
+        progressHistory,
+        weekStart,
+      ),
       daily: {
         expected: rows.length,
         submitted: submittedToday,

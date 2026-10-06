@@ -97,9 +97,15 @@ export function Sheet({
             titleRef.current.focus({ preventScroll: true })
           }}
           onCloseAutoFocus={(e) => {
-            if (trigger && trigger.isConnected) {
+            // Hasil palet pencarian sudah dilepas saat detail ditutup. Utamakan
+            // pemicu yang masih bisa difokuskan, lalu landmark konten yang stabil.
+            const target = trigger?.isConnected && trigger.getClientRects().length > 0
+              && !trigger.closest('[inert], [hidden], [aria-hidden="true"]') && !trigger.hasAttribute('disabled')
+              ? trigger
+              : document.querySelector<HTMLElement>('[data-sheet-focus-fallback]')
+            if (target) {
               e.preventDefault()
-              trigger.focus({ preventScroll: true })
+              target.focus({ preventScroll: true })
             }
           }}
           onTouchStart={onTouchStart}

@@ -140,7 +140,7 @@ export const WEEKLY_STATUS_META: Record<string, { label: string; bg: string; tex
   ON_PROGRESS: { label: 'Berjalan', bg: 'bg-info-soft', text: 'text-info', dot: 'bg-info' },
   BELUM_MULAI: { label: 'Belum mulai', bg: 'bg-fill-2', text: 'text-ink-2', dot: 'bg-ink-3' },
   TERKENDALA: { label: 'Terkendala', bg: 'bg-waspada-soft', text: 'text-waspada', dot: 'bg-waspada' },
-  NA: { label: 'N/A', bg: 'bg-zinc-500/15', text: 'text-zinc-700 ', dot: 'bg-zinc-500' },
+  NA: { label: 'N/A', bg: 'bg-fill-1', text: 'text-ink-2 ', dot: 'bg-ink-3' },
 }
 
 export const WEEKLY_HEADER_META: Record<string, { label: string; bg: string; text: string }> = {
@@ -166,7 +166,7 @@ export const ESCALATION_NEEDED_LABELS: Record<string, string> = {
 export const PRIORITY_META: Record<string, { label: string; bg: string; text: string }> = {
   TINGGI: { label: 'Tinggi', bg: 'bg-bahaya-soft', text: 'text-bahaya' },
   SEDANG: { label: 'Sedang', bg: 'bg-waspada-soft', text: 'text-waspada' },
-  RENDAH: { label: 'Rendah', bg: 'bg-sky-500/15', text: 'text-sky-700 ' },
+  RENDAH: { label: 'Rendah', bg: 'bg-info-soft', text: 'text-info ' },
 }
 
 export const UNLOCK_STATUS_META: Record<string, { label: string; bg: string; text: string }> = {
