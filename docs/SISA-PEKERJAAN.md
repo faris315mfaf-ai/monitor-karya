@@ -68,7 +68,7 @@ Deploy sasaran adalah VPS ([`deploy/README.md`](../deploy/README.md)); berkas bu
 - [ ] Putuskan nasib perubahan `AGENTS.md` (ditambahkan ulang oleh `next dev`; panduan proyek menyarankan ikut di-commit).
 - [ ] Commit bertahap per area: sistem desain & token; kerangka & navigasi; Ringkasan per peran; Perusahaan & akun; Meja kerja; layar P1; fitur peran + migrasi; tes; keamanan; data contoh; dokumentasi.
 - [ ] Isi deskripsi PR dengan daftar periksa `docs/design/15-checklist-review.md` yang sudah dicentang (hasil F4-A/F4-B).
-- [ ] Hapus komponen `src/components/ui/*` yang tidak dipakai lagi (penghapusan oleh agen ditolak sistem izin). Yang **harus tetap ada**: `alert-dialog` (dipakai `useConfirm`), `input`, `label`, `sonner`, `switch`, `textarea`, `toast`, `toaster`, dan `src/hooks/use-toast.ts`. Juga calon hapus: `src/hooks/use-mobile.ts`, `src/components/index.ts`, `src/components/stat-card.tsx`, `src/components/loading-states.tsx`. Setelahnya jalankan ulang `tsc` dan build, lalu cabut paket Radix dan paket lain yang tidak terpakai dari `package.json`.
+- [x] Hapus komponen `src/components/ui/*` yang tidak dipakai (CD 8, 6 Okt 2026): 39 komponen UI + `use-mobile.ts`, `components/index.ts`, `stat-card.tsx`, `loading-states.tsx` (43 berkas), dan 41 paket npm tak terpakai. Yang tetap: `alert-dialog`, `button` (dipakai alert-dialog), `input`, `label`, `sonner`, `switch`, `textarea`, `toast`, `toaster`, `use-toast.ts`; paket `server-only` dan `sharp`.
 
 ---
 

@@ -20,14 +20,14 @@ Cara memakai:
 
 | Kode | Judul | Pemilik | Status | Bergantung pada |
 |---|---|---|---|---|
-| TUGAS CD 1 | Data contoh pratinjau untuk semua API | Claude | dikerjakan (workflow F3-A/B) | — |
-| TUGAS CD 2 | Tes route peran, admin, grup, keamanan | Claude | dikerjakan (workflow F3-C/D) | — |
-| TUGAS CD 3 | Audit mutu desain semua layar | Claude | menunggu (workflow F4-A/B) | CD 1 |
-| TUGAS CD 4 | Integrasi akhir: build + uji Docker | Claude | menunggu (workflow) | CD 1–3 |
-| TUGAS CD 5 | Dokumentasi akhir & matriks fungsi per peran | Claude | menunggu (workflow) | CD 4 |
-| TUGAS CD 6 | Commit bertahap cabang `desain-baru` | Claude | menunggu persetujuan pengguna | CD 5 |
-| TUGAS CD 7 | Gabungkan hasil Codex + tulis migrasi dari usulan skema | Claude | menunggu | CD 6, semua CX selesai |
-| TUGAS CD 8 | Hapus 44 berkas UI tak terpakai & paket npm-nya | Claude | menunggu persetujuan pengguna | CD 7 |
+| TUGAS CD 1 | Data contoh pratinjau untuk semua API | Claude | selesai | — |
+| TUGAS CD 2 | Tes route peran, admin, grup, keamanan | Claude | selesai | — |
+| TUGAS CD 3 | Audit mutu desain semua layar | Claude | selesai | CD 1 |
+| TUGAS CD 4 | Integrasi akhir: build + uji Docker | Claude | selesai | CD 1–3 |
+| TUGAS CD 5 | Dokumentasi akhir & matriks fungsi per peran | Claude | selesai | CD 4 |
+| TUGAS CD 6 | Commit bertahap cabang `desain-baru` | Claude | selesai | CD 5 |
+| TUGAS CD 7 | Gabungkan hasil Codex + tulis migrasi dari usulan skema | Claude | selesai | CD 6, semua CX selesai |
+| TUGAS CD 8 | Hapus 43 berkas UI tak terpakai & 41 paket npm-nya | Claude | selesai | CD 7 |
 | TUGAS CX 1 | Buka kunci berlaku untuk bukti (unggah/hapus) | Codex | selesai | — |
 | TUGAS CX 2 | Papan task mingguan menandai hari yang dibekukan | Codex | selesai | — |
 | TUGAS CX 3 | CI GitHub Actions | Codex | selesai | — |
