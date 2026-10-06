@@ -95,6 +95,12 @@ export async function applyRoleChange(
   })
   let link: { divisionId?: string; projectId?: string } = {}
   const heads = new Map<string, HeadChange>()
+  // Peran lama tidak boleh menyisakan hak kepala; simpan jejak untuk akses sementara.
+  if (change.role !== 'KEPALA_DIVISI') {
+    const led = await tx.division.findMany({ where: { headUserId: existing.id }, select: { id: true } })
+    for (const d of led) heads.set(d.id, { divisionId: d.id, from: existing.id, to: null })
+    await tx.division.updateMany({ where: { headUserId: existing.id }, data: { headUserId: null } })
+  }
   if ((change.divisionId || change.projectId) && existing.scopeEntityId) {
     const entity = await tx.entity.findUnique({ where: { id: existing.scopeEntityId }, select: { id: true, code: true, name: true } })
     if (entity) {

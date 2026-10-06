@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     undoToken: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }))
 
@@ -55,10 +56,11 @@ let issued: Record<string, unknown> | null = null
 
 beforeEach(() => {
   for (const [k, g] of Object.entries(db)) {
-    if (k === '$transaction') continue
+    if (k.startsWith('$')) continue
     for (const f of Object.values(g as Record<string, ReturnType<typeof vi.fn>>)) f.mockReset()
   }
   issued = null
+  db.$queryRaw.mockReset().mockResolvedValue([])
   db.$transaction.mockReset().mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db))
   db.undoToken.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
     issued = { id: 'tok-1', usedAt: null, createdAt: new Date(), ...data }

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { scopeEntityIds, type SessionUser } from '@/lib/auth'
+import { can, canSignSlot, isMasterRole, type Capability } from '@/lib/rbac'
 
 /**
  * [F2-URUNGKAN] Urungkan di sisi server (6 Okt 2026).
@@ -193,6 +194,47 @@ export const UNDONE_MESSAGES: Record<UndoAction, string> = {
   FORWARD_WEEKLY_REPORT: 'Penerusan capaian mingguan diurungkan.',
 }
 
+/** Hak aksi diperiksa lagi: tiket bukan izin yang bertahan setelah peran dicabut. */
+const UNDO_CAPABILITIES: Record<UndoAction, readonly Capability[]> = {
+  APPROVE_PROJECT: ['project:approve'],
+  REJECT_PROJECT: ['project:approve'],
+  RESUBMIT_PROJECT: ['project:manage', 'project:propose'],
+  ARCHIVE_PROJECT: ['project:manage'],
+  REVIEW_ESCALATION: ['escalation:followup'],
+  DECIDE_ESCALATION: ['escalation:decide'],
+  CLOSE_ESCALATION: ['escalation:decide', 'escalation:followup', 'escalation:raise'],
+  FORWARD_DAILY_REPORT: ['daily:forward'],
+  FORWARD_WEEKLY_REPORT: ['weekly:forward'],
+}
+
+async function mayUndo(
+  user: SessionUser, action: UndoAction, targetId: string, entityId: string | null, snapshot: unknown,
+): Promise<boolean> {
+  if (!UNDO_CAPABILITIES[action].some((capability) => can(user.role, capability))) return false
+  if (isMasterRole(user.role)) return true
+  if (action === 'APPROVE_PROJECT' || action === 'REJECT_PROJECT') {
+    const savedSlot = (snapshot as ProjectSnapshot).slot
+    // Aktivasi data lama dengan rantai kosong tidak memiliki slot penandatangan.
+    if (action === 'APPROVE_PROJECT' && savedSlot === null) return true
+    const slot = savedSlot?.role
+    return Boolean(slot && entityId && canSignSlot(user, slot, entityId))
+  }
+  if (action === 'RESUBMIT_PROJECT') {
+    if (can(user.role, 'project:manage') && user.scopeEntityId === entityId) return true
+    if (!can(user.role, 'project:propose')) return false
+    const project = await db.project.findUnique({ where: { id: targetId }, select: { proposedById: true } })
+    return project?.proposedById === user.id
+  }
+  if (action === 'ARCHIVE_PROJECT' || action === 'FORWARD_DAILY_REPORT' || action === 'FORWARD_WEEKLY_REPORT') {
+    return user.scopeEntityId === entityId
+  }
+  if (action === 'CLOSE_ESCALATION' && !can(user.role, 'escalation:decide') && !can(user.role, 'escalation:followup')) {
+    const escalation = await db.escalation.findUnique({ where: { id: targetId }, select: { raisedById: true } })
+    return escalation?.raisedById === user.id
+  }
+  return true
+}
+
 /**
  * Urungkan satu tindakan. Klaim tiket, pemeriksaan keadaan, pemulihan, dan
  * log berada dalam satu transaksi: bila keadaan sudah berubah, klaim ikut
@@ -220,6 +262,9 @@ export async function applyUndo(user: SessionUser, tokenId: string, req?: NextRe
 
   const action = token.action as UndoAction
   const snapshot = JSON.parse(token.snapshot) as unknown
+  if (!(await mayUndo(user, action, token.targetId, token.entityId, snapshot))) {
+    return { ok: false, status: 403, error: 'Peran Anda sekarang tidak berwenang mengurungkan tindakan ini' }
+  }
   const stamp = JSON.parse(token.stamp) as unknown
 
   try {

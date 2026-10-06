@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => {
       user: { findFirst: fn() },
       auditLog: { create: fn() },
       $transaction: fn(),
+      $queryRaw: fn(),
     },
   }
 })
@@ -123,10 +124,12 @@ function resetDb() {
   mocks.reports.length = 0
   mocks.unlocks.length = 0
   for (const [name, model] of Object.entries(db)) {
-    if (name === '$transaction') continue
+    if (name === '$transaction' || name === '$queryRaw') continue
     for (const f of Object.values(model as Record<string, ReturnType<typeof vi.fn>>)) f.mockReset()
   }
   db.$transaction.mockReset()
+  db.$queryRaw.mockReset()
+  db.$queryRaw.mockResolvedValue([])
   db.project.findUnique.mockImplementation(async () => PROJECT)
   db.dailyProjectReport.findUnique.mockImplementation(async ({ where }: { where: Parameters<typeof findReport>[0] }) => findReport(where))
   db.dailyProjectReport.update.mockImplementation(async ({ where, data }: { where: { id: string }; data: Partial<Report> }) => {

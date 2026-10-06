@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { can, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
 import { createAccount, isValidEmail, parseLogo, readPosition, slugify, uniqueEntityCode, type PositionInput } from '@/lib/companies'
-import { clientErrorMessage } from '@/lib/api-error'
+import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-error'
 
 /**
  * Perusahaan & akun — meja Super Admin (10 Sep 2026); sejak 5 Okt 2026 Admin PT
@@ -218,7 +218,8 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
-    return NextResponse.json({ error: clientErrorMessage(err, 'Gagal menambah perusahaan. Coba lagi.', 'companies POST') }, { status: 422 })
+    if (isSafeClientMessage(err)) return NextResponse.json({ error: err.message }, { status: 422 })
+    return serverError(err, 'Gagal menambah perusahaan. Coba lagi.', 'companies POST')
   }
 }
 

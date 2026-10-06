@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -20,15 +20,16 @@ const ROOT = join(__dirname, '..', '..', 'src', 'app', 'api')
 
 /** Route yang memang boleh menulis untuk akun sendiri, atau bukan berbasis sesi. */
 const ALLOWED: Record<string, string> = {
-  'auth/login': 'masuk (sebelum ada sesi)',
-  'auth/logout': 'keluar dari sesi sendiri',
-  'profile': 'mengubah profil sendiri',
-  'profile/password': 'mengganti kata sandi sendiri',
-  'notifications': 'menandai notifikasi sendiri sudah dibaca',
+  'auth/login:POST': 'masuk (sebelum ada sesi)',
+  'auth/logout:POST': 'keluar dari sesi sendiri',
+  'profile:PATCH': 'mengubah profil sendiri',
+  'profile/password:POST': 'mengganti kata sandi sendiri',
+  'notifications:PATCH': 'menandai notifikasi sendiri sudah dibaca',
 }
-const SKIP_PREFIX = ['cron/'] // dilindungi CRON_SECRET, bukan sesi
+const METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 
 const writes: string[] = []
+const reads: string[] = []
 const WRITE_OPS = new Set(['create', 'createMany', 'createManyAndReturn', 'update', 'updateMany', 'upsert', 'delete', 'deleteMany'])
 
 function sampleRow(): Record<string, unknown> {
@@ -40,7 +41,7 @@ function sampleRow(): Record<string, unknown> {
   }
   return {
     id: 'row-1', entityId: 'pt-a', projectId: 'p-1', divisionId: 'd-1', userId: 'u-other', picUserId: 'u-pic',
-    headUserId: 'u-head', requestedById: 'u-other', proposedById: 'u-other', authorId: 'u-other', ownerId: 'u-pic',
+    actorId: 'u-other', headUserId: 'u-head', requestedById: 'u-other', proposedById: 'u-other', authorId: 'u-other', ownerId: 'u-pic',
     raisedById: 'u-other', targetUserId: 'u-other', weeklyReportId: 'wr-1', reviewerId: null,
     status: 'DIAJUKAN', statusHeader: 'MENUNGGU_PERSETUJUAN', lifecycle: 'AKTIF', role: 'PIC_PROYEK', type: 'PT',
     kind: 'HARIAN', isActive: true, isLocked: false, isLate: false, enabled: true, scope: 'HARIAN',
@@ -58,10 +59,11 @@ function sampleRow(): Record<string, unknown> {
 
 function model(name: string) {
   return new Proxy(
-    {},
+    {} as Record<string, (...args: unknown[]) => Promise<unknown>>,
     {
       get(_t, op: string) {
         return async (...args: unknown[]) => {
+          if (!WRITE_OPS.has(op)) reads.push(`${name}.${op}`)
           if (WRITE_OPS.has(op)) {
             writes.push(`${name}.${op}`)
             return op.endsWith('Many') ? { count: 1 } : sampleRow()
@@ -69,7 +71,7 @@ function model(name: string) {
           if (op === 'findMany' || op === 'groupBy') return []
           if (op === 'count') return 0
           if (op === 'aggregate') return { _count: { _all: 0 }, _max: {}, _min: {}, _sum: {}, _avg: {} }
-          if (op === 'findUnique' || op === 'findFirst' || op === 'findUniqueOrThrow' || op === 'findFirstOrThrow') return sampleRow()
+          if (op === 'findUnique' || op === 'findFirst' || op === 'findUniqueOrThrow' || op === 'findFirstOrThrow') return { ...sampleRow(), id: (args[0] as { where?: { id?: string } } | undefined)?.where?.id ?? 'row-1' }
           void args
           return null
         }
@@ -129,7 +131,19 @@ function routeFiles(dir: string): string[] {
   return out
 }
 
-const ACTIONS = [undefined, 'approve', 'reject', 'submit', 'forward', 'execute', 'relock', 'decide', 'review', 'close', 'remind', 'remind-all-pics', 'undo', 'withdraw']
+// Hanya aksi sah: 400 akibat aksi rekaan tidak membuktikan otorisasi.
+const ROUTE_ACTIONS: Record<string, string[]> = {
+  'unlock-requests': ['approve', 'reject', 'execute', 'relock'],
+  'approval-requests': ['approve', 'reject', 'withdraw', 'reopen', 'undo'],
+  'access-requests': ['approve', 'reject'],
+  'outputs/review': ['accept', 'revise', 'accept-all', 'undo'],
+  'outputs': ['submit', 'withdraw'],
+  'deadline-proposals': ['approve', 'reject'],
+  'escalations/actions': ['review', 'decide', 'close'],
+  'work-desk': ['remind-all-pics'],
+  'kadiv/team': ['read', 'unread', 'remind'],
+  'kadiv/weekly-summary': ['send', 'unsend'],
+}
 
 function body(action: string | undefined): Record<string, unknown> {
   return {
@@ -139,13 +153,25 @@ function body(action: string | undefined): Record<string, unknown> {
     reason: 'Alasan contoh yang cukup panjang', note: 'Catatan contoh', body: 'Isi catatan', title: 'Judul contoh',
     name: 'Nama Contoh', role: 'PIC_PROYEK', kind: 'HARIAN', enabled: false, token: 'tok', password: 'rahasia-sekali-123',
     payload: { name: 'Akun Baru', role: 'PIC_PROYEK' }, achievementToday: 'Capaian', progressPct: 50, items: [],
-    workDate: '2026-10-06', reportDate: '2026-10-06', proposedDate: '2027-01-01', week: '2026-W41',
+    cadence: 'BULANAN', ids: ['row-1'], order: ['row-1'], fileName: 'Bukti', url: 'https://contoh.test/bukti', text: 'Catatan contoh', userId: 'u-other', memberIds: ['u-other'], itemId: 'row-1', workDate: '2026-10-06', reportDate: '2026-10-06', proposedDate: '2027-01-01', week: '2026-W41',
   }
 }
 
 const files = routeFiles(ROOT)
   .map((f) => ({ file: f, key: relative(ROOT, f).replace(/\/route\.ts$/, '').replace(/\\/g, '/') }))
-  .filter(({ key }) => !SKIP_PREFIX.some((p) => key.startsWith(p)) && !(key in ALLOWED))
+  .filter(({ file, key }) => METHODS.some((method) =>
+    !(`${key}:${method}` in ALLOWED) && new RegExp(`export async function ${method}\\(`).test(readFileSync(file, 'utf8'))))
+
+function assertDenied(res: Response, expected: number) {
+  expect(res.status, 'Harus penolakan akses tepat, bukan validasi/crash').toBe(expected)
+  expect(writes, 'DB maupun fetch dilarang sebelum penolakan').toEqual([])
+}
+
+async function checkHandler(handler: () => Promise<Response>, expected = 403) {
+  const res = await handler() // exception sengaja tidak ditangkap
+  assertDenied(res, expected)
+  return res
+}
 
 describe('AUDITOR hanya-baca di semua route tulis', () => {
   const realFetch = globalThis.fetch
@@ -158,15 +184,61 @@ describe('AUDITOR hanya-baca di semua route tulis', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
   afterAll(() => {
+    vi.useRealTimers()
     globalThis.fetch = realFetch
   })
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-06T02:00:00Z'))
     mocks.user.value = AUDITOR
     writes.length = 0
+    reads.length = 0
   })
 
-  it('menemukan route untuk diperiksa', () => {
-    expect(files.length).toBeGreaterThan(20)
+  it('inventaris benar-benar memuat handler tulis, bukan hanya route baca', async () => {
+    const discovered: string[] = []
+    const exercised: string[] = []
+    for (const { file, key } of files) {
+      const source = readFileSync(file, 'utf8')
+      for (const method of METHODS) {
+        if (!(`${key}:${method}` in ALLOWED) && new RegExp(`export async function ${method}\\(`).test(source)) discovered.push(`${key}:${method}`)
+      }
+      const mod = await import(file)
+      for (const method of METHODS) {
+        if (!(`${key}:${method}` in ALLOWED) && typeof mod[method] === 'function') exercised.push(`${key}:${method}`)
+      }
+    }
+    expect(exercised.sort()).toEqual(discovered.sort())
+    expect(exercised.length).toBeGreaterThan(50)
+    expect(exercised).toContain('evidence/upload:POST')
+    expect(exercised).toContain('tasks:PATCH')
+    for (const endpoint of Object.keys(ALLOWED)) {
+      const [key, method] = endpoint.split(':')
+      const mod = await import(join(ROOT, key, 'route.ts'))
+      expect(typeof mod[method], endpoint).toBe('function')
+    }
+  })
+
+  it.each([200, 400, 404, 409, 422, 500])('harness menggagalkan handler rusak yang menjawab %s', async (status) => {
+    await expect(checkHandler(async () => Response.json({ error: 'rusak' }, { status }))).rejects.toThrow()
+  })
+
+  it('harness menggagalkan exception yang dahulu dianggap 500 aman', async () => {
+    await expect(checkHandler(async () => { throw new Error('rusak') })).rejects.toThrow('rusak')
+  })
+
+  it('harness menggagalkan fetch walau handler menangkap galat dan menjawab 403', async () => {
+    await expect(checkHandler(async () => {
+      await fetch('https://contoh.test').catch(() => null)
+      return Response.json({ error: 'Ditolak' }, { status: 403 })
+    })).rejects.toThrow()
+  })
+
+  it('harness menggagalkan tulis DB walau akhirnya menjawab 403', async () => {
+    await expect(checkHandler(async () => {
+      await model('project').update({})
+      return Response.json({ error: 'Ditolak' }, { status: 403 })
+    })).rejects.toThrow()
   })
 
   for (const { file, key } of files) {
@@ -174,32 +246,39 @@ describe('AUDITOR hanya-baca di semua route tulis', () => {
       vi.spyOn(console, 'error').mockImplementation(() => {})
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       const mod = (await import(file)) as Record<string, unknown>
-      const methods = ['POST', 'PUT', 'PATCH', 'DELETE'].filter((m) => typeof mod[m] === 'function')
-      const failures: string[] = []
+      const methods = METHODS.filter((m) => !(`${key}:${m}` in ALLOWED) && typeof mod[m] === 'function')
       for (const method of methods) {
-        for (const action of ACTIONS) {
+        for (const action of (ROUTE_ACTIONS[key] ?? [undefined])) {
           writes.length = 0
+          reads.length = 0
           const url = `http://localhost/api/${key.replace(/\[(\w+)\]/g, 'row-1')}?id=row-1&projectId=p-1&entityId=pt-a${action ? `&action=${action}` : ''}`
+          const data = { ...body(action), ...(key === 'attendance' ? { status: 'HADIR' } : {}), points: ['Capaian minggu ini'] }
+          const multipart = key === 'evidence/upload' || key === 'approval-requests/berkas'
+          const form = new FormData()
+          if (multipart) {
+            form.set('file', new File(['bukti'], 'bukti.txt', { type: 'text/plain' }))
+            form.set('id', 'row-1')
+            form.set('targetType', 'DAILY_REPORT')
+            form.set('targetId', 'row-1')
+          }
           const req = new NextRequest(url, {
             method,
-            body: method === 'DELETE' && action ? undefined : JSON.stringify(body(action)),
-            headers: { 'content-type': 'application/json', 'user-agent': 'vitest', origin: 'http://localhost', host: 'localhost' },
+            body: multipart ? form : JSON.stringify(data),
+            headers: { ...(multipart ? {} : { 'content-type': 'application/json' }), 'user-agent': 'vitest', origin: 'http://localhost', host: 'localhost' },
           })
-          let status = 0
-          try {
-            const handler = mod[method] as (r: NextRequest, ctx: unknown) => Promise<Response>
-            const res = await handler(req, { params: Promise.resolve({ id: 'row-1' }) })
-            status = res.status
-          } catch {
-            status = 500 // galat sebelum menulis = tidak menulis
-          }
-          const wrote = writes.filter((w) => w !== 'fetch')
-          if (wrote.length || (status >= 200 && status < 300)) {
-            failures.push(`${method} action=${action ?? '-'} → ${status} ${wrote.join(', ')}`)
+          const handler = mod[method] as (r: NextRequest, ctx: unknown) => Promise<Response>
+          // Exception gagal langsung; jangan menyulap crash menjadi penolakan akses.
+          const expected = ['undo', 'approval-requests/berkas', 'weekly-comments', 'project-reviews'].includes(key) &&
+            (key === 'undo' || key === 'approval-requests/berkas' || method === 'DELETE' || key === 'weekly-comments') ? 404 : 403
+          await checkHandler(() => handler(req, { params: Promise.resolve({ id: 'row-1' }) }), expected)
+          if (expected === 404) {
+            // Bukan objek hilang: fixture ada dan query pencarian benar-benar tercapai.
+            const modelName = key === 'undo' ? 'undoToken' : key === 'approval-requests/berkas' ? 'approvalRequest' :
+              key === 'project-reviews' ? 'projectReview' : method === 'DELETE' ? 'weeklyReportComment' : 'weeklyDivisionReport'
+            expect(reads).toContain(`${modelName}.findUnique`)
           }
         }
       }
-      expect(failures).toEqual([])
     })
   }
 })

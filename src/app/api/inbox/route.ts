@@ -10,6 +10,7 @@ import {
   startOfWibDay,
   weeklyDeadlines,
 } from '@/lib/lock'
+import { lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
 import { issueUndo } from '@/lib/undo' // [F2-URUNGKAN]
 
 /**
@@ -118,112 +119,127 @@ export async function POST(req: NextRequest) {
   const id = typeof body.id === 'string' ? body.id : ''
   if (!id) return NextResponse.json({ error: 'Id laporan wajib diisi' }, { status: 400 })
 
-  if (kind === 'daily') {
-    if (!can(user.role, 'daily:forward')) {
-      return NextResponse.json({ error: 'Peran Anda tidak meneruskan laporan harian' }, { status: 403 })
+  let undoInput: Parameters<typeof issueUndo>[0] | undefined
+  const response = await db.$transaction(async (tx) => {
+    const db = tx
+    if (kind === 'daily') {
+      if (!can(user.role, 'daily:forward')) {
+        return NextResponse.json({ error: 'Peran Anda tidak meneruskan laporan harian' }, { status: 403 })
+      }
+      const locator = await db.dailyProjectReport.findUnique({ where: { id }, select: { projectId: true, reportDate: true } })
+      if (!locator) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
+      await lockDailyProject(db, locator.projectId)
+      await lockDailyReport(db, locator.projectId, locator.reportDate)
+      const report = await db.dailyProjectReport.findUnique({ where: { id } })
+      if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
+      // Gagal-tertutup: akun berlingkup tanpa PT tidak boleh meneruskan laporan PT mana pun.
+      if (!isMasterRole(user.role) && report.entityId !== user.scopeEntityId) {
+        return NextResponse.json({ error: 'Laporan ini di luar entitas Anda' }, { status: 403 })
+      }
+      if (!report.submittedAt) {
+        return NextResponse.json({ error: 'PIC belum mengirimkan laporan ini' }, { status: 422 })
+      }
+      if (report.forwardedAt) {
+        return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
+      }
+
+      // Diteruskan = dibekukan (6 Okt 2026): laporan ikut dikunci supaya PIC tidak
+      // bisa mengubahnya diam-diam; perubahan hanya lewat buka kunci yang disetujui.
+      const now = new Date()
+      // Bersyarat agar dua klik bersamaan tidak meneruskan dua kali.
+      const claimed = await db.dailyProjectReport.updateMany({
+        where: { id, forwardedAt: null, submittedAt: { not: null } },
+        data: { forwardedById: user.id, forwardedAt: now, isLocked: true, lockedAt: now },
+      })
+      if (claimed.count === 0) {
+        return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
+      }
+      await db.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'FORWARD_DAILY_REPORT',
+          targetType: 'DAILY_REPORT',
+          targetId: id,
+          afterData: JSON.stringify({ forwardedAt: now.toISOString(), locked: true }),
+          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        },
+      })
+      // [F2-URUNGKAN] Urungkan penerusan memulihkan forwardedAt/isLocked/lockedAt persis sebelumnya.
+      const after = await db.dailyProjectReport.findUnique({ where: { id }, select: { forwardedAt: true, updatedAt: true } })
+      undoInput = {
+        action: 'FORWARD_DAILY_REPORT',
+        targetType: 'DAILY_REPORT',
+        targetId: id,
+        entityId: report.entityId,
+        actorId: user.id,
+        snapshot: {
+          forwardedById: report.forwardedById,
+          forwardedAt: null, // sudah dipastikan belum diteruskan di atas
+          isLocked: report.isLocked,
+          lockedAt: report.lockedAt?.toISOString() ?? null,
+        },
+        stamp: after ? { forwardedAt: after.forwardedAt?.toISOString() ?? null, updatedAt: after.updatedAt.toISOString() } : null,
+      }
+      return NextResponse.json({ ok: true })
     }
-    const report = await db.dailyProjectReport.findUnique({ where: { id } })
+
+    if (!can(user.role, 'weekly:forward')) {
+      return NextResponse.json({ error: 'Peran Anda tidak meneruskan laporan mingguan' }, { status: 403 })
+    }
+    const locator = await db.weeklyDivisionReport.findUnique({ where: { id }, select: { divisionId: true } })
+    if (!locator) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
+    await db.$queryRaw`SELECT "id" FROM "Division" WHERE "id" = ${locator.divisionId} FOR UPDATE`
+    await db.$queryRaw`SELECT "id" FROM "WeeklyDivisionReport" WHERE "id" = ${id} FOR UPDATE`
+    const report = await db.weeklyDivisionReport.findUnique({ where: { id } })
     if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
-    // Gagal-tertutup: akun berlingkup tanpa PT tidak boleh meneruskan laporan PT mana pun.
     if (!isMasterRole(user.role) && report.entityId !== user.scopeEntityId) {
       return NextResponse.json({ error: 'Laporan ini di luar entitas Anda' }, { status: 403 })
     }
-    if (!report.submittedAt) {
-      return NextResponse.json({ error: 'PIC belum mengirimkan laporan ini' }, { status: 422 })
+    if (report.statusHeader !== 'DISETUJUI') {
+      return NextResponse.json(
+        { error: 'Kepala divisi belum menyetujui laporan ini' },
+        { status: 422 }
+      )
     }
     if (report.forwardedAt) {
       return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
     }
 
-    // Diteruskan = dibekukan (6 Okt 2026): laporan ikut dikunci supaya PIC tidak
-    // bisa mengubahnya diam-diam; perubahan hanya lewat buka kunci yang disetujui.
-    const now = new Date()
-    // Bersyarat agar dua klik bersamaan tidak meneruskan dua kali.
-    const claimed = await db.dailyProjectReport.updateMany({
-      where: { id, forwardedAt: null },
-      data: { forwardedById: user.id, forwardedAt: now, isLocked: true, lockedAt: now },
-    })
-    if (claimed.count === 0) {
-      return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
-    }
+    // [F3-D] Bersyarat seperti jalur harian: dua klik bersamaan tidak meneruskan
+    // (dan mencatat/menerbitkan tiket urungkan) dua kali. P2025 = sudah diteruskan.
+    const forwarded = await db.weeklyDivisionReport
+      .update({
+        where: { id, forwardedAt: null, statusHeader: 'DISETUJUI' },
+        data: { forwardedById: user.id, forwardedAt: new Date() },
+      })
+      .catch((err: unknown) => {
+        if ((err as { code?: unknown } | null)?.code === 'P2025') return null
+        throw err
+      })
+    if (!forwarded) return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
     await db.auditLog.create({
       data: {
         actorId: user.id,
-        action: 'FORWARD_DAILY_REPORT',
-        targetType: 'DAILY_REPORT',
+        action: 'FORWARD_WEEKLY_REPORT',
+        targetType: 'WEEKLY_REPORT',
         targetId: id,
-        afterData: JSON.stringify({ forwardedAt: now.toISOString(), locked: true }),
+        afterData: JSON.stringify({ forwardedAt: new Date().toISOString() }),
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
       },
     })
-    // [F2-URUNGKAN] Urungkan penerusan memulihkan forwardedAt/isLocked/lockedAt persis sebelumnya.
-    const after = await db.dailyProjectReport.findUnique({ where: { id }, select: { forwardedAt: true, updatedAt: true } })
-    const undoToken = await issueUndo({
-      action: 'FORWARD_DAILY_REPORT',
-      targetType: 'DAILY_REPORT',
-      targetId: id,
-      entityId: report.entityId,
-      actorId: user.id,
-      snapshot: {
-        forwardedById: report.forwardedById,
-        forwardedAt: null, // sudah dipastikan belum diteruskan di atas
-        isLocked: report.isLocked,
-        lockedAt: report.lockedAt?.toISOString() ?? null,
-      },
-      stamp: after ? { forwardedAt: after.forwardedAt?.toISOString() ?? null, updatedAt: after.updatedAt.toISOString() } : null,
-    })
-    return NextResponse.json({ ok: true, undoToken })
-  }
-
-  if (!can(user.role, 'weekly:forward')) {
-    return NextResponse.json({ error: 'Peran Anda tidak meneruskan laporan mingguan' }, { status: 403 })
-  }
-  const report = await db.weeklyDivisionReport.findUnique({ where: { id } })
-  if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
-  if (!isMasterRole(user.role) && report.entityId !== user.scopeEntityId) {
-    return NextResponse.json({ error: 'Laporan ini di luar entitas Anda' }, { status: 403 })
-  }
-  if (report.statusHeader !== 'DISETUJUI') {
-    return NextResponse.json(
-      { error: 'Kepala divisi belum menyetujui laporan ini' },
-      { status: 422 }
-    )
-  }
-  if (report.forwardedAt) {
-    return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
-  }
-
-  // [F3-D] Bersyarat seperti jalur harian: dua klik bersamaan tidak meneruskan
-  // (dan mencatat/menerbitkan tiket urungkan) dua kali. P2025 = sudah diteruskan.
-  const forwarded = await db.weeklyDivisionReport
-    .update({
-      where: { id, forwardedAt: null, statusHeader: 'DISETUJUI' },
-      data: { forwardedById: user.id, forwardedAt: new Date() },
-    })
-    .catch((err: unknown) => {
-      if ((err as { code?: unknown } | null)?.code === 'P2025') return null
-      throw err
-    })
-  if (!forwarded) return NextResponse.json({ error: 'Laporan ini sudah diteruskan' }, { status: 409 })
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
+    // [F2-URUNGKAN]
+    undoInput = {
       action: 'FORWARD_WEEKLY_REPORT',
       targetType: 'WEEKLY_REPORT',
       targetId: id,
-      afterData: JSON.stringify({ forwardedAt: new Date().toISOString() }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-    },
-  })
-  // [F2-URUNGKAN]
-  const undoToken = await issueUndo({
-    action: 'FORWARD_WEEKLY_REPORT',
-    targetType: 'WEEKLY_REPORT',
-    targetId: id,
-    entityId: report.entityId,
-    actorId: user.id,
-    snapshot: { forwardedById: report.forwardedById, forwardedAt: null }, // belum diteruskan (dicek di atas)
-    stamp: { forwardedAt: forwarded.forwardedAt?.toISOString() ?? null, updatedAt: forwarded.updatedAt.toISOString() },
-  })
-  return NextResponse.json({ ok: true, undoToken })
+      entityId: report.entityId,
+      actorId: user.id,
+      snapshot: { forwardedById: report.forwardedById, forwardedAt: null }, // belum diteruskan (dicek di atas)
+      stamp: { forwardedAt: forwarded.forwardedAt?.toISOString() ?? null, updatedAt: forwarded.updatedAt.toISOString() },
+    }
+    return NextResponse.json({ ok: true })
+  }, { isolationLevel: 'ReadCommitted' })
+  if (!undoInput || response.status !== 200) return response
+  const undoToken = await issueUndo(undoInput)
+  return NextResponse.json({ ...await response.json(), undoToken })
 }

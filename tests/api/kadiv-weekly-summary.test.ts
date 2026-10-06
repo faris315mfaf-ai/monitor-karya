@@ -24,6 +24,7 @@ const build = vi.mocked(buildWeeklySummary)
 
 type Summary = Record<string, unknown> & { divisionId: string; isoYear: number; isoWeek: number; status: string; points: string[] }
 let rows: Summary[] = []
+let transactionStarted: (() => void) | undefined
 
 const LIVE = {
   outputsAccepted: 4, outputsTarget: 6, projectsOnTrack: 1, projectsTotal: 1, openObstacles: 0, pendingReview: 0,
@@ -54,6 +55,21 @@ beforeEach(() => {
   vi.setSystemTime(wib('2026-10-06T10:00:00')) // Selasa minggu 41
   resetWorld()
   rows = []
+  transactionStarted = undefined
+  let tail = Promise.resolve()
+  const tx = new Proxy(db, { get(target, key) { return key === '$queryRaw' ? async () => [] : Reflect.get(target, key) } })
+  db.$transaction.mockImplementation(async (fn) => {
+    const previous = tail
+    let release!: () => void
+    tail = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    const snapshot = structuredClone({ rows, notifications: world.notifications, audits: world.audits })
+    transactionStarted?.(); transactionStarted = undefined
+    try { return await fn(tx) } catch (err) {
+      rows = snapshot.rows; world.notifications = snapshot.notifications; world.audits = snapshot.audits
+      throw err
+    } finally { release() }
+  })
   build.mockReset()
   build.mockResolvedValue(view())
   db.weeklyDivisionReport.findUnique.mockResolvedValue(null)
@@ -195,16 +211,73 @@ describe('POST /api/kadiv/weekly-summary — kirim ke Direktur & urungkan', () =
 
   it('tanpa poin di body: memakai draf tersimpan, lalu draf otomatis', async () => {
     asUser('kadiv-1')
+    rows.push({ id: 'ws-1', divisionId: 'div-a1', isoYear: 2026, isoWeek: 41, status: 'DRAF', points: ['Draf saya'] })
     build.mockResolvedValue(view({ saved: { ...LIVE, status: 'DRAF', points: ['Draf saya'], sentAt: null, updatedAt: '' } }))
     await post({ divisionId: 'div-a1', action: 'send' })
     expect(rows[0].points).toEqual(['Draf saya'])
   })
 
   it('sudah terkirim: 409 SENT', async () => {
+    rows.push({ id: 'ws-1', divisionId: 'div-a1', isoYear: 2026, isoWeek: 41, status: 'TERKIRIM', points: POINTS })
     build.mockResolvedValue(view({ saved: { ...LIVE, status: 'TERKIRIM', points: POINTS, sentAt: '', updatedAt: '' } }))
     asUser('kadiv-1')
     const res = await post({ divisionId: 'div-a1', action: 'send' })
     expect((await res.json()).code).toBe('SENT')
+  })
+
+  it('SENT menang atas PENDING_REVIEW untuk ringkasan yang sudah terkirim', async () => {
+    rows.push({ id: 'ws-1', divisionId: 'div-a1', isoYear: 2026, isoWeek: 41, status: 'TERKIRIM', points: POINTS })
+    build.mockResolvedValue(view({ saved: { ...LIVE, status: 'TERKIRIM', points: POINTS, sentAt: '', updatedAt: '' } }, { pendingReview: 2 }))
+    asUser('kadiv-1')
+    const res = await post({ divisionId: 'div-a1', action: 'send' })
+    expect((await res.json()).code).toBe('SENT')
+    expect(world.notifications).toHaveLength(0)
+  })
+
+  it('dua pengiriman bersamaan hanya menghasilkan satu kirim dan satu notifikasi', async () => {
+    asUser('kadiv-1')
+    const responses = await Promise.all([post({ divisionId: 'div-a1', action: 'send' }), post({ divisionId: 'div-a1', action: 'send' })])
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409])
+    expect(world.notifications).toHaveLength(1)
+    expect(auditsOf('KADIV_SEND_WEEKLY_SUMMARY')).toHaveLength(1)
+  })
+
+  it('kegagalan notifikasi membatalkan claim sehingga pengiriman bisa dicoba lagi', async () => {
+    asUser('kadiv-1')
+    db.notificationLog.createMany.mockRejectedValueOnce(new Error('notification unavailable'))
+    expect((await post({ divisionId: 'div-a1', action: 'send' })).status).toBe(500)
+    expect(rows).toHaveLength(0)
+    expect(world.notifications).toHaveLength(0)
+    expect((await post({ divisionId: 'div-a1', action: 'send' })).status).toBe(200)
+    expect(world.notifications).toHaveLength(1)
+  })
+
+  it('kegagalan audit membatalkan status dan notifikasi', async () => {
+    asUser('kadiv-1')
+    db.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'))
+    expect((await post({ divisionId: 'div-a1', action: 'send' })).status).toBe(500)
+    expect(rows).toHaveLength(0)
+    expect(world.notifications).toHaveLength(0)
+  })
+
+  it('draf bersamaan dengan pengiriman tidak menimpa potret yang sudah terkirim', async () => {
+    asUser('kadiv-1')
+    const started = new Promise<void>((resolve) => { transactionStarted = resolve })
+    const sending = post({ divisionId: 'div-a1', action: 'send', points: POINTS })
+    await started
+    const responses = await Promise.all([sending, put({ divisionId: 'div-a1', points: ['Pengganti'] })])
+    expect(responses.map((r) => r.status)).toEqual([200, 409])
+    expect(rows[0].points).toEqual(POINTS)
+  })
+
+  it.each(['pengirim lain', 'tepat 15 menit', 'waktu masa depan'])('urungkan ditolak untuk %s', async (reason) => {
+    asUser('kadiv-1')
+    rows.push({ id: 'ws-1', divisionId: 'div-a1', isoYear: 2026, isoWeek: 41, status: 'TERKIRIM', points: POINTS,
+      sentById: reason === 'pengirim lain' ? 'other' : 'kadiv-1',
+      sentAt: new Date(Date.now() + (reason === 'waktu masa depan' ? 1 : reason === 'tepat 15 menit' ? -15 * 60_000 : 0)),
+    })
+    expect((await post({ divisionId: 'div-a1', action: 'unsend' })).status).toBe(409)
+    expect(rows[0].status).toBe('TERKIRIM')
   })
 
   it('kepala divisi lain tidak bisa mengirim atas nama divisi ini', async () => {

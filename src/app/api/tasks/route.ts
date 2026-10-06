@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
@@ -21,7 +22,7 @@ import {
   type Period,
   type TaskScope,
 } from '@/lib/lock'
-import { dailyGate, frozenMessage, rollupDailyReport } from '@/lib/daily-rollup'
+import { dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
 import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
@@ -35,9 +36,9 @@ import { activeUnlockFor } from '@/lib/unlock-requests'
  *   DELETE ?id=                        — remove a task
  *
  * Two contexts share these handlers (8 Sep 2026). The daily desk follows the
- * daily 17:00 lock of the task's own day. The weekly board — where the weekly
- * report is composed from the week's daily tasks — follows the Friday lock of
- * that week instead, so a PIC can still tidy Monday's achievements on Wednesday.
+ * daily 17:00 lock of the task's own day, including daily cards on the weekly
+ * board. Weekly-scope cards follow the Friday lock; daily cards from an earlier
+ * day need an active unlock for that day's report.
  * Everything is gated on owning the project, the same rule the report follows.
  *
  * Pembekuan (6 Okt 2026): task bercakupan HARIAN adalah isi laporan harian
@@ -53,8 +54,8 @@ type Guard = { ok: true; project: { id: string; entityId: string } } | { ok: fal
 const contextOf = (raw: unknown): Context => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
 const scopeOf = (raw: unknown): TaskScope => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
 
-async function guardProject(user: SessionUser, projectId: string, opts?: { write?: boolean }): Promise<Guard> {
-  const project = await db.project.findUnique({
+async function guardProject(user: SessionUser, projectId: string, opts?: { write?: boolean }, client: Prisma.TransactionClient = db): Promise<Guard> {
+  const project = await client.project.findUnique({
     where: { id: projectId },
     select: { id: true, entityId: true, picUserId: true },
   })
@@ -89,20 +90,23 @@ async function guardProject(user: SessionUser, projectId: string, opts?: { write
 /**
  * Kunci yang berlaku untuk menulis task pada satu hari: laporan harinya yang
  * sudah diteruskan/dikunci membekukan task HARIAN; lalu tenggat 17.00 hari itu
- * di meja harian, atau kunci Jumat 17.00 minggunya di papan mingguan. Buka kunci
- * yang sedang berlaku untuk laporan hari itu menembus keduanya di meja harian.
+ * untuk semua kartu harian, juga di papan mingguan. Kartu mingguan mengikuti
+ * kunci Jumat 17.00. Buka kunci berlaku untuk laporan harian yang ditunjuk.
  * Mengembalikan 409 yang harus dikirim, atau null.
  */
-async function lockCheck(context: Context, projectId: string, workDate: Date, scope: TaskScope): Promise<NextResponse | null> {
+async function lockCheck(context: Context, projectId: string, workDate: Date, scope: TaskScope, client: Prisma.TransactionClient = db): Promise<NextResponse | null> {
   const day = startOfWibDay(workDate)
-  const gate = await dailyGate(projectId, day)
+  await lockDailyReport(client, projectId, day)
+  const gate = await dailyGate(projectId, day, new Date(), client)
   if (scope === 'HARIAN') {
+    if (!isWorkingDay(day) || day > startOfWibDay(new Date())) return NextResponse.json({ error: 'Tanggal task harian harus hari kerja yang sudah tiba.' }, { status: 422 })
     const frozen = frozenMessage(gate)
     if (frozen) {
       return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
     }
   }
-  if (context === 'HARIAN') {
+  if (context === 'MINGGUAN' && isWeeklyLocked(weekPeriodOf(workDate).start)) return NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  if (context === 'HARIAN' || scope === 'HARIAN') {
     if (!gate.timeLocked) return null
     const isToday = day.getTime() === startOfWibDay(new Date()).getTime()
     return NextResponse.json(
@@ -193,11 +197,11 @@ function readBody(body: Record<string, unknown>, day: Date) {
  * is checked against the user table here rather than left for the foreign key
  * to reject, which would surface as an opaque 500.
  */
-async function validate(t: ReturnType<typeof readBody>, entityId: string): Promise<string[]> {
+async function validate(t: ReturnType<typeof readBody>, entityId: string, client: Prisma.TransactionClient = db): Promise<string[]> {
   const errors: string[] = []
   if (!t.title) errors.push('Judul task wajib diisi.')
   if (t.picUserId) {
-    const pic = await db.user.findFirst({
+    const pic = await client.user.findFirst({
       where: { id: t.picUserId, isActive: true, OR: [{ scopeEntityId: entityId }, { scopeEntityId: null }] },
       select: { id: true },
     })
@@ -228,8 +232,8 @@ function laneWhere(projectId: string, scope: TaskScope, workDate: Date, period: 
     : { projectId, scope, workDate }
 }
 
-async function nextSortOrder(where: ReturnType<typeof laneWhere>) {
-  const last = await db.task.aggregate({ where, _max: { sortOrder: true } })
+async function nextSortOrder(where: ReturnType<typeof laneWhere>, client: Prisma.TransactionClient = db) {
+  const last = await client.task.aggregate({ where, _max: { sortOrder: true } })
   return (last._max.sortOrder ?? -1) + 1
 }
 
@@ -309,6 +313,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => post(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -318,7 +326,8 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-  const guard = await guardProject(user, projectId, { write: true })
+  await lockDailyProject(db, projectId)
+  const guard = await guardProject(user, projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const context = contextOf(body.context)
@@ -350,11 +359,11 @@ export async function POST(req: NextRequest) {
     workDate = requested
   }
 
-  const lockRes = await lockCheck(context, projectId, workDate, scope)
+  const lockRes = await lockCheck(context, projectId, workDate, scope, db)
   if (lockRes) return lockRes
 
   const t = readBody(body, workDate)
-  const errors = await validate(t, guard.project.entityId)
+  const errors = await validate(t, guard.project.entityId, db)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
@@ -365,7 +374,7 @@ export async function POST(req: NextRequest) {
       entityId: guard.project.entityId,
       workDate,
       scope,
-      sortOrder: await nextSortOrder(laneWhere(projectId, scope, workDate, period)),
+      sortOrder: await nextSortOrder(laneWhere(projectId, scope, workDate, period), db),
       createdById: user.id,
       subtasks: { create: subtasks },
     },
@@ -383,7 +392,7 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  await rollupDailyReport(projectId, workDate)
+  await rollupDailyReport(projectId, workDate, db)
 
   return NextResponse.json({ ok: true, task })
 }
@@ -391,6 +400,10 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -400,14 +413,18 @@ export async function PUT(req: NextRequest) {
   }
 
   const id = typeof body.id === 'string' ? body.id : ''
+  // Resolve the parent before taking locks; re-read the task under the lock.
+  const parent = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+  if (!parent) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
+  await lockDailyProject(db, parent.projectId)
   const existing = await db.task.findUnique({ where: { id }, include: { subtasks: true } })
   if (!existing) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
 
-  const guard = await guardProject(user, existing.projectId, { write: true })
+  const guard = await guardProject(user, existing.projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const context = contextOf(body.context)
-  const lockRes = await lockCheck(context, existing.projectId, existing.workDate, existing.scope as TaskScope)
+  const lockRes = await lockCheck(context, existing.projectId, existing.workDate, existing.scope as TaskScope, db)
   if (lockRes) return lockRes
 
   // Di papan mingguan kartu boleh pindah hari atau berubah cakupan, selama
@@ -428,12 +445,12 @@ export async function PUT(req: NextRequest) {
 
   // Pindah ke hari lain: hari tujuan juga tidak boleh beku.
   if (workDate.getTime() !== startOfWibDay(existing.workDate).getTime() || scope !== existing.scope) {
-    const targetRes = await lockCheck(context, existing.projectId, workDate, scope)
+    const targetRes = await lockCheck(context, existing.projectId, workDate, scope, db)
     if (targetRes) return targetRes
   }
 
   const t = readBody(body, workDate)
-  const errors = await validate(t, guard.project.entityId)
+  const errors = await validate(t, guard.project.entityId, db)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
@@ -442,18 +459,16 @@ export async function PUT(req: NextRequest) {
   if (!('picUserId' in body)) fields.picUserId = existing.picUserId
   const movedLane = workDate.getTime() !== existing.workDate.getTime() || scope !== existing.scope
   const sortOrder = movedLane
-    ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period))
+    ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period), db)
     : existing.sortOrder
 
   // Subtasks are sent whole, so replace the list rather than diffing it.
-  const task = await db.$transaction(async (tx) => {
-    await tx.subtask.deleteMany({ where: { taskId: id } })
-    return tx.task.update({
+  await db.subtask.deleteMany({ where: { taskId: id } })
+  const task = await db.task.update({
       where: { id },
       data: { ...fields, workDate, scope, sortOrder, subtasks: { create: subtasks } },
       include: TASK_INCLUDE,
     })
-  })
 
   await db.auditLog.create({
     data: {
@@ -467,8 +482,8 @@ export async function PUT(req: NextRequest) {
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate))
-  if (movedLane) await rollupDailyReport(existing.projectId, workDate)
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
+  if (movedLane) await rollupDailyReport(existing.projectId, workDate, db)
 
   return NextResponse.json({ ok: true, task })
 }
@@ -482,6 +497,10 @@ export async function PUT(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => patch(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function patch(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -491,7 +510,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-  const guard = await guardProject(user, projectId, { write: true })
+  await lockDailyProject(db, projectId)
+  const guard = await guardProject(user, projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const period = typeof body.week === 'string' && body.week ? parseWeekKey(body.week) : weekPeriodOf(new Date())
@@ -543,19 +563,14 @@ export async function PATCH(req: NextRequest) {
     if (cur.scope === 'HARIAN') harianDays.add(startOfWibDay(cur.workDate).getTime())
     if (u.scope === 'HARIAN') harianDays.add(u.workDate.getTime())
   }
-  for (const ms of harianDays) {
-    const gate = await dailyGate(projectId, new Date(ms))
-    const frozen = frozenMessage(gate)
-    if (frozen) {
-      return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
-    }
+  for (const ms of [...harianDays].sort((a, b) => a - b)) {
+    const blocked = await lockCheck('MINGGUAN', projectId, new Date(ms), 'HARIAN', db)
+    if (blocked) return blocked
   }
 
-  await db.$transaction(
-    updates.map((u) =>
-      db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
-    )
-  )
+  for (const u of updates) {
+    await db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
+  }
 
   // Hari asal dan hari tujuan sama-sama berubah isinya, jadi keduanya dihitung ulang.
   const touched = new Set<number>()
@@ -563,7 +578,7 @@ export async function PATCH(req: NextRequest) {
     touched.add(startOfWibDay(byId.get(u.id)!.workDate).getTime())
     touched.add(u.workDate.getTime())
   }
-  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms))
+  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms), db)
 
   await db.auditLog.create({
     data: {
@@ -582,15 +597,23 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => deleteReport(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   const id = req.nextUrl.searchParams.get('id') || ''
+  // Resolve the parent before taking locks; re-read the task under the lock.
+  const parent = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+  if (!parent) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
+  await lockDailyProject(db, parent.projectId)
   const existing = await db.task.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
 
-  const guard = await guardProject(user, existing.projectId, { write: true })
+  const guard = await guardProject(user, existing.projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
-  const lockRes = await lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.projectId, existing.workDate, existing.scope as TaskScope)
+  const lockRes = await lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.projectId, existing.workDate, existing.scope as TaskScope, db)
   if (lockRes) return lockRes
   if (existing.escalationId) {
     return NextResponse.json(
@@ -613,7 +636,7 @@ export async function DELETE(req: NextRequest) {
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate))
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
 
   return NextResponse.json({ ok: true })
 }

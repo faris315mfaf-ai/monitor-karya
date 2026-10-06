@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
@@ -14,7 +15,7 @@ import {
   validateDailyReport,
   wibDateKey,
 } from '@/lib/lock'
-import { computeRollup, dailyGate, frozenMessage, rollupDailyReport } from '@/lib/daily-rollup'
+import { computeRollup, dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
@@ -44,7 +45,7 @@ const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(','
  */
 function resolveDay(raw: unknown, now: Date = new Date()): { ok: true; day: Date; isToday: boolean } | { ok: false; res: NextResponse } {
   const today = startOfWibDay(now)
-  if (raw === undefined || raw === null || raw === '') return { ok: true, day: today, isToday: true }
+  if (raw === undefined || raw === null || raw === '') raw = wibDateKey(today)
   const day = parseWibDateKey(raw)
   if (!day) return { ok: false, res: NextResponse.json({ error: 'Tanggal laporan tidak valid.' }, { status: 400 }) }
   if (day.getTime() > today.getTime()) {
@@ -227,6 +228,19 @@ function ownsProject(user: SessionUser, project: { picUserId: string | null; ent
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  const result = await db.$transaction((tx) => deleteReport(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  if (result instanceof NextResponse) return result
+  if (storageConfigured()) {
+    for (const f of result.files) {
+      if (!f.url) {
+        try { await removeEvidence(f.storageKey) } catch { /* Objek sudah hilang. */ }
+      }
+    }
+  }
+  return NextResponse.json({ ok: true })
+}
+
+async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
   if (!can(user.role, 'daily:input')) {
     return NextResponse.json({ error: 'Peran Anda tidak melakukan input harian' }, { status: 403 })
   }
@@ -237,6 +251,8 @@ export async function DELETE(req: NextRequest) {
   if (!resolved.ok) return resolved.res
   const day = resolved.day
 
+  await lockDailyProject(db, projectId)
+  await lockDailyReport(db, projectId, day)
   const project = await db.project.findUnique({ where: { id: projectId } })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (!ownsProject(user, project)) {
@@ -248,7 +264,7 @@ export async function DELETE(req: NextRequest) {
   })
   if (!existing) return NextResponse.json({ error: resolved.isToday ? 'Belum ada laporan hari ini' : 'Belum ada laporan pada tanggal ini' }, { status: 404 })
 
-  const gate = await dailyGate(projectId, day)
+  const gate = await dailyGate(projectId, day, new Date(), db)
   if (existing.forwardedAt) {
     return NextResponse.json(
       gate.unlock
@@ -267,17 +283,6 @@ export async function DELETE(req: NextRequest) {
   }
 
   const files = await db.evidence.findMany({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
-  if (storageConfigured()) {
-    for (const f of files) {
-      if (!f.url) {
-        try {
-          await removeEvidence(f.storageKey)
-        } catch {
-          // Objek yang sudah hilang tidak boleh menggagalkan penghapusan laporan.
-        }
-      }
-    }
-  }
   await db.evidence.deleteMany({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
   await db.dailyProjectReport.delete({ where: { id: existing.id } })
 
@@ -297,12 +302,16 @@ export async function DELETE(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ ok: true })
+  return { files }
 }
 
 export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
   if (!can(user.role, 'daily:input')) {
     return NextResponse.json({ error: 'Peran Anda tidak melakukan input harian' }, { status: 403 })
   }
@@ -336,6 +345,8 @@ export async function PUT(req: NextRequest) {
   if (!resolved.ok) return resolved.res
   const day = resolved.day
 
+  await lockDailyProject(db, projectId)
+  await lockDailyReport(db, projectId, day)
   const project = await db.project.findUnique({ where: { id: projectId } })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (!ownsProject(user, project)) {
@@ -344,7 +355,7 @@ export async function PUT(req: NextRequest) {
 
   // Satu aturan untuk semua jalur tulis: dibekukan setelah diteruskan atau
   // dikunci, terkunci setelah 17.00 — kecuali buka kunci sedang berlaku.
-  const gate = await dailyGate(projectId, day)
+  const gate = await dailyGate(projectId, day, new Date(), db)
   const frozen = frozenMessage(gate)
   if (frozen) {
     return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
@@ -374,7 +385,7 @@ export async function PUT(req: NextRequest) {
 
   // Once the day has tasks they are the source of truth: the report cannot
   // disagree with the work it summarises.
-  const rollup = await computeRollup(projectId, day)
+  const rollup = await computeRollup(projectId, day, db)
   const effectiveStatus = rollup ? rollup.status : status
   const effectiveProgress = rollup ? rollup.progressPct : progressPct
   const effectiveEvidence = rollup ? evidenceCount + rollup.evidenceCount : evidenceCount
@@ -440,7 +451,7 @@ export async function PUT(req: NextRequest) {
   })
 
   // Keep the cached totals consistent with whatever the tasks now say.
-  if (rollup) await rollupDailyReport(projectId, day)
+  if (rollup) await rollupDailyReport(projectId, day, db)
 
   return NextResponse.json({
     ok: true,

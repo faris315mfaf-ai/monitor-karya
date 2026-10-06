@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const project = await db.project.findUnique({
+  const observed = await db.project.findUnique({
     where: { id: projectId },
     select: {
       id: true, name: true, entityId: true, lifecycle: true, approvalChain: true, approvedAt: true, approvedByName: true,
@@ -50,78 +50,101 @@ export async function POST(req: NextRequest) {
       approvals: { select: { role: true, decision: true, note: true, decidedById: true, decidedAt: true } },
     },
   })
-  if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
-  if (project.lifecycle !== 'DIUSULKAN') {
-    return NextResponse.json({ error: 'Proyek ini sudah tidak dalam tahap pengajuan' }, { status: 409 })
-  }
-
-  const approvedRoles = project.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
-  const slot = pendingSlot(project.approvalChain, approvedRoles)
-  if (!slot) {
-    // Rantai kosong tetapi masih DIUSULKAN — data lama. Aktifkan saja, tetapi
-    // hanya oleh akun yang memang menjangkau PT proyek itu (6 Okt 2026).
-    const reach = isMasterRole(user.role) ? null : await scopeEntityIds(user)
-    if (reach !== null && !reach.includes(project.entityId)) {
-      return NextResponse.json({ error: 'Proyek ini di luar cakupan Anda' }, { status: 403 })
-    }
-    await db.project.update({ where: { id: projectId }, data: { lifecycle: 'AKTIF', approvedAt: new Date(), approvedByName: user.name } })
-    // [F2-URUNGKAN]
-    const undoToken = await issueUndo({
-      action: 'APPROVE_PROJECT', targetType: 'PROJECT', targetId: projectId, entityId: project.entityId, actorId: user.id,
-      snapshot: { project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName }, slot: null },
-      stamp: await projectStamp(projectId),
+  if (!observed) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
+  const reach = isMasterRole(user.role) ? null : await scopeEntityIds(user)
+  let undoInput: Parameters<typeof issueUndo>[0] | undefined
+  const response = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    const db = tx
+    // A concurrent decision must not consume a second slot on behalf of this request.
+    const project = await db.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true, name: true, entityId: true, lifecycle: true, approvalChain: true, approvedAt: true, approvedByName: true,
+        // [F2-URUNGKAN] baris lengkap agar urungkan memulihkan slot persis.
+        approvals: { select: { role: true, decision: true, note: true, decidedById: true, decidedAt: true } },
+      },
     })
-    return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [], undoToken })
-  }
-  if (!canSignSlot(user, slot, project.entityId)) {
-    const label = PROJECT_APPROVER_LABELS[slot] ?? slot
-    const sameEntity = (PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot) ? ' di PT pemilik proyek' : ''
-    return NextResponse.json({ error: `Sekarang giliran ${label}${sameEntity}. Anda tidak bisa menandatangani slot ini.` }, { status: 403 })
-  }
+    const approvalState = (p: typeof observed) => JSON.stringify({ chain: p.approvalChain, approvals: p.approvals.map((a) => approvalSnap(a)).sort((a, b) => a.role.localeCompare(b.role)) })
+    if (project && (project.lifecycle !== observed.lifecycle || approvalState(project) !== approvalState(observed))) {
+      return NextResponse.json({ error: 'Keputusan proyek sudah berubah. Muat ulang pengajuan.' }, { status: 409 })
+    }
+    if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
+    if (project.lifecycle !== 'DIUSULKAN') {
+      return NextResponse.json({ error: 'Proyek ini sudah tidak dalam tahap pengajuan' }, { status: 409 })
+    }
 
-  await db.projectApproval.upsert({
-    where: { projectId_role: { projectId, role: slot } },
-    update: { decision, note: note || null, decidedById: user.id, decidedAt: new Date() },
-    create: { projectId, role: slot, decision, note: note || null, decidedById: user.id },
-  })
+    const approvedRoles = project.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
+    const slot = pendingSlot(project.approvalChain, approvedRoles)
+    if (!slot) {
+      // Rantai kosong tetapi masih DIUSULKAN — data lama. Aktifkan saja, tetapi
+      // hanya oleh akun yang memang menjangkau PT proyek itu (6 Okt 2026).
+      if (reach !== null && !reach.includes(project.entityId)) {
+        return NextResponse.json({ error: 'Proyek ini di luar cakupan Anda' }, { status: 403 })
+      }
+      await db.project.update({ where: { id: projectId }, data: { lifecycle: 'AKTIF', approvedAt: new Date(), approvedByName: user.name } })
+      await db.auditLog.create({ data: { actorId: user.id, action: 'APPROVE_PROJECT', targetType: 'PROJECT', targetId: projectId, afterData: JSON.stringify({ slot: null, lifecycle: 'AKTIF' }) } })
+      // [F2-URUNGKAN]
+      undoInput = {
+        action: 'APPROVE_PROJECT', targetType: 'PROJECT', targetId: projectId, entityId: project.entityId, actorId: user.id,
+        snapshot: { project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName }, slot: null },
+        stamp: await projectStamp(projectId, tx),
+      }
+      return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [] })
+    }
+    if (!canSignSlot(user, slot, project.entityId)) {
+      const label = PROJECT_APPROVER_LABELS[slot] ?? slot
+      const sameEntity = (PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot) ? ' di PT pemilik proyek' : ''
+      return NextResponse.json({ error: `Sekarang giliran ${label}${sameEntity}. Anda tidak bisa menandatangani slot ini.` }, { status: 403 })
+    }
 
-  const nextPending = decision === 'DISETUJUI' ? pendingSlot(project.approvalChain, [...approvedRoles, slot]) : slot
-  let lifecycle = project.lifecycle
-  if (decision === 'DITOLAK') {
-    lifecycle = 'DITOLAK'
-    await db.project.update({ where: { id: projectId }, data: { lifecycle } })
-  } else if (nextPending === null) {
-    lifecycle = 'AKTIF'
-    await db.project.update({ where: { id: projectId }, data: { lifecycle, approvedAt: new Date(), approvedByName: user.name } })
-  }
+    await db.projectApproval.upsert({
+      where: { projectId_role: { projectId, role: slot } },
+      update: { decision, note: note || null, decidedById: user.id, decidedAt: new Date() },
+      create: { projectId, role: slot, decision, note: note || null, decidedById: user.id },
+    })
 
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
+    const nextPending = decision === 'DISETUJUI' ? pendingSlot(project.approvalChain, [...approvedRoles, slot]) : slot
+    let lifecycle = project.lifecycle
+    if (decision === 'DITOLAK') {
+      lifecycle = 'DITOLAK'
+      await db.project.update({ where: { id: projectId }, data: { lifecycle } })
+    } else if (nextPending === null) {
+      lifecycle = 'AKTIF'
+      await db.project.update({ where: { id: projectId }, data: { lifecycle, approvedAt: new Date(), approvedByName: user.name } })
+    }
+
+    await db.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: decision === 'DISETUJUI' ? 'APPROVE_PROJECT' : 'REJECT_PROJECT',
+        targetType: 'PROJECT',
+        targetId: projectId,
+        afterData: JSON.stringify({ slot, signerRole: user.role, decision, note, lifecycle }),
+        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        userAgent: req.headers.get('user-agent') || null,
+      },
+    })
+
+    // [F2-URUNGKAN] tiket urungkan: slot dan status proyek persis sebelum keputusan ini.
+    const prior = project.approvals.find((a) => a.role === slot)
+    undoInput = {
       action: decision === 'DISETUJUI' ? 'APPROVE_PROJECT' : 'REJECT_PROJECT',
       targetType: 'PROJECT',
       targetId: projectId,
-      afterData: JSON.stringify({ slot, signerRole: user.role, decision, note, lifecycle }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-      userAgent: req.headers.get('user-agent') || null,
-    },
-  })
+      entityId: project.entityId,
+      actorId: user.id,
+      snapshot: {
+        project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName },
+        slot: { role: slot, before: prior ? approvalSnap(prior) : null },
+      },
+      stamp: await projectStamp(projectId, tx),
+    }
 
-  // [F2-URUNGKAN] tiket urungkan: slot dan status proyek persis sebelum keputusan ini.
-  const prior = project.approvals.find((a) => a.role === slot)
-  const undoToken = await issueUndo({
-    action: decision === 'DISETUJUI' ? 'APPROVE_PROJECT' : 'REJECT_PROJECT',
-    targetType: 'PROJECT',
-    targetId: projectId,
-    entityId: project.entityId,
-    actorId: user.id,
-    snapshot: {
-      project: { lifecycle: project.lifecycle, approvedAt: project.approvedAt?.toISOString() ?? null, approvedByName: project.approvedByName },
-      slot: { role: slot, before: prior ? approvalSnap(prior) : null },
-    },
-    stamp: await projectStamp(projectId),
-  })
-
-  const approvals = await db.projectApproval.findMany({ where: { projectId }, select: { role: true, decision: true, note: true, decidedAt: true } })
-  return NextResponse.json({ ok: true, lifecycle, pending: lifecycle === 'DIUSULKAN' ? nextPending : null, approvals, undoToken })
+    const approvals = await db.projectApproval.findMany({ where: { projectId }, select: { role: true, decision: true, note: true, decidedAt: true } })
+    return NextResponse.json({ ok: true, lifecycle, pending: lifecycle === 'DIUSULKAN' ? nextPending : null, approvals })
+  }, { isolationLevel: 'ReadCommitted' })
+  if (!undoInput || response.status !== 200) return response
+  const undoToken = await issueUndo(undoInput)
+  return NextResponse.json({ ...await response.json(), undoToken })
 }

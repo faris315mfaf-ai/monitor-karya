@@ -6,7 +6,7 @@ import { ENTITY_ROLES } from '@/lib/rbac'
 import { accountDesk as desk, deskReachError, entityRef, isLastSuperadmin as lastSuperadmin, roleOutOfReachMessage } from '@/lib/account-desk'
 import { passwordProblem } from '@/lib/password-policy'
 import { USERNAME_RE, assignPosition, createAccount, isKnownRole, isValidEmail, readPosition } from '@/lib/companies'
-import { clientErrorMessage } from '@/lib/api-error'
+import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-error'
 
 /**
  * Akun & posisi — meja Super Admin (10 Sep 2026), dan sejak 5 Okt 2026 juga
@@ -106,7 +106,8 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, account })
   } catch (err) {
-    return NextResponse.json({ error: clientErrorMessage(err, 'Gagal menambah akun. Coba lagi.', 'companies/users POST') }, { status: 422 })
+    if (isSafeClientMessage(err)) return NextResponse.json({ error: err.message }, { status: 422 })
+    return serverError(err, 'Gagal menambah akun. Coba lagi.', 'companies/users POST')
   }
 }
 
@@ -233,6 +234,9 @@ export async function PATCH(req: NextRequest) {
         data,
         select: { id: true, name: true, username: true, email: true, role: true, title: true, isActive: true, scopeEntityId: true },
       })
+      if (finalRole !== 'KEPALA_DIVISI' && finalRole !== existing.role) {
+        await tx.division.updateMany({ where: { headUserId: id }, data: { headUserId: null } })
+      }
       let link: { divisionId?: string; projectId?: string } = {}
       if (wantsLink && finalEntityId) {
         const entity = await tx.entity.findUnique({ where: { id: finalEntityId }, select: { id: true, code: true, name: true } })
