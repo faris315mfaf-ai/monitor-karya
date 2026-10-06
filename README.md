@@ -56,7 +56,7 @@ Project Settings** dan dari catatan Anda sendiri:
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → API Keys → `service_role` (rahasia) |
 | `AUTH_SECRET` | Acak panjang, mis. `openssl rand -base64 32` |
 | `CRON_SECRET` | Acak panjang; harus sama dengan yang ada di Vercel |
-| `SEED_PASSWORD` | Kata sandi awal akun contoh |
+| `SEED_PASSWORD` | Kata sandi akun contoh (minimal 8 karakter; kosong = acak, dicetak skrip seed) |
 
 Cara paling aman memindahkannya dari laptop lama: buka `.env` di mesin lama,
 salin isinya lewat pengelola kata sandi atau catatan terenkripsi, lalu tempel di
