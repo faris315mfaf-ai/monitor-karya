@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
 import {
@@ -127,7 +127,6 @@ export function WeeklyTaskBoard({
   const [busy, setBusy] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [confirmEl, confirm] = useConfirm()
-  const noteId = useId()
   // Urungkan dapat hidup lebih lama daripada render yang membuat toast.
   const current = useRef({ data, projectId, weekKey, loading, error })
   useLayoutEffect(() => {
@@ -142,7 +141,6 @@ export function WeeklyTaskBoard({
 
   const frozen = new Set((data.frozenDays ?? []).map(wibKey))
   const editableDays = data.days.filter((day) => !frozen.has(wibKey(day)))
-  const editableCards = cards.filter((card) => !frozen.has(card.lane))
   const frozenSignature = [...frozen].sort().join(',')
   const dialogAllowed = dialog && data.period.key === weekKey && !data.locked && !loading && !frozen.has(dialog.lane)
     && (!dialog.task || !frozen.has(laneOf(data.tasks.find((t) => t.id === dialog.task!.id) ?? dialog.task)))
@@ -305,59 +303,30 @@ export function WeeklyTaskBoard({
         </p>
       )}
 
-      {/* WeeklyBoard belum memiliki API kunci per lajur. Lajur beku dikeluarkan
-          dari kartu interaktif dan ditampilkan sebagai bagian baca-saja. Hari
-          tetap utuh agar label hari/weekend pada WeeklyBoard tidak bergeser. */}
-      <div className={cx('mk-weekly-task-editable', ...data.days.flatMap((day, index) => frozen.has(wibKey(day)) ? [`has-frozen-${index + 1}`] : []))}>
-        <WeeklyBoard<Card>
-          key={`${data.period.key}:${version}:${frozenSignature}:${boardSignature(cards)}`}
-          days={data.days}
-          today={data.today}
-          cards={editableCards}
-          disabled={data.locked || loading}
-          onMove={move}
-          onAdd={(lane) => openDialog(lane)}
-          emptyText="Belum ada capaian."
-          renderCard={(t, dragging) => (
-            <TaskCard
-              task={t}
-              dragging={dragging}
-              locked={data.locked || frozen.has(t.lane)}
-              busy={busy === t.id}
-              onEdit={() => openDialog(t.lane, t)}
-              onDelete={() => remove(t)}
-            />
-          )}
-        />
-      </div>
-
-      {frozen.size > 0 && (
-        <div className="mk-wb" aria-label="Hari yang dibekukan">
-          {data.days.filter((day) => frozen.has(wibKey(day))).map((day) => {
-            const lane = wibKey(day)
-            const laneCards = cards.filter((card) => card.lane === lane)
-            const descriptionId = `${noteId}-${lane}`
-            return (
-              <section key={lane} className="mk-wb-lane mk-wt-frozen" tabIndex={0}
-                aria-label={`${formatDate(day)} · hanya dapat dibaca`} aria-describedby={descriptionId}>
-                <header className="mk-wb-lane__head">
-                  <span className="mk-wb-lane__title">{formatDate(day)}</span>
-                  <span className="mk-wb-lane__count" aria-label={`${laneCards.length} kartu`}>{laneCards.length}</span>
-                </header>
-                <p id={descriptionId} className="mk-wt-frozen__note"><Icon name="kunci" size={16} /><span>{FROZEN_NOTE}</span></p>
-                <div className="mk-wb-lane__body">
-                  {laneCards.length === 0 && <p className="mk-wb-lane__empty">Belum ada capaian.</p>}
-                  {laneCards.map((t) => (
-                    <div key={t.id} aria-describedby={descriptionId}>
-                      <TaskCard task={t} dragging={false} locked busy={false} onEdit={() => {}} onDelete={() => {}} />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )
-          })}
-        </div>
-      )}
+      <WeeklyBoard<Card>
+        key={`${data.period.key}:${version}:${frozenSignature}:${boardSignature(cards)}`}
+        days={data.days}
+        today={data.today}
+        cards={cards}
+        disabled={data.locked || loading}
+        disabledLanes={[...frozen]}
+        renderLaneNote={(lane) => frozen.has(lane) ? (
+          <p className="mk-wt-frozen__note"><Icon name="kunci" size={16} /><span>{FROZEN_NOTE}</span></p>
+        ) : null}
+        onMove={move}
+        onAdd={(lane) => openDialog(lane)}
+        emptyText="Belum ada capaian."
+        renderCard={(t, dragging) => (
+          <TaskCard
+            task={t}
+            dragging={dragging}
+            locked={data.locked || frozen.has(t.lane)}
+            busy={busy === t.id}
+            onEdit={() => openDialog(t.lane, t)}
+            onDelete={() => remove(t)}
+          />
+        )}
+      />
 
       {dialogAllowed && dialog && (
         <TaskDialog

@@ -51,8 +51,12 @@ vi.mock('@/components/weekly-board', async (original) => {
     ...board,
     WeeklyBoard: (props: any) => {
       harness.board = props
-      return createElement('div', { 'data-editable': true }, props.cards.map((card: any) =>
-        createElement('div', { key: card.id }, props.renderCard(card, false))))
+      const lanes = [...props.days.map(board.wibKey), 'MINGGUAN']
+      return createElement('div', null, lanes.map((lane: string) =>
+        createElement('section', { key: lane, 'data-lane': lane },
+          props.renderLaneNote?.(lane),
+          props.cards.filter((card: any) => card.lane === lane).map((card: any) =>
+            createElement('div', { key: card.id }, props.renderCard(card, false))))))
     },
   }
 })
@@ -119,21 +123,19 @@ describe('CX2 frozen days', () => {
     expect(canMoveTasks(harness.data, cards, [{ ...moves[0], lane: '2026-10-20' }])).toBe(false)
   })
 
-  it('shows focusable locked lanes including empty ones; removes frozen cards from drag surface', () => {
+  it('passes all chronological lanes/cards and lock notes to the shared board', () => {
     harness.data.frozenDays = days
     harness.data.tasks = [task('a', days[0]), task('w', days[0], 'MINGGUAN')]
     const html = render()
-    expect(harness.board.days).toEqual(days) // weekday labels keep their original indices
-    expect(harness.board.cards.map((t: any) => t.id)).toEqual(['w'])
-    expect(html).toContain('has-frozen-1 has-frozen-2')
+    expect(harness.board.days).toEqual(days)
+    expect(harness.board.cards.map((t: any) => t.id)).toEqual(['a', 'w'])
+    expect(harness.board.disabledLanes).toEqual(['2026-10-05', '2026-10-06'])
     expect(html.match(/Diteruskan ke holding/g)).toHaveLength(2)
-    expect(html).toContain('tabindex="0"')
-    expect(html).toContain('aria-describedby=')
-    expect(html).toContain('Capaian a')
-    const frozenMarkup = html.slice(html.indexOf('aria-label="Hari yang dibekukan"'))
+    const frozenMarkup = html.slice(html.indexOf('data-lane="2026-10-05"'), html.indexOf('data-lane="MINGGUAN"'))
+    expect(frozenMarkup).toContain('Capaian a')
     expect(frozenMarkup).not.toContain('Ubah capaian')
     expect(frozenMarkup).not.toContain('Hapus')
-    expect(frozenMarkup).not.toContain('Tambah capaian')
+    expect(html).not.toContain('has-frozen-')
   })
 
   it.each([
