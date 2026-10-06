@@ -1,5 +1,7 @@
 # Koordinasi Claude Code ↔ Codex
 
+> Sejak 6 Okt 2026 Codex menjadi pemegang utama — lihat [`SERAH-TERIMA-CODEX.md`](SERAH-TERIMA-CODEX.md). Aturan migrasi di bawah digantikan bagian 5 dokumen itu: Codex boleh menulis migrasi mulai 0026, tetap tidak pernah ke Supabase.
+
 Dua agen AI bekerja di proyek ini bersamaan. Aturan ini mencegah keduanya
 saling menimpa. Berlaku untuk Claude Code, Codex, dan manusia.
 

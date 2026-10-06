@@ -27,5 +27,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Kerja bersama Claude Code & Codex
 - Dua agen bekerja bersamaan di worktree terpisah: Claude di `monitor karya` (cabang `desain-baru`, port 3100), Codex di `monitor-karya-codex` (cabang `codex/kerja`, port 3200). Aturan dan zona aktif: docs/KOORDINASI-AGEN.md — baca sebelum mulai, klaim zona sebelum mengedit.
-- Dilarang menyentuh basis data (prisma migrate/db push/db execute/seed). Migrasi baru hanya ditulis Claude; Codex menulis usulan di docs/usulan-skema/.
+- Dilarang menyentuh basis data sungguhan (prisma migrate/db push/db execute/seed ke Supabase atau server); DB lokal Docker boleh. Migrasi baru bernomor mulai 0026, diuji di DB lokal saja.
 - Jangan rebase/reset/force-push. Commit kecil per topik di cabang sendiri; penggabungan oleh manusia.
+- Serah terima ke Codex (6 Okt 2026): docs/SERAH-TERIMA-CODEX.md — keadaan proyek, aturan, dan tugas lanjutan CX 8–15. Baca sebelum mulai.
