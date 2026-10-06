@@ -1,0 +1,31 @@
+/* [F4-B] Perbaikan dari daftar periksa desain (docs/design/15-checklist-review.md). */
+
+/* Judul sheet menerima fokus terprogram (tabIndex -1) supaya pembaca layar
+   membacanya; cincin fokus hanya untuk elemen yang bisa dipilih dengan Tab. */
+.mk-sheet__title:focus { outline: none; }
+
+/* Log aktivitas: subjudul pelaku lebih sempit agar tabel muat tanpa gulir samping di 1440. */
+.mk-adm-table .mk-adm-sub { max-width: 200px; }
+
+/* Palet ⌘K: baris terpilih berlatar accent-soft; subjudul ink-2 hanya 4,4:1 di atasnya. */
+.mk-cmdk__item[aria-selected="true"] .mk-cmdk__sub { color: var(--ink); }
+
+/* Target sentuh ≥44px di layar sentuh (15 · Perangkat). Tombol ikon 40px menjadi 44px bulat;
+   tautan bergaya tombol, pilihan, kolom cari, dan panah pohon ikut. Panah pohon memakai margin
+   negatif supaya area sentuh membesar tanpa menggeser indentasi. */
+@media (pointer: coarse) {
+  .mk-iconbtn { min-width: var(--touch-min); min-height: var(--touch-min); }
+  a.mk-btn { min-height: var(--touch-min); }
+  .mk-select { min-height: var(--touch-min); }
+  .mk-search { height: var(--touch-min); }
+  .mk-tree__twisty { width: var(--touch-min); height: var(--touch-min); margin: calc((28px - var(--touch-min)) / 2); }
+}
+/* Kolom cari mengisi tinggi wadahnya: mengetuk di mana pun pada wadah memfokuskan kolom. */
+.mk-search input { align-self: stretch; }
+
+/* Pohon entitas di ponsel: lencana kepatuhan (kata + angka) turun ke baris kedua, sejajar judul,
+   supaya nama PT tidak terpotong menjadi "P…". 76px = spacer 28 + celah 6 + ikon 28 + celah 6 + padding judul 8. */
+@media (width < 600px) {
+  .mk-tree__row { flex-wrap: wrap; row-gap: 0; }
+  .mk-tree__score { flex-basis: 100%; padding-left: 76px; margin-top: calc(-1 * var(--space-2)); padding-bottom: var(--space-2); }
+}

@@ -1,0 +1,22 @@
+/* [F2-GRUP] Peran grup: saringan log aktivitas (Auditor). Nilai hanya dari token. */
+
+.mk-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.mk-audit-filters > .mk-select { flex: 1 1 calc(var(--space-12) * 4); width: auto; min-width: 0; }
+.mk-audit-date { display: flex; flex-direction: column; gap: var(--space-1); flex: 1 1 calc(var(--space-10) * 4); min-width: 0; }
+.mk-audit-date input { min-height: var(--touch-min); }
+.mk-filterbar .mk-audit-filters { flex: 1 1 100%; }
+
+@media (max-width: 599px) {
+  .mk-audit-filters { flex-direction: column; align-items: stretch; }
+  .mk-audit-filters > .mk-select, .mk-audit-date { flex: 1 1 auto; width: 100%; }
+}
+
+/* Tabel kepatuhan SDM GA di tablet: kolom Hadir disembunyikan (tetap ada di Sheet rincian) supaya lencana status muat. */
+@media (max-width: 1023px) {
+  .mk-grup-compliance th:nth-child(5), .mk-grup-compliance td:nth-child(5) { display: none; }
+}
