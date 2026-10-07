@@ -20,6 +20,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
 COPY package.json package-lock.json prisma.config.ts ./
+COPY vendor ./vendor
 COPY prisma ./prisma
 RUN DATABASE_URL=postgresql://build:build@127.0.0.1:1/build \
     DIRECT_URL=postgresql://build:build@127.0.0.1:1/build \
