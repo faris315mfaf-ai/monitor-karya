@@ -288,8 +288,13 @@ function useSignOut() {
   async function signOut() {
     setBusy(true)
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } catch {}
+      const res = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!res.ok) toast.error('Sesi server belum berhasil dicabut. Hubungi admin untuk menyetel ulang kata sandi.')
+    } catch {
+      toast.error('Tidak dapat keluar. Periksa koneksi Anda dan coba lagi.')
+      setBusy(false)
+      return
+    }
     router.replace('/login')
     router.refresh()
   }

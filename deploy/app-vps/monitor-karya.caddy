@@ -4,7 +4,7 @@ monitor.contoh.id {
 	import aman
 
 	# Endpoint cron hanya dipanggil dari host ini lewat http://127.0.0.1 — tolak dari internet.
-	@cron path /api/cron/*
+	@cron path /api/cron/* /api/health/internal /api/health/backup
 	respond @cron 404
 
 	reverse_proxy monitor-karya:3000 {

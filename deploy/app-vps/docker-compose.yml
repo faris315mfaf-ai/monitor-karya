@@ -29,6 +29,13 @@ services:
     networks:
       web:
         aliases: [monitor-karya]
+    # Readiness requires DB connectivity; storage degradation is checked separately by monitor.sh.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready',{redirect:'error',signal:AbortSignal.timeout(7000)}).then(async r=>process.exit(r.status===200&&(await r.json()).ok===true?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     mem_limit: 2g
     cpus: 2
     pids_limit: 512

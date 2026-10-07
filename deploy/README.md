@@ -101,7 +101,7 @@ Gunakan [checklist rilis](CHECKLIST-RILIS.md) sebelum rilis.
 
 ### 9. Cron
 Tempel tiga baris dari kepala `deploy/app-vps/cron.sh` (pengingat divisi, aturan pengingat, KPI harian) ke `crontab -e` user admin.
-Jadwal cron harian lama di `vercel.json` tidak berlaku lagi di VPS.
+Jadwal cron harian lama di `vercel.json` tidak berlaku lagi di VPS. `reminder-rules` kini tiap 30 menit sepanjang hari (termasuk akhir pekan) untuk housekeeping akses dan heartbeat 90 menit; aturan pengingat tetap mengikuti jadwal WIB masing-masing. Siapkan rahasia status/backup dan objek probe sesuai [CX20 operasional](../docs/codex/CX20-OPERASIONAL.md).
 
 ### 10. Periksa
 - `https://<domain>/login` terbuka, gembok HTTPS valid.
@@ -123,5 +123,5 @@ Cadangan otomatis mencakup semua database baru tanpa perubahan apa pun.
 - **Berkas bukti** memakai Supabase Storage sebagai bawaan (`STORAGE_DRIVER=supabase`).
   Driver S3/MinIO memerlukan konfigurasi terpisah dan uji penyimpanan sebelum diaktifkan.
 - **Point-in-time recovery**: cadangan harian berarti paling banyak 24 jam data bisa hilang. Bila perlu lebih rapat, tambahkan pgBackRest/WAL-G dengan arsip WAL ke R2.
-- **Pemantauan**: pasang Uptime Kuma atau pemantau eksternal untuk `/login` dan ruang disk kedua VPS.
+- **Pemantauan**: `/api/health` membuktikan proses hidup; `/api/health/ready` memeriksa koneksi DB. Pasang `deploy/app-vps/monitor.sh` tiap 5 menit untuk storage, heartbeat cron, dan laporan backup. Konfigurasi dan batasan: [CX20 operasional](../docs/codex/CX20-OPERASIONAL.md). Kode keluar gagal adalah sinyal integrasi pemantau; skrip tidak mengirim notifikasi eksternal. Ruang disk kedua VPS tetap perlu dipantau tersendiri.
 - Pembatas laju login disimpan di memori kontainer: cukup untuk satu kontainer; bila aplikasi diskalakan ke beberapa replika, pindahkan ke Redis.

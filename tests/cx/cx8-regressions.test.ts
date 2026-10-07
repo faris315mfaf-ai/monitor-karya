@@ -25,11 +25,12 @@ vi.mock('@/components/mk', () => {
     Button: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
     EmptyNote: container, ErrorNote: container, StatusBadge: container,
     ApprovalItem: () => null, Skeleton: () => null,
+    Sheet: ({ open, children }: { open: boolean; children?: ReactNode }) => open ? container({ children }) : null,
   }
 })
 
 import { AUTH_SECRET_FOR_TESTS, cookie, db, one, rows, seed, world } from '../api/admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from '../api/test-session'
 import { startOfWibDay } from '@/lib/lock'
 import type { AdminOverview } from '@/lib/admin-meta'
 import type { ComplianceData } from '@/lib/admin-compliance'

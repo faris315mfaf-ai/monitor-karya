@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { ensureTemporaryAccessCurrent } from '@/lib/access-requests'
 import { hashPassword, mustChangePasswordFor, setSessionCookie, verifyPassword } from '@/lib/auth'
 import { MAX_PASSWORD_LENGTH, clientIp, hit, peek, resetRate, tooManyRequests } from '@/lib/security'
 
@@ -81,6 +82,13 @@ export async function POST(req: NextRequest) {
       .catch(() => null)
     return NextResponse.json({ error: INVALID }, { status: 401 })
   }
+  try {
+    await ensureTemporaryAccessCurrent(user.id)
+    const current = await db.user.findUnique({ where: { id: user.id }, select: { isActive: true } })
+    if (!current?.isActive) return NextResponse.json({ error: 'Akun ini dinonaktifkan' }, { status: 403 })
+  } catch {
+    return NextResponse.json({ error: 'Akses akun belum dapat diperiksa. Coba lagi.' }, { status: 503 })
+  }
   if (!user.isActive) {
     return NextResponse.json({ error: 'Akun ini dinonaktifkan' }, { status: 403 })
   }
@@ -104,6 +112,6 @@ export async function POST(req: NextRequest) {
     user: { id: user.id, name: user.name, email: user.email, username: user.username, role: user.role },
     mustChangePassword,
   })
-  setSessionCookie(res, user.id, user.passwordHash)
+  await setSessionCookie(res, user.id, user.passwordHash)
   return res
 }

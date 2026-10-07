@@ -18,7 +18,7 @@ vi.mock('next/headers', async () => {
 })
 
 import { AUTH_SECRET_FOR_TESTS, cookie, one, rows, seed, world } from './admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
 import { POST as inboxPost } from '@/app/api/inbox/route'
 

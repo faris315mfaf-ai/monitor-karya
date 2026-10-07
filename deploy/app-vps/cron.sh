@@ -10,7 +10,7 @@
 # Pasang di crontab user admin (host sudah WIB lewat harden.sh):
 #   crontab -e
 #   0 9 * * 1-5      bash /srv/apps/monitor-karya/deploy/app-vps/cron.sh remind-divisions >> /srv/apps/monitor-karya/cron.log 2>&1
-#   */30 7-18 * * 1-5 bash /srv/apps/monitor-karya/deploy/app-vps/cron.sh reminder-rules  >> /srv/apps/monitor-karya/cron.log 2>&1
+#   */30 * * * * bash /srv/apps/monitor-karya/deploy/app-vps/cron.sh reminder-rules  >> /srv/apps/monitor-karya/cron.log 2>&1
 #   30 17 * * *      bash /srv/apps/monitor-karya/deploy/app-vps/cron.sh kpi-snapshot    >> /srv/apps/monitor-karya/cron.log 2>&1
 set -euo pipefail
 JOB="${1:?nama job cron}"
@@ -18,7 +18,13 @@ JOB="${1:?nama job cron}"
 
 docker exec monitor-karya-monitor-karya-1 node -e "
 if (!process.env.CRON_SECRET) { console.error('CRON_SECRET belum diisi'); process.exit(1); }
-fetch('http://127.0.0.1:3000/api/cron/$JOB', { headers: { authorization: 'Bearer ' + process.env.CRON_SECRET }, signal: AbortSignal.timeout(30000) })
-  .then(async (r) => { console.log(new Date().toISOString(), '$JOB', r.status, (await r.text()).slice(0, 300)); process.exit(r.ok ? 0 : 1) })
-  .catch((e) => { console.error(new Date().toISOString(), '$JOB', e.message); process.exit(1) })
+fetch('http://127.0.0.1:3000/api/cron/$JOB', {
+  headers: { authorization: 'Bearer ' + process.env.CRON_SECRET },
+  redirect: 'error', signal: AbortSignal.timeout(650000)
+}).then(async (r) => {
+  const body = await r.json();
+  const ok = r.status === 200 && body.ok === true;
+  console.log(new Date().toISOString(), '$JOB', ok ? 'berhasil' : 'gagal');
+  process.exit(ok ? 0 : 1);
+}).catch(() => { console.error('$JOB gagal: periksa status operasional internal'); process.exit(1); });
 "

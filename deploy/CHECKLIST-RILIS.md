@@ -16,7 +16,7 @@ atau berkas bukti memerlukan instruksi pengguna tersendiri.
 - [ ] STORAGE_DRIVER tetap `supabase`, service role hanya server; jangan memakai akun Supabase sungguhan untuk pengujian audit.
 - [ ] `docker compose -f deploy/app-vps/docker-compose.yml --env-file .env.production config -q` lolos. Jangan menyimpan output config lengkap karena mengandung rahasia.
 - [ ] Compose aplikasi/migrate tidak mempunyai `ports`; hanya Caddy menerbitkan TCP 80/443 dan UDP 443. Jaringan eksternal `web` sudah ada.
-- [ ] Operator memeriksa konfigurasi Caddy dengan `caddy validate`, domain dan email sertifikat benar; `/api/cron/*` ditolak; header IP klien ditimpa.
+- [ ] Operator memeriksa konfigurasi Caddy dengan `caddy validate`, domain dan email sertifikat benar; `/api/cron/*`, `/api/health/internal`, dan `/api/health/backup` ditolak dari internet; header IP klien ditimpa.
 - [ ] Uji SSH admin dari sesi kedua sebelum menutup sesi lama. Periksa `sshd -T`, port SSH, socket activation, sudo, UFW, firewall panel dan WireGuard.
 - [ ] PostgreSQL hanya melalui WireGuard; periksa koneksi dari container dan penolakan port publik 5432. Verifikasi TLS sesuai kebijakan produksi.
 - [ ] Cadangan terenkripsi terbaru berhasil disalin ke penyimpanan luar VPS; SHA256SUMS lolos; pemulihan ke database uji terpisah telah berhasil.
@@ -27,13 +27,13 @@ atau berkas bukti memerlukan instruksi pengguna tersendiri.
 - [ ] Jalankan deploy.sh hanya di host rilis yang diotorisasi. Baca seluruh diagnostik Prisma sebelum konfirmasi `ya`; status gagal bisa berarti koneksi gagal, bukan sekadar migrasi tertunda.
 - [ ] `migrate deploy` wajib berhasil sebelum container diganti. Tidak ada migrasi baru yang dibuat oleh CX6.
 - [ ] Simpan image sebelumnya sampai rilis terverifikasi. Script tidak memangkas image agar rollback tersedia.
-- [ ] Kesehatan `/login` lolos. Bila rollback image dilakukan, ingat skema database tetap versi baru; verifikasi kembali kesehatan image lama secara manual.
+- [ ] Readiness `/api/health/ready` lolos dengan DB terhubung. Bila rollback image dilakukan, ingat skema database tetap versi baru; verifikasi kembali kesehatan image lama secara manual.
 
 ## Setelah rilis
 
 - [ ] HTTPS, masuk akun, peran, buka kunci, papan mingguan dan unggah/hapus bukti lolos dengan akun uji yang diotorisasi.
 - [ ] Cron tiga job berjalan dari container dengan secret; endpoint cron dari internet menghasilkan 404.
-- [ ] Jejak audit IP, log aplikasi, ruang disk dan cadangan dipantau. `/login` hanya membuktikan server hidup; uji fungsi database dan penyimpanan tersendiri.
+- [ ] Jejak audit IP, log aplikasi, ruang disk dan cadangan dipantau. `monitor.sh` keluar 0 hanya bila DB, probe penyimpanan, semua cron, dan laporan backup sehat. Siapkan objek probe dan rahasia berbeda sesuai CX20; uji unggah/hapus dan pemulihan backup tersendiri.
 - [ ] Catat commit/image, waktu, migrasi dan hasil pemeriksaan tanpa menyalin rahasia.
 
 ## Pemeriksaan lokal tanpa layanan sungguhan

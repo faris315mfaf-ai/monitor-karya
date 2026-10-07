@@ -22,7 +22,7 @@ const SECRET = 'database RahasiaInternal passwordHash connection unexpectedly lo
 const MARK = 'RahasiaInternal'
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 // Tidak ada bisnis DB di dua handler ini setelah auth di-mock.
-const NO_BUSINESS_DB = { 'auth/me': ['GET'], 'auth/logout': ['POST'] }
+const NO_BUSINESS_DB = { 'auth/me': ['GET'], 'auth/logout': ['POST'], 'health': ['GET'] }
 
 const mocks = vi.hoisted(() => ({ user: { value: null as unknown }, calls: [] as string[], failures: [] as Error[] }))
 
@@ -74,8 +74,15 @@ function routeFiles(dir: string): string[] {
 
 const files = routeFiles(ROOT).map((f) => ({ file: f, key: relative(ROOT, f).replace(/\/route\.ts$/, '').replace(/\\/g, '/') })).filter(({ key }) => !(key in NO_BUSINESS_DB))
 
-type ErrorContract = { status: number; error: string }
+type ErrorContract = { status: number; error?: string; body?: Record<string, unknown> }
 const ERROR_CONTRACTS: Record<string, ErrorContract> = {
+  'auth/activate:POST': { status: 500, error: 'Aktivasi belum dapat diproses. Coba lagi.' },
+  'health/ready:GET': { status: 503, body: { ok: false, status: 'unavailable' } },
+  'health/internal:GET': { status: 503, body: { ok: false, error: 'Status operasional tidak tersedia' } },
+  'health/backup:POST': { status: 503, body: { ok: false, error: 'Laporan belum tersimpan' } },
+  'cron/kpi-snapshot:GET': { status: 503, body: { ok: false, error: 'Pekerjaan operasional gagal' } },
+  'cron/remind-divisions:GET': { status: 503, body: { ok: false, error: 'Pekerjaan operasional gagal' } },
+  'cron/reminder-rules:GET': { status: 503, body: { ok: false, error: 'Pekerjaan operasional gagal' } },
   'auth/login:POST': { status: 503, error: 'Database tidak terjangkau dari server ini.' },
   'approval-requests/berkas:GET': { status: 502, error: 'Tautan berkas belum bisa dibuat. Coba lagi.' },
   'approval-requests/berkas:POST': { status: 502, error: 'Berkas belum terunggah. Coba lagi.' },
@@ -161,6 +168,10 @@ async function checkFailure(handler: () => Promise<Response>, contract?: ErrorCo
     expect(mocks.failures).toContain(boundaryErrors[0])
   } else {
     const payload = JSON.parse(text) as { error?: unknown }
+    if (contract?.body) {
+      expect(payload).toEqual(contract.body)
+      return
+    }
     expect(typeof payload.error).toBe('string')
     expect((payload.error as string).length).toBeGreaterThan(0)
     if (contract) expect(payload).toEqual({ error: contract.error })
@@ -181,6 +192,8 @@ describe('500 tanpa err.message mentah', () => {
       throw new Error(SECRET)
     }) as unknown as typeof fetch
     vi.stubEnv('CRON_SECRET', 'rahasia-cron-uji-yang-cukup-panjang-1234567890')
+    vi.stubEnv('OPS_HEALTH_SECRET', 'rahasia-ops-uji-yang-cukup-panjang-1234567890')
+    vi.stubEnv('BACKUP_REPORT_SECRET', 'rahasia-backup-uji-yang-cukup-panjang-1234567890')
   })
   afterAll(async () => {
     activeHandler = null
@@ -213,7 +226,7 @@ describe('500 tanpa err.message mentah', () => {
       const mod = await import(join(ROOT, key, 'route.ts'))
       expect(METHODS.filter((method) => typeof mod[method] === 'function')).toEqual(methods)
     }
-  })
+  }, 30000)
 
   it.each([200, 400, 404, 422, 502, 503])('harness menolak respons %s meski marker tidak bocor', async (status) => {
     mocks.calls.push('project.findMany')
@@ -255,9 +268,9 @@ describe('500 tanpa err.message mentah', () => {
 
   it.each(Object.entries(ERROR_CONTRACTS))('harness memeriksa kontrak %s tepat', async (_endpoint, contract) => {
     mocks.calls.push('query-bisnis')
-    await checkFailure(async () => Response.json({ error: contract.error }, { status: contract.status }), contract)
+    await checkFailure(async () => Response.json(contract.body ?? { error: contract.error }, { status: contract.status }), contract)
     await expect(checkFailure(async () => Response.json({ error: 'pesan yang salah' }, { status: contract.status }), contract)).rejects.toThrow()
-    await expect(checkFailure(async () => Response.json({ error: contract.error }, { status: 500 }), contract)).rejects.toThrow()
+    await expect(checkFailure(async () => Response.json(contract.body ?? { error: contract.error }, { status: contract.status === 500 ? 503 : 500 }), contract)).rejects.toThrow()
   })
 
   it('harness menerima 500 aman sesudah kegagalan DB bisnis', async () => {
@@ -306,6 +319,11 @@ describe('500 tanpa err.message mentah', () => {
       if (key === 'admin/compliance/remind') { delete data.divisionId; data.userId = 'u_other' }
       if (key === 'access-requests') data.decision = 'approve'
       if (key === 'attendance') data.status = 'HADIR'
+      if (key === 'auth/activate') data.token = 'a'.repeat(43)
+      if (key === 'health/backup') {
+        for (const field of Object.keys(data)) delete data[field]
+        Object.assign(data, { status: 'running', runId: '11111111-1111-4111-8111-111111111111' })
+      }
       if (key === 'approval-requests') data.type = 'MATERI'
       if (key === 'kadiv/team') data.action = 'read'
       if (key === 'kadiv/weekly-summary') data.action = 'send'
@@ -325,7 +343,7 @@ describe('500 tanpa err.message mentah', () => {
         body: method === 'GET' ? undefined : multipart ? form : JSON.stringify(data),
         headers: {
           ...(multipart ? {} : { 'content-type': 'application/json' }),
-          authorization: `Bearer ${process.env.CRON_SECRET}`,
+          authorization: `Bearer ${key === 'health/backup' ? process.env.BACKUP_REPORT_SECRET : key === 'health/internal' ? process.env.OPS_HEALTH_SECRET : process.env.CRON_SECRET}`,
           'x-cron-secret': process.env.CRON_SECRET!, origin: 'http://localhost', host: 'localhost',
         },
       })

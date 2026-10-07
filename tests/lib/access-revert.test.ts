@@ -9,11 +9,12 @@ const mocks = vi.hoisted(() => {
   const fn = () => vi.fn()
   return {
     db: {
-      accessRequest: { findMany: fn(), update: fn() },
+      accessRequest: { findMany: fn(), update: fn(), updateMany: fn() },
       user: { findUnique: fn(), update: fn(), count: fn() },
-      division: { findUnique: fn(), update: fn() },
+      division: { findUnique: fn(), update: fn(), updateMany: fn() },
       auditLog: { create: fn() },
       $transaction: fn(),
+      $queryRaw: fn(),
     },
   }
 })
@@ -28,6 +29,8 @@ beforeEach(() => {
     for (const m of Object.values(group)) m.mockReset().mockResolvedValue({})
   }
   db.$transaction.mockReset().mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db))
+  db.accessRequest.updateMany.mockResolvedValue({ count: 1 })
+  db.division.updateMany.mockResolvedValue({ count: 1 })
 })
 
 function due(applied: Record<string, unknown>) {
@@ -40,13 +43,13 @@ describe('revertExpiredAccess', () => {
     db.user.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
       where.id === 'u-temp'
         ? { id: 'u-temp', name: 'Temp', role: 'KEPALA_DIVISI', scopeEntityId: 'pt-a', isActive: true }
-        : { id: where.id }
+        : { id: where.id, isActive: true, role: 'KEPALA_DIVISI', scopeEntityId: 'pt-a' }
     )
-    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp' })
+    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp', entityId: 'pt-a' })
 
     expect(await revertExpiredAccess(new Date('2026-10-06T10:00:00Z'))).toBe(1)
     expect(db.user.update).toHaveBeenCalledWith({ where: { id: 'u-temp' }, data: { role: 'PIC_PROYEK' } })
-    expect(db.division.update).toHaveBeenCalledWith({ where: { id: 'div-a' }, data: { headUserId: 'u-kadiv-lama' } })
+    expect(db.division.updateMany).toHaveBeenCalledWith({ where: { id: 'div-a', entityId: 'pt-a', headUserId: 'u-temp' }, data: { headUserId: 'u-kadiv-lama' } })
     const after = JSON.parse(db.auditLog.create.mock.calls[0][0].data.afterData)
     expect(after.heads).toEqual([{ divisionId: 'div-a', from: 'u-temp', to: 'u-kadiv-lama' }])
   })
@@ -54,10 +57,10 @@ describe('revertExpiredAccess', () => {
   it('divisi yang sudah diubah orang lain sejak itu dibiarkan', async () => {
     due({ role: 'PIC_PROYEK', grantedRole: 'KEPALA_DIVISI', heads: [{ divisionId: 'div-a', from: 'u-kadiv-lama', to: 'u-temp' }] })
     db.user.findUnique.mockResolvedValue({ id: 'u-temp', name: 'Temp', role: 'KEPALA_DIVISI', scopeEntityId: 'pt-a', isActive: true })
-    db.division.findUnique.mockResolvedValue({ headUserId: 'u-orang-lain' })
+    db.division.findUnique.mockResolvedValue({ headUserId: 'u-orang-lain', entityId: 'pt-a' })
 
     await revertExpiredAccess()
-    expect(db.division.update).not.toHaveBeenCalled()
+    expect(db.division.updateMany).not.toHaveBeenCalled()
   })
 
   it('kepala lama yang sudah dihapus tidak dipasang kembali', async () => {
@@ -65,9 +68,37 @@ describe('revertExpiredAccess', () => {
     db.user.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
       where.id === 'u-temp' ? { id: 'u-temp', name: 'Temp', role: 'KEPALA_DIVISI', scopeEntityId: 'pt-a', isActive: true } : null
     )
-    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp' })
+    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp', entityId: 'pt-a' })
 
     await revertExpiredAccess()
+    expect(db.division.updateMany).toHaveBeenCalledWith({ where: { id: 'div-a', entityId: 'pt-a', headUserId: 'u-temp' }, data: { headUserId: null } })
+  })
+
+  it.each([
+    { isActive: false, role: 'KEPALA_DIVISI', scopeEntityId: 'pt-a' },
+    { isActive: true, role: 'PIC_PROYEK', scopeEntityId: 'pt-a' },
+    { isActive: true, role: 'KEPALA_DIVISI', scopeEntityId: 'pt-b' },
+  ])('kepala lama tidak layak dibersihkan: %j', async (previous) => {
+    due({ role: 'PIC_PROYEK', grantedRole: 'KEPALA_DIVISI', heads: [{ divisionId: 'div-a', from: 'u-old', to: 'u-temp' }] })
+    db.user.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+      where.id === 'u-temp' ? { id: 'u-temp', role: 'KEPALA_DIVISI', isActive: true, scopeEntityId: 'pt-a' } : previous
+    )
+    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp', entityId: 'pt-a' })
+    expect(await revertExpiredAccess()).toBe(1)
+    expect(db.division.updateMany).toHaveBeenCalledWith({ where: { id: 'div-a', entityId: 'pt-a', headUserId: 'u-temp' }, data: { headUserId: null } })
+    const after = JSON.parse(db.auditLog.create.mock.calls[0][0].data.afterData)
+    expect(after.heads).toEqual([{ divisionId: 'div-a', from: 'u-temp', to: null }])
+  })
+
+  it('penugasan manual bersamaan tidak ditimpa dan tidak diaudit sebagai dipulihkan', async () => {
+    due({ role: 'PIC_PROYEK', grantedRole: 'KEPALA_DIVISI', heads: [{ divisionId: 'div-a', from: 'u-old', to: 'u-temp' }] })
+    db.user.findUnique.mockResolvedValue({ id: 'u-temp', role: 'KEPALA_DIVISI', isActive: true, scopeEntityId: 'pt-a' })
+    db.division.findUnique.mockResolvedValue({ headUserId: 'u-temp', entityId: 'pt-a' })
+    db.division.updateMany.mockResolvedValue({ count: 0 })
+    expect(await revertExpiredAccess()).toBe(1)
+    expect(db.division.updateMany).toHaveBeenCalledWith({ where: { id: 'div-a', entityId: 'pt-a', headUserId: 'u-temp' }, data: { headUserId: 'u-old' } })
+    const after = JSON.parse(db.auditLog.create.mock.calls[0][0].data.afterData)
+    expect(after.heads).toBeUndefined()
     expect(db.division.update).not.toHaveBeenCalled()
   })
 

@@ -21,7 +21,7 @@ vi.mock('next/headers', async () => {
 vi.mock('@/lib/storage', () => ({ storageConfigured: () => false, removeEvidence: vi.fn() }))
 
 import { AUTH_SECRET_FOR_TESTS, auditActions, cookie, one, rows, seed, world } from './admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { isoWeekOf, isoWeekStart, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
 import { FORWARDED_FROZEN_MESSAGE } from '@/lib/daily-rollup'
 import { GET, PATCH, POST } from '@/app/api/unlock-requests/route'

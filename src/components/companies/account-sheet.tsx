@@ -6,6 +6,7 @@
  * kata sandi, status, sampai hapus — kolomnya sama dari mana pun dibuka.
  */
 
+import { ActivationPanel } from './activation-handoff'
 import { ChoiceGroup } from '@/components/mk/forms'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -67,6 +68,7 @@ export function AccountSheet({
         <AccountForm
           key={key}
           target={t}
+          activationVisible={!!target}
           companies={companies}
           me={me}
           lockCompany={lockCompany}
@@ -81,6 +83,7 @@ export function AccountSheet({
 
 function AccountForm({
   target,
+  activationVisible,
   companies,
   me,
   lockCompany,
@@ -89,6 +92,7 @@ function AccountForm({
   onSaved,
 }: {
   target: AccountTarget
+  activationVisible: boolean
   companies: Company[]
   me: string
   lockCompany?: boolean
@@ -398,6 +402,8 @@ function AccountForm({
           </Field>
         </div>
       </section>
+
+      {user && !isSelf && activationVisible ? <ActivationPanel key={user.id} userId={user.id} /> : null}
 
       <section className="mk-formsec">
         <SectionTitle icon="kunci">{editing ? 'Setel ulang kata sandi' : 'Kata sandi awal'}</SectionTitle>

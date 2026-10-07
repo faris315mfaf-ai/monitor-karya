@@ -251,7 +251,35 @@ model Holiday {
 // PENGGUNA & AKSES
 // ============================================================
 
+/// Sesi server; token mentah tidak disimpan.
+model AuthSession {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Tautan aktivasi: hanya hash token dan sidik kredensial tersimpan.
+model AccountActivation {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash        String   @unique
+  credentialDigest String
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model User {
+  authSessions AuthSession[]
+  accountActivation AccountActivation?
   id           String   @id @default(cuid())
   email        String   @unique
   /// Nama masuk pendek (10 Sep 2026): huruf kecil, unik — dipakai di halaman masuk.

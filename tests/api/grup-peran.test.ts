@@ -25,7 +25,7 @@ vi.mock('next/headers', async () => {
 })
 
 import { AUTH_SECRET_FOR_TESTS, auditActions, cookie, one, rows, seed, world } from './admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { isoWeekOf, weeklyDeadlines } from '@/lib/lock'
 import { GET as grupGet } from '@/app/api/system/grup/route'
 import { GET as approvalsGet, PATCH as approvalsPatch, POST as approvalsPost } from '@/app/api/approval-requests/route'

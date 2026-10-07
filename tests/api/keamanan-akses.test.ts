@@ -24,7 +24,8 @@ vi.mock('next/headers', async () => {
 })
 
 import { AUTH_SECRET_FOR_TESTS, auditActions, cookie, one, rows, seed, world } from './admin-fake-db'
-import { SESSION_COOKIE, createSessionToken, hashPassword } from '@/lib/auth'
+import { SESSION_COOKIE, hashPassword } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { startOfWibDay } from '@/lib/lock'
 import { GET as accessGet } from '@/app/api/access-requests/route'
 import { GET as unlockGet, POST as unlockPost } from '@/app/api/unlock-requests/route'

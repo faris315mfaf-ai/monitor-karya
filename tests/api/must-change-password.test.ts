@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 const mocks = vi.hoisted(() => {
   const fn = () => vi.fn()
   const db = {
+    authSession: { create: fn(), findFirst: fn() },
+    accessRequest: { count: fn() },
     user: { findFirst: fn(), findUnique: fn(), update: fn() },
     auditLog: { create: fn() },
     notificationLog: { findMany: fn(), count: fn() },
@@ -62,6 +64,9 @@ const post = (url: string, body: unknown) =>
   })
 
 beforeEach(async () => {
+  db.authSession.create.mockResolvedValue({})
+  db.authSession.findFirst.mockResolvedValue({ id: 'session' })
+  db.accessRequest.count.mockResolvedValue(0)
   hash ??= await hashPassword('sandi-dari-admin')
   for (const m of [db.user.findFirst, db.user.findUnique, db.user.update, db.auditLog.create, db.notificationLog.findMany, db.notificationLog.count]) {
     m.mockReset()
@@ -149,7 +154,7 @@ describe('POST /api/profile/password', () => {
 describe('POST /api/auth/login', () => {
   it('memberi tahu klien bila akun wajib ganti kata sandi', async () => {
     db.user.findFirst.mockResolvedValue({ id: 'u-1', name: 'Rina', email: 'r@contoh.test', username: 'rina-wajib', role: 'PIC_PROYEK', isActive: true, passwordHash: hash })
-    db.user.findUnique.mockResolvedValue({ mustChangePassword: true })
+    db.user.findUnique.mockResolvedValue({ mustChangePassword: true, isActive: true })
     const res = await login(post('/api/auth/login', { identifier: 'rina-wajib', password: 'sandi-dari-admin' }))
     expect(res.status).toBe(200)
     expect((await res.json()).mustChangePassword).toBe(true)

@@ -20,6 +20,8 @@ const ROOT = join(__dirname, '..', '..', 'src', 'app', 'api')
 
 /** Route yang memang boleh menulis untuk akun sendiri, atau bukan berbasis sesi. */
 const ALLOWED: Record<string, string> = {
+  'auth/activate:POST': 'aktivasi sebelum sesi, dibuktikan token sekali pakai pada activation.test.ts',
+  'health/backup:POST': 'pelapor cadangan memakai BACKUP_REPORT_SECRET, bukan peran; diuji operational-health.test.ts',
   'auth/login:POST': 'masuk (sebelum ada sesi)',
   'auth/logout:POST': 'keluar dari sesi sendiri',
   'profile:PATCH': 'mengubah profil sendiri',
@@ -217,7 +219,7 @@ describe('AUDITOR hanya-baca di semua route tulis', () => {
       const mod = await import(join(ROOT, key, 'route.ts'))
       expect(typeof mod[method], endpoint).toBe('function')
     }
-  })
+  }, 30000)
 
   it.each([200, 400, 404, 409, 422, 500])('harness menggagalkan handler rusak yang menjawab %s', async (status) => {
     await expect(checkHandler(async () => Response.json({ error: 'rusak' }, { status }))).rejects.toThrow()

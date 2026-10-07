@@ -19,7 +19,7 @@ vi.mock('next/headers', async () => {
 })
 
 import { AUTH_SECRET_FOR_TESTS, auditActions, cookie, one, rows, world } from './admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { GET, PATCH, POST } from '@/app/api/access-requests/route'
 
 process.env.AUTH_SECRET = AUTH_SECRET_FOR_TESTS

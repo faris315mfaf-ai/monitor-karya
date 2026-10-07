@@ -19,7 +19,7 @@ vi.mock('next/headers', async () => {
 })
 
 import { AUTH_SECRET_FOR_TESTS, cookie, db, one, rows, seed, world } from './admin-fake-db'
-import { createSessionToken } from '@/lib/auth'
+import { createSessionToken } from './test-session'
 import { startOfWibDay } from '@/lib/lock'
 import type { AdminOverview, ReminderRuleView } from '@/lib/admin-meta'
 import { GET as overview } from '@/app/api/admin/overview/route'

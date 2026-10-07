@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
   const fn = () => vi.fn()
   return {
     db: {
+      authSession: { create: fn(), findFirst: fn() },
+      accessRequest: { count: fn() },
       user: { findFirst: fn(), findUnique: fn(), update: fn() },
       auditLog: { create: fn() },
     },
@@ -43,6 +45,10 @@ function login(body: unknown, ip = `10.0.0.${++ipSeq}`) {
 
 let goodHash: string
 beforeEach(async () => {
+  db.authSession.create.mockResolvedValue({})
+  db.authSession.findFirst.mockResolvedValue({ id: 'session' })
+  db.accessRequest.count.mockResolvedValue(0)
+  db.user.findUnique.mockResolvedValue({ isActive: true })
   goodHash ??= await hashPassword('benar-sekali')
   db.user.findFirst.mockReset()
   db.user.update.mockReset().mockResolvedValue({})

@@ -19,6 +19,47 @@
 set -euo pipefail
 
 umask 077
+# Optional reporting is observed by /api/health/internal; absent reports remain missing/stale.
+# Install report-backup.py beside this script. A reporting failure never skips the backup.
+REPORT_ENABLED=0
+REPORT_STARTED=0
+REPORT_FAILED=0
+REPORT_HOOK="$(dirname "$0")/report-backup.py"
+BACKUP_RUN_ID=""
+if [[ -n "${BACKUP_REPORT_URL:-}" || -n "${BACKUP_REPORT_SECRET_FILE:-}" ]]; then
+  REPORT_ENABLED=1
+fi
+report_backup() {
+  # timeout also bounds a slow/dribbling HTTP peer; Python's socket timeout alone does not.
+  timeout 15s python3 "$REPORT_HOOK" "$1" "$BACKUP_RUN_ID"
+}
+finish_backup() {
+  local original_status=$?
+  trap - EXIT
+  if [[ "$REPORT_ENABLED" == 1 ]]; then
+    if [[ "$REPORT_STARTED" == 1 ]]; then
+      local result=failure
+      [[ "$original_status" == 0 ]] && result=success
+      report_backup "$result" || REPORT_FAILED=1
+    else
+      REPORT_FAILED=1
+    fi
+    if [[ "$REPORT_FAILED" == 1 ]]; then
+      echo "Backup: pelaporan gagal; periksa hook/status internal." >&2
+      # Keep the original pg_dump/age/rclone exit status; 70 only if backup itself succeeded.
+      [[ "$original_status" != 0 ]] || original_status=70
+    fi
+  fi
+  exit "$original_status"
+}
+trap finish_backup EXIT
+if [[ "$REPORT_ENABLED" == 1 ]]; then
+  if BACKUP_RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')" && report_backup running; then
+    REPORT_STARTED=1
+  else
+    REPORT_FAILED=1
+  fi
+fi
 RECIPIENT_FILE="/etc/pg-backup/recipient.txt"
 REMOTE="${REMOTE:-offsite:pg-backups/$(hostname -s)}"
 LOCAL_DIR="${LOCAL_DIR:-/var/backups/postgres}"
@@ -34,6 +75,18 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 700 "$LOCAL_DIR/$STAMP"
 
 DBS=$(sudo -u postgres psql -v ON_ERROR_STOP=1 -Atc "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate AND datname <> 'postgres'")
+
+if [[ "$REPORT_ENABLED" == 1 && -z "${BACKUP_REQUIRED_DATABASE:-}" ]]; then
+  echo "BACKUP_REQUIRED_DATABASE wajib untuk laporan backup aplikasi." >&2; exit 1
+fi
+[[ -n "$DBS" ]] || { echo "Tidak ada database aplikasi untuk dicadangkan." >&2; exit 1; }
+# When set, require this application database to appear in the dump inventory.
+if [[ -n "${BACKUP_REQUIRED_DATABASE:-}" ]]; then
+  [[ "$BACKUP_REQUIRED_DATABASE" =~ ^[a-z][a-z0-9_]{1,40}$ ]] || { echo "Nama database wajib tidak sah." >&2; exit 1; }
+  FOUND_REQUIRED=0
+  while IFS= read -r db; do [[ "$db" != "$BACKUP_REQUIRED_DATABASE" ]] || FOUND_REQUIRED=1; done <<< "$DBS"
+  [[ "$FOUND_REQUIRED" == 1 ]] || { echo "Database aplikasi wajib tidak ditemukan." >&2; exit 1; }
+fi
 
 # Role & hak akses (tanpa kata sandi tersimpan dalam teks terbuka di luar enkripsi).
 sudo -u postgres pg_dumpall --globals-only | age -R "$RECIPIENT_FILE" > "$LOCAL_DIR/$STAMP/globals.sql.age"

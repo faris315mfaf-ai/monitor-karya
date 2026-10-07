@@ -141,6 +141,25 @@ export function readHeads(raw: unknown): HeadChange[] {
   )
 }
 
+type PicChange = {
+  projectId: string
+  entityId: string
+  from: string | null
+  fromName: string | null
+  to: string
+  toName: string
+}
+
+/** null means absent/incomplete historical evidence, never an empty change list. */
+function readPics(raw: unknown): PicChange[] | null {
+  if (!Array.isArray(raw)) return null
+  const valid = raw.every((p): p is PicChange => !!p && typeof p === 'object' &&
+    typeof p.projectId === 'string' && typeof p.entityId === 'string' &&
+    (p.from === null || typeof p.from === 'string') && (p.fromName === null || typeof p.fromName === 'string') &&
+    typeof p.to === 'string' && typeof p.toName === 'string')
+  return valid ? raw : null
+}
+
 function parse(json: string | null): Record<string, unknown> {
   try {
     return json ? (JSON.parse(json) as Record<string, unknown>) : {}
@@ -188,6 +207,8 @@ export async function applyAccessRequest(
   }
 
   const userId = typeof payload.userId === 'string' ? payload.userId : ''
+  // Serialisasi pemberian dan pemulihan hak untuk akun yang sama.
+  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`
   const existing = await tx.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, scopeEntityId: true, isActive: true } })
   if (!existing) throw new AccessRefusal('Akun yang dimaksud sudah tidak ada.', 404)
   if (!desk.full && existing.scopeEntityId !== desk.entityId) throw new AccessRefusal('Akun ini bukan di perusahaan Anda.')
@@ -219,6 +240,9 @@ export async function applyAccessRequest(
   }
 
   // AKSES_SEMENTARA: peran sementara dan/atau mengaktifkan akun sampai tanggal tertentu.
+  if (await tx.accessRequest.count({ where: { id: { not: row.id }, targetUserId: userId, type: 'AKSES_SEMENTARA', status: 'DISETUJUI', revertedAt: null } })) {
+    throw new AccessRefusal('Akun masih memiliki akses sementara. Selesaikan akses tersebut sebelum memberi akses baru.', 409)
+  }
   const days = Math.min(MAX_TEMP_ACCESS_DAYS, Math.max(1, Number(payload.days ?? 0) || 1))
   const role = typeof payload.role === 'string' && payload.role ? payload.role : null
   const refusal = deskReachError(desk, decider.id, existing, role ? { role } : {})
@@ -228,7 +252,19 @@ export async function applyAccessRequest(
   const expiresAt = new Date(Date.now() + days * 86400000)
   const before = { role: existing.role, isActive: existing.isActive }
   let heads: HeadChange[] = []
+  const pics: PicChange[] = []
   if (role && role !== existing.role) {
+    if (role === 'PIC_PROYEK' && typeof payload.projectId === 'string' && payload.projectId && existing.scopeEntityId) {
+      // Lock before reading the former PIC so snapshot and assignment are atomic.
+      const projectId = payload.projectId
+      await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+      const project = await tx.project.findFirst({
+        where: { id: projectId, entityId: existing.scopeEntityId },
+        select: { id: true, entityId: true, picUserId: true, picName: true },
+      })
+      if (!project) throw new AccessRefusal('Proyek tidak ditemukan di perusahaan ini.', 422)
+      pics.push({ projectId: project.id, entityId: project.entityId, from: project.picUserId, fromName: project.picName, to: existing.id, toName: existing.name })
+    }
     // F1-C: tautan kepala divisi yang ikut berubah disimpan supaya bisa dikembalikan saat kedaluwarsa.
     const applied = await applyRoleChange(tx, existing, {
       role,
@@ -251,7 +287,7 @@ export async function applyAccessRequest(
       ip,
     },
   })
-  return { targetUserId: existing.id, expiresAt, appliedData: JSON.stringify({ ...before, grantedRole: role, heads }), effect: { role: role ?? existing.role, days } }
+  return { targetUserId: existing.id, expiresAt, appliedData: JSON.stringify({ ...before, grantedRole: role, heads, pics }), effect: { role: role ?? existing.role, days } }
 }
 
 /**
@@ -262,24 +298,44 @@ export async function applyAccessRequest(
  *
  * F1-C (6 Okt 2026): Division.headUserId yang diubah applyRoleChange
  * (appliedData.heads) juga dikembalikan — hanya bila divisi itu masih
- * menunjuk nilai yang dipasang akses sementara, dan kepala lamanya masih ada.
+ * menunjuk nilai yang dipasang akses sementara; kepala lama harus aktif,
+ * masih berperan KEPALA_DIVISI, dan berada di PT divisi tersebut.
+ * PIC proyek dipulihkan dari appliedData.pics; PIC lama harus aktif, berperan
+ * PIC_PROYEK, dan masih di PT proyek. Tanpa bukti historis, residu PIC menahan
+ * pemulihan agar ensureTemporaryAccessCurrent menolak sesi sampai rekonsiliasi.
  */
-export async function revertExpiredAccess(now = new Date()): Promise<number> {
+export async function revertExpiredAccess(now = new Date(), userId?: string): Promise<number> {
   const due = await db.accessRequest.findMany({
-    where: { type: 'AKSES_SEMENTARA', status: 'DISETUJUI', revertedAt: null, expiresAt: { lte: now } },
+    where: { type: 'AKSES_SEMENTARA', status: 'DISETUJUI', revertedAt: null, expiresAt: { lte: now }, ...(userId ? { targetUserId: userId } : {}) },
     select: { id: true, targetUserId: true, appliedData: true },
     take: 100,
   })
   let n = 0
   for (const r of due) {
-    const before = parse(r.appliedData) as { role?: string; isActive?: boolean; grantedRole?: string | null; heads?: unknown }
+    const before = parse(r.appliedData) as { role?: string; isActive?: boolean; grantedRole?: string | null; heads?: unknown; pics?: unknown }
     const heads = readHeads(before.heads)
+    const pics = readPics(before.pics)
     try {
-      await db.$transaction(async (tx) => {
+      const changed = await db.$transaction(async (tx) => {
+        if (r.targetUserId) await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${r.targetUserId} FOR UPDATE`
+        // Klaim atomik: cron dan autentikasi dapat tiba bersamaan.
+        // Seluruh klaim ikut rollback bila pemulihan atau audit gagal.
+        const claimed = await tx.accessRequest.updateMany({
+          where: { id: r.id, revertedAt: null, status: 'DISETUJUI', expiresAt: { lte: now } },
+          data: { revertedAt: now },
+        })
+        if (claimed.count !== 1) return false
         const u = r.targetUserId
           ? await tx.user.findUnique({ where: { id: r.targetUserId }, select: { id: true, name: true, role: true, scopeEntityId: true, isActive: true } })
           : null
         const changes: Record<string, unknown> = {}
+        // Historical PIC grants have no trustworthy former owner. Do not mark
+        // them reverted while a residual assignment remains: request-time auth
+        // must fail closed until an admin explicitly reconciles the project.
+        if (!pics && r.targetUserId && before.grantedRole === 'PIC_PROYEK' && before.role !== 'PIC_PROYEK') {
+          const residual = await tx.project.findFirst({ where: { picUserId: r.targetUserId }, select: { id: true } })
+          if (residual) throw new AccessRefusal('PIC sementara lama belum dapat dipulihkan: snapshot PIC tidak lengkap. Admin perlu merekonsiliasi penugasan proyek.', 503)
+        }
         if (u) {
           const stillGranted = before.grantedRole ? u.role === before.grantedRole : true
           if (stillGranted && before.role && before.role !== u.role) {
@@ -294,18 +350,45 @@ export async function revertExpiredAccess(now = new Date()): Promise<number> {
         }
         const restored: HeadChange[] = []
         for (const h of heads) {
-          const d = await tx.division.findUnique({ where: { id: h.divisionId }, select: { headUserId: true } })
+          const d = await tx.division.findUnique({ where: { id: h.divisionId }, select: { headUserId: true, entityId: true } })
           // Sudah diubah orang lain sejak itu: perubahan terbaru dipertahankan.
           if (!d || d.headUserId !== h.to) continue
+          let headUserId: string | null = null
           if (h.from) {
-            const prev = await tx.user.findUnique({ where: { id: h.from }, select: { id: true } })
-            if (!prev) continue
+            await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${h.from} FOR UPDATE`
+            const prev = await tx.user.findUnique({ where: { id: h.from }, select: { isActive: true, role: true, scopeEntityId: true } })
+            if (prev?.isActive && prev.role === 'KEPALA_DIVISI' && prev.scopeEntityId === d.entityId) headUserId = h.from
           }
-          await tx.division.update({ where: { id: h.divisionId }, data: { headUserId: h.from } })
-          restored.push({ divisionId: h.divisionId, from: h.to, to: h.from })
+          // Clear an ineligible former head, and do not overwrite an assignment
+          // that changed between the read and this conditional write.
+          const applied = await tx.division.updateMany({
+            where: { id: h.divisionId, entityId: d.entityId, headUserId: h.to },
+            data: { headUserId },
+          })
+          if (applied.count === 1) restored.push({ divisionId: h.divisionId, from: h.to, to: headUserId })
         }
         if (restored.length) changes.heads = restored
-        await tx.accessRequest.update({ where: { id: r.id }, data: { revertedAt: now } })
+        const restoredPics: Record<string, unknown>[] = []
+        for (const p of pics ?? []) {
+          const project = await tx.project.findUnique({ where: { id: p.projectId }, select: { entityId: true, picUserId: true, picName: true } })
+          if (!project || project.picUserId !== p.to || project.picName !== p.toName) continue
+          let previousIsEligible = false
+          if (p.from && project.entityId === p.entityId) {
+            // Prevent role/company/deactivation changes racing this eligibility check.
+            await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${p.from} FOR UPDATE`
+            const previous = await tx.user.findUnique({ where: { id: p.from }, select: { isActive: true, role: true, scopeEntityId: true } })
+            previousIsEligible = !!previous?.isActive && previous.role === 'PIC_PROYEK' && previous.scopeEntityId === project.entityId
+          }
+          const picUserId = previousIsEligible ? p.from : null
+          const picName = previousIsEligible || (p.from === null && project.entityId === p.entityId) ? p.fromName : null
+          // Preserve a manual reassignment even when it arrives after our read.
+          const applied = await tx.project.updateMany({
+            where: { id: p.projectId, entityId: project.entityId, picUserId: p.to, picName: p.toName },
+            data: { picUserId, picName },
+          })
+          if (applied.count === 1) restoredPics.push({ projectId: p.projectId, from: p.to, to: picUserId, picName })
+        }
+        if (restoredPics.length) changes.pics = restoredPics
         await tx.auditLog.create({
           data: {
             actorId: null,
@@ -316,11 +399,21 @@ export async function revertExpiredAccess(now = new Date()): Promise<number> {
             userAgent: 'sistem',
           },
         })
+        return true
       })
-      n += 1
+      if (changed) n += 1
     } catch (err) {
       console.error('[access-requests] gagal mencabut akses sementara', r.id, err instanceof Error ? err.message : err)
     }
   }
   return n
+}
+
+/** Periksa tenggat pada setiap permintaan, termasuk ketika cron tidak berjalan. */
+export async function ensureTemporaryAccessCurrent(userId: string, now = new Date()): Promise<void> {
+  const where = { targetUserId: userId, type: 'AKSES_SEMENTARA', status: 'DISETUJUI', revertedAt: null, expiresAt: { lte: now } }
+  if (!(await db.accessRequest.count({ where }))) return
+  await revertExpiredAccess(now, userId)
+  // Gagal memulihkan tidak boleh membuat peran kedaluwarsa tetap berwenang.
+  if (await db.accessRequest.count({ where })) throw new AccessRefusal('Akses sementara telah berakhir. Coba lagi atau hubungi admin.', 503)
 }

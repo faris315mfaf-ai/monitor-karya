@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { runOperationalJob } from '@/lib/operational-health'
 import { db } from '@/lib/db'
 import { refuseCron } from '@/lib/cron-auth'
 import { refreshKpiSnapshots } from '@/lib/kpi-snapshot'
@@ -16,7 +17,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const refused = refuseCron(req)
   if (refused) return refused
-  try {
+  return runOperationalJob('kpi-snapshot', async () => {
     const now = new Date()
     const { updated, failed } = await refreshKpiSnapshots(now)
     await db.auditLog.create({
@@ -29,9 +30,6 @@ export async function GET(req: NextRequest) {
         userAgent: 'cron',
       },
     })
-    return NextResponse.json({ ok: failed.length === 0, updated: updated.length, failed: failed.length })
-  } catch (err) {
-    console.error('[cron/kpi-snapshot]', err instanceof Error ? err.message : err)
-    return NextResponse.json({ error: 'KPI harian belum diperbarui' }, { status: 500 })
-  }
+    return { ok: failed.length === 0, updated: updated.length, failed: failed.length }
+  })
 }

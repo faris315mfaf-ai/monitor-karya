@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { activationError, activationIssueLimit, issueAccountActivation } from '@/lib/account-activation'
 import { refuseUnscoped, requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { entityRef } from '@/lib/account-desk'
 import {
@@ -30,7 +31,7 @@ const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(','
 
 const include = {
   requestedBy: { select: { id: true, name: true } },
-  targetUser: { select: { id: true, name: true, role: true } },
+  targetUser: { select: { id: true, name: true, role: true, isActive: true, mustChangePassword: true, lastLoginAt: true, scopeEntityId: true } },
   decidedBy: { select: { id: true, name: true } },
 } satisfies Prisma.AccessRequestInclude
 
@@ -87,6 +88,9 @@ async function toItems(rows: RowWithNames[], user: SessionUser): Promise<AccessR
       expiresAt: r.expiresAt?.toISOString() ?? null,
       revertedAt: r.revertedAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
+      canActivate: r.type === 'AKUN_BARU' && r.status === 'DISETUJUI' &&
+        !!r.targetUser?.isActive && !!r.targetUser.mustChangePassword && !r.targetUser.lastLoginAt &&
+        r.targetUser.id !== user.id && mayDecideFor(desk, r.targetUser.scopeEntityId) && !!desk?.roles.includes(r.targetUser.role),
       // Tombol hanya untuk yang benar-benar bisa diterapkan meja ini (server tetap memeriksa).
       canDecide:
         r.status === 'DIAJUKAN' &&
@@ -233,10 +237,15 @@ export async function PATCH(req: NextRequest) {
   }
   if (row.status !== 'DIAJUKAN') return NextResponse.json({ error: 'Permintaan ini sudah diputuskan.' }, { status: 409 })
 
+  if (decision === 'approve' && row.type === 'AKUN_BARU') {
+    const limited = activationIssueLimit(user.id)
+    if (limited) return limited
+  }
   const now = new Date()
   const ip = ipOf(req)
   try {
-    const updated = await db.$transaction(async (tx) => {
+    const { updated, activation } = await db.$transaction(async (tx) => {
+      let activation: Awaited<ReturnType<typeof issueAccountActivation>> | null = null
       // Klaim baris lebih dulu: dua pemutus yang menekan bersamaan tidak menerapkan dua kali.
       const claimed = await tx.accessRequest.updateMany({
         where: { id, status: 'DIAJUKAN' },
@@ -252,6 +261,9 @@ export async function PATCH(req: NextRequest) {
           where: { id },
           data: { targetUserId: r.targetUserId, expiresAt: r.expiresAt, appliedData: r.appliedData },
         })
+        if (row.type === 'AKUN_BARU' && r.targetUserId) {
+          activation = await issueAccountActivation(tx, user, r.targetUserId, ip)
+        }
       }
       await tx.auditLog.create({
         data: {
@@ -264,7 +276,7 @@ export async function PATCH(req: NextRequest) {
           ip,
         },
       })
-      return tx.accessRequest.findUniqueOrThrow({ where: { id }, include })
+      return { updated: await tx.accessRequest.findUniqueOrThrow({ where: { id }, include }), activation }
     })
 
     const [item] = await toItems([updated], user)
@@ -287,9 +299,10 @@ export async function PATCH(req: NextRequest) {
         })
         .catch(() => null)
     }
-    return NextResponse.json({ ok: true, item })
+    return NextResponse.json({ ok: true, item, activation }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     if (err instanceof AccessRefusal) return NextResponse.json({ error: err.message }, { status: err.status })
+    if (row.type === 'AKUN_BARU' && decision === 'approve') return activationError(err)
     return NextResponse.json({ error: clientErrorMessage(err, 'Gagal memutuskan permintaan. Coba lagi.', 'access-requests PATCH') }, { status: 422 })
   }
 }

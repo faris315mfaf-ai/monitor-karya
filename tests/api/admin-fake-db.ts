@@ -58,6 +58,7 @@ const MANY: Record<string, [string, string]> = {
 }
 
 const DEFAULTS: Record<string, Row> = {
+  authSession: { revokedAt: null },
   user: { isActive: true, mustChangePassword: false, divisionId: null, scopeEntityId: null, passwordHash: null, avatarColor: null, title: null, phone: null },
   entity: { isActive: true, parentId: null },
   division: { isActive: true, headUserId: null },

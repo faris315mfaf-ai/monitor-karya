@@ -9,17 +9,19 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ApprovalItem, Button, Card, EmptyNote, ErrorNote, Skeleton, StatusBadge } from '@/components/mk'
+import { ApprovalItem, Button, Card, EmptyNote, ErrorNote, Sheet, Skeleton, StatusBadge } from '@/components/mk'
 import { formatDateShort, formatRelative } from '@/lib/format'
 import { initialsOf } from '@/lib/accounts'
 import { canManageAccounts } from '@/lib/rbac'
 import { useApp } from '@/components/app-provider'
 import type { AccessRequestItem, AccessRequestList } from '@/lib/admin-meta'
+import { ActivationHandoff, ActivationPanel, type ActivationHandoffData } from '@/components/companies/activation-handoff'
 import { AccessRequestSheet } from './access-request-sheet'
 import { send, useFetch } from './use-fetch'
 
 const UNDO_MS = 5000
 type Decision = 'approve' | 'reject'
+type ActivationRequestItem = AccessRequestItem & { canActivate?: boolean }
 
 export function AccessRequestsCard({
   className,
@@ -35,10 +37,12 @@ export function AccessRequestsCard({
 }) {
   const { user } = useApp()
   const canRequest = canManageAccounts(user.role)
-  const { data, setData, error, loading, reload } = useFetch<AccessRequestList>('/api/access-requests?status=all')
+  const { data, setData, error, loading, reload } = useFetch<Omit<AccessRequestList, 'items'> & { items: ActivationRequestItem[] }>('/api/access-requests?status=all')
   const [local, setLocal] = useState<Record<string, Decision>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [activation, setActivation] = useState<ActivationHandoffData | null>(null)
+  const [activationTarget, setActivationTarget] = useState<string | null>(null)
   const timers = useRef(new Map<string, { t: ReturnType<typeof setTimeout>; run: () => void }>())
 
   const pending = (data?.items ?? []).filter((i) => i.status === 'DIAJUKAN' && !local[i.id])
@@ -75,6 +79,7 @@ export function AccessRequestsCard({
     }
     const updated = r.json.item as AccessRequestItem | undefined
     if (updated) setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === updated.id ? updated : x)), pending: Math.max(0, d.pending - 1) } : d))
+    if (!keepalive && r.json.activation) setActivation(r.json.activation as ActivationHandoffData)
     onChanged?.()
   }
 
@@ -164,11 +169,17 @@ export function AccessRequestsCard({
                   </div>
                 </div>
                 <StatusLabel item={item} />
+                {item.canActivate && item.target && (
+                  <Button size="sm" variant="secondary" onClick={() => setActivationTarget(item.target!.id)}>Kelola aktivasi</Button>
+                )}
               </div>
             )
           })}
         </div>
       )}
+      <Sheet open={!!activation || !!activationTarget} onOpenChange={(open) => { if (!open) { setActivation(null); setActivationTarget(null) } }} title="Aktivasi akun" backLabel="Permintaan akses">
+        {activation ? <ActivationHandoff value={activation} /> : activationTarget ? <ActivationPanel key={activationTarget} userId={activationTarget} showUnavailable /> : null}
+      </Sheet>
       {canRequest && (
         <AccessRequestSheet
           open={creating}

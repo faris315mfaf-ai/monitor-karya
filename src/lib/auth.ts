@@ -1,9 +1,11 @@
 import 'server-only'
 
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { ensureTemporaryAccessCurrent } from '@/lib/access-requests'
 import { MUST_CHANGE_PASSWORD_CODE, MUST_CHANGE_PASSWORD_MESSAGE, blocksForPasswordChange } from '@/lib/password-policy'
 
 const IS_PROD = process.env.NODE_ENV === 'production'
@@ -33,7 +35,7 @@ export { hashPassword, verifyPassword } from '@/lib/password'
 // Session tokens — compact HMAC-signed payload, no external dependency
 // ------------------------------------------------------------------
 
-type SessionPayload = { sub: string; iat: number; exp: number; pv?: string }
+type SessionPayload = { sub: string; iat: number; exp: number; pv?: string; sid: string }
 
 function sign(data: string): string {
   return createHmac('sha256', authSecret()).update(data).digest('base64url')
@@ -55,6 +57,7 @@ export function createSessionToken(
 ): { token: string; maxAge: number } {
   const now = Math.floor(Date.now() / 1000)
   const payload: SessionPayload = {
+    sid: randomUUID(),
     sub: userId,
     iat: now,
     exp: now + SESSION_MAX_AGE_SECONDS,
@@ -70,8 +73,15 @@ function cookieOptions(maxAge: number) {
 }
 
 /** Memasang cookie sesi baru pada respons (masuk, ganti kata sandi sendiri). */
-export function setSessionCookie(res: NextResponse, userId: string, passwordHash: string | null) {
+export async function setSessionCookie(
+  res: NextResponse,
+  userId: string,
+  passwordHash: string | null,
+  sessionDb: Pick<Prisma.TransactionClient, 'authSession'> = db,
+) {
   const { token, maxAge } = createSessionToken(userId, passwordHash)
+  const payload = readSessionToken(token)!
+  await sessionDb.authSession.create({ data: { id: payload.sid, userId, expiresAt: new Date(payload.exp * 1000) } })
   res.cookies.set(SESSION_COOKIE, token, cookieOptions(maxAge))
 }
 
@@ -82,8 +92,8 @@ export function clearSessionCookie(res: NextResponse) {
 
 export function readSessionToken(token: string | undefined): SessionPayload | null {
   if (!token) return null
-  const [body, signature] = token.split('.')
-  if (!body || !signature) return null
+  const [body, signature, extra] = token.split('.')
+  if (!body || !signature || extra !== undefined) return null
 
   if (token.length > 2048) return null
   const expectedSig = Buffer.from(sign(body))
@@ -93,9 +103,9 @@ export function readSessionToken(token: string | undefined): SessionPayload | nu
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as SessionPayload
     if (!payload.sub || typeof payload.sub !== 'string' || typeof payload.exp !== 'number') return null
-    if (payload.exp * 1000 < Date.now()) return null
-    // Token tanpa sidik kata sandi berasal dari sebelum 6 Okt 2026: masuk ulang.
-    if (typeof payload.pv !== 'string') return null
+    if (payload.exp * 1000 <= Date.now()) return null
+    // Token lama tanpa sidik atau id sesi wajib masuk ulang.
+    if (typeof payload.pv !== 'string' || typeof payload.sid !== 'string' || !payload.sid) return null
     return payload
   } catch {
     return null
@@ -181,6 +191,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   let user
   try {
+    const session = await db.authSession.findFirst({
+      where: { id: payload.sid, userId: payload.sub, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    })
+    if (!session) return null
+    await ensureTemporaryAccessCurrent(payload.sub)
     user = await readSessionRow(payload.sub)
   } catch (err) {
     // With the database unreachable nobody can be signed in. Treating that as

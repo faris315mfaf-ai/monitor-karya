@@ -57,27 +57,30 @@ export async function POST(req: NextRequest) {
   resetRate(failKey)
 
   const newHash = await hashPassword(newPassword)
-  await db.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: user.id },
-      // Hanya disentuh bila memang true, supaya rute tetap jalan sebelum migrasi 0018 diterapkan.
-      data: { passwordHash: newHash, ...(user.mustChangePassword ? { mustChangePassword: false } : {}) },
-    })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'CHANGE_OWN_PASSWORD',
-        targetType: 'USER',
-        targetId: user.id,
-        afterData: user.mustChangePassword ? JSON.stringify({ forced: true }) : null,
-        ip: clientIp(req),
-      },
-    })
-  })
-
-  // Sesi lain (perangkat lain) tidak berlaku lagi karena sidik kata sandinya
-  // berubah; sesi ini diberi token baru supaya pemiliknya tetap masuk.
   const res = NextResponse.json({ ok: true })
-  setSessionCookie(res, user.id, newHash)
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        // Hanya disentuh bila memang true, supaya rute tetap jalan sebelum migrasi 0018 diterapkan.
+        data: { passwordHash: newHash, ...(user.mustChangePassword ? { mustChangePassword: false } : {}) },
+      })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'CHANGE_OWN_PASSWORD',
+          targetType: 'USER',
+          targetId: user.id,
+          afterData: user.mustChangePassword ? JSON.stringify({ forced: true }) : null,
+          ip: clientIp(req),
+        },
+      })
+      // Simpan sandi, audit, dan sesi pengganti dalam satu transaksi.
+      // Cookie hanya dikirim jika seluruh transaksi berhasil.
+      await setSessionCookie(res, user.id, newHash, tx)
+    })
+  } catch {
+    return NextResponse.json({ error: 'Kata sandi belum berhasil diubah. Coba lagi.' }, { status: 503 })
+  }
   return res
 }
