@@ -1,5 +1,9 @@
 # Status lanjutan Codex — hasil lokal terbaru
 
+7 Oktober 2026: lima prioritas lanjutan diimplementasikan — tenggat akses, sesi server, aktivasi akun, dependensi, dan kesiapan operasional. [Laporan CX16–20](codex/CX16-20-HASIL.md). Migrasi 0026–0028 diterapkan hanya pada DB Docker lokal setelah cadangan; 97 akun, 40 proyek, 741 laporan tetap ada. Pengguna perlu masuk ulang.
+
+Riwayat gerbang sebelumnya:
+
 6 Oktober 2026: **63 berkas/1.192 tes**, Prisma validate, TypeScript, ESLint,
 diff check, build/runtime Docker lolos; E2E lokal 14 pemeriksaan lolos.
 [Hasil CX 8–15](codex/CX8–15-HASIL.md). Backlog global B/C/D dan operator

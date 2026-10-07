@@ -100,3 +100,30 @@ npx prisma generate && npx tsc --noEmit && npx vitest run
 
 Konflik di berkas yang diklaim Claude: utamakan versi Claude, lalu terapkan ulang
 perubahan Codex di atasnya.
+
+## Putaran 7 Oktober 2026 — lima prioritas lanjutan
+
+Diotorisasi pemilik: kerjakan seluruh poin 1–5 hasil pemeriksaan. Worktree Codex saja.
+- Parent: kedaluwarsa akses, sesi server, auth/login/logout/password, schema sesi/migrasi 0027, integrasi dan laporan.
+- Agen aktivasi: alur aktivasi akun (lib/account-activation, API auth/activate dan companies activation, halaman aktivasi, UI akun), migrasi 0028; usulan schema ke parent.
+- Agen dependensi: package.json/package-lock.json dan bukti audit dependensi.
+- Agen operasional: readiness/health, status cron/backup/storage, deploy scripts, tes terkait, migrasi 0029 bila perlu; usulan schema ke parent.
+Tidak menyentuh DB server/Supabase. DB persisten 54339 tidak direset/seed. Tidak push/PR/deploy.
+
+Penutupan parent: 69 berkas/1.356 tes aplikasi, 794 tes dependensi Node22/Linux,
+TypeScript, ESLint src, diff check, build Next/Docker lulus. Tujuh skenario
+HTTP/PostgreSQL image final dan tiga probe gangguan lokal lulus. DB persisten
+dicadangkan lalu menerima migrasi tambahan 0026–0028; 97/40/741 akun/proyek/laporan
+tetap ada. Server3200 berjalan. Zona implementasi agen dilepas; parent menyimpan
+commit dan dokumentasi. [Laporan](codex/CX16-20-HASIL.md).
+
+## Klaim CX18 — aktivasi akun (7 Oktober 2026)
+
+Agen aktivasi memiliki `src/lib/account-activation.ts`, API `auth/activate` dan
+`companies/users/activation`, `login/aktivasi`, integrasi `api/access-requests/route.ts`,
+UI `admin/access-requests-card.tsx`, `companies/account-sheet.tsx` dan komponen aktivasi baru,
+`tests/cx/activation.test.ts`, `docs/codex/CX18-AKTIVASI.md`. Schema/migrasi dan auth/sesi tetap parent.
+Kontrak model untuk parent ada di laporan CX18; tool pesan ke native ancestor tidak tersedia.
+
+### Perbaikan P1 PIC sementara — 7 Oktober 2026
+Parent menyerahkan `src/lib/access-requests.ts` kepada agen aktivasi untuk snapshot/pemulihan PIC sementara dan `tests/cx/temporary-pic.test.ts`; mock access-revert bila perlu. Kunci User, penjagaan hibah bertumpuk, dan klaim expiry atomik dipertahankan. Parent menangani atomisitas kata sandi/sesi (P2). Tanpa commit.

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T09:30:09.580Z",
+  "results": [
+    "PASS logout mencabut token; sesi perangkat kedua tetap sah",
+    "PASS insert sesi PostgreSQL gagal: perubahan sandi dan audit rollback; sesi lama tetap sah",
+    "PASS akses kedaluwarsa dipulihkan tanpa cron; dua request menghasilkan satu audit",
+    "PASS audit PostgreSQL gagal tetap mencabut sesi",
+    "PASS PIC sementara: PIC asal dan kepala divisi dipulihkan saat tenggat",
+    "PASS persetujuan → tautan aktivasi → reissue → konsumsi satu kali bersamaan → login",
+    "PASS readiness DB, proteksi status privat, heartbeat tiga cron, laporan backup anti-replay"
+  ],
+  "productionStorage": "NOT_TESTED"
+}
