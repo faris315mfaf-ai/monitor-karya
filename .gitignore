@@ -47,6 +47,9 @@ local-*
 dev.log
 dev.out.log
 test
+# Suite sumber pihak ketiga yang wajib ikut verifikasi CI.
+!vendor/braces/test/
+!vendor/braces/test/**
 prompt
 
 server.log

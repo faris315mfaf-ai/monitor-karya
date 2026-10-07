@@ -15,3 +15,8 @@
 # Lockfile: tampilkan utuh, jangan diringkas saat diff.
 package-lock.json -diff
 bun.lock -diff
+
+# Pertahankan format upstream untuk reproduksi tarball; spasi konteks patch wajib ada.
+vendor/braces/depth-guard.patch -whitespace
+vendor/braces/package/** -whitespace
+vendor/braces/test/upstream/** -whitespace
