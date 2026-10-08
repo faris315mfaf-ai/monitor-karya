@@ -120,6 +120,7 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/09-PROMPT-ZCODE.md](../../docs/zcode/09-PROMPT-ZCODE.md)
 - [docs/zcode/10-INVENTARIS-KODE.md](../../docs/zcode/10-INVENTARIS-KODE.md)
 - [docs/zcode/11-INDEKS-DOKUMEN.md](../../docs/zcode/11-INDEKS-DOKUMEN.md)
+- [docs/zcode/DEPLOY-RENCANA-VPS-BIZNET.md](../../docs/zcode/DEPLOY-RENCANA-VPS-BIZNET.md)
 - [docs/zcode/HASIL-DRIFT-MIGRASI.md](../../docs/zcode/HASIL-DRIFT-MIGRASI.md)
 - [docs/zcode/HASIL-GLADI-RILIS.md](../../docs/zcode/HASIL-GLADI-RILIS.md)
 - [docs/zcode/HASIL-TAHAP1.md](../../docs/zcode/HASIL-TAHAP1.md)
@@ -135,4 +136,4 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 120 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri tambahan menyusul penerimaan, hasil Tahap 1, gladi rilis, dan kerangka swarm Tahap 2 Zcode — lihat [PENERIMAAN](PENERIMAAN-ZCODE.md), [HASIL-TAHAP1](HASIL-TAHAP1.md), [HASIL-GLADI-RILIS](HASIL-GLADI-RILIS.md), [HASIL-TAHAP2-SWARM](HASIL-TAHAP2-SWARM.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 121 dokumen Markdown dalam cakupan ini (120 setelah swarm Tahap 2; bertambah [DEPLOY-RENCANA-VPS-BIZNET](DEPLOY-RENCANA-VPS-BIZNET.md) saat persiapan deploy Biznet, 8 Okt 2026). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
