@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Avatar, Button, Card, DivisionBar, EmptyNote, ErrorNote, Heatmap, SegmentedControl, Sheet, Skeleton, StatTile, StatusBadge,
+  useIsPhone, useIsTablet,
   type Status,
 } from '@/components/mk'
 import { initialsOf } from '@/lib/accounts'
@@ -55,6 +56,15 @@ const dayLabel = (iso: string) =>
   new Intl.DateTimeFormat('id-ID', { weekday: 'short', timeZone: WIB }).format(new Date(iso)).replace('.', '') +
   ' ' +
   new Intl.DateTimeFormat('id-ID', { day: 'numeric', timeZone: WIB }).format(new Date(iso))
+
+/** Label 3 huruf peta panas di ponsel (04-admin-pt.md §Ponsel). Dua kata atau
+ * lebih memakai inisial (Sumber Daya Manusia → SDM); satu kata memakai tiga
+ * huruf pertamanya (Teknologi → Tek). Nama lengkap tetap di caption kartu. */
+export function short3(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return words.slice(0, 3).map((w) => (w[0] ?? '').toUpperCase()).join('')
+  return (words[0] ?? name).slice(0, 3)
+}
 
 type RemindBody = { userId: string } | { divisionId: string } | { all: true }
 type RemindResult = { ok: boolean; people: { userId: string; name: string; remindedAt: string }[]; error: string | null; remindedAt?: string | null }
@@ -95,6 +105,7 @@ export function ComplianceCard({ state, className, onChanged }: { state: Complia
   const [mode, setMode] = useState<'harian' | 'mingguan'>('harian')
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const tablet = useIsTablet()
   const data = state.data
   const divisions = (data?.divisions ?? []).filter((d) => d.expected > 0 || d.onLeave > 0 || mode === 'mingguan')
   const weeklyIn = (data?.divisions ?? []).filter((d) => d.weekly.state !== 'BELUM').length
@@ -143,6 +154,65 @@ export function ComplianceCard({ state, className, onChanged }: { state: Complia
         <EmptyNote icon="tim">
           {data.divisions.length === 0 ? 'Belum ada divisi aktif.' : 'Belum ada PIC proyek aktif di divisi mana pun. Atur divisi proyek atau anggota divisi di sheet akun.'}
         </EmptyNote>
+      ) : tablet ? (
+        // Tablet 600–1023: kartu divisi 2 kolom (04-admin-pt.md §Tablet):
+        // nama, kepala divisi, lencana, DivisionBar, Detail + Ingatkan.
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            {divisions.map((d) => {
+              const daily = dailyBadge(d, data.locked)
+              const weekly = weeklyBadge(d, data.week.handoverPassed)
+              const remindable = d.missing.filter((m) => !m.remindedAt).length
+              return (
+                <div key={d.id} className="mk-card mk-card--inset flex flex-col gap-3 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className="t-body-strong block truncate">Divisi {d.name}</span>
+                      <span className="t-footnote text-ink-2 block truncate">
+                        {d.head?.name ?? 'Kepala divisi belum ditetapkan'}
+                      </span>
+                    </span>
+                    <StatusBadge status={mode === 'harian' ? daily.status : weekly.status} size="sm">
+                      {mode === 'harian' ? daily.text : weekly.text}
+                    </StatusBadge>
+                  </div>
+                  {mode === 'harian' ? (
+                    <DivisionBar
+                      name="Kepatuhan harian"
+                      value={pctOf(d.reported, d.expected)}
+                      tone={divisionTone(d.name)}
+                      meta={`${d.reported} dari ${d.expected} orang`}
+                    />
+                  ) : (
+                    <span className="t-footnote text-ink-2">Tenggat Kamis 17.00 WIB</span>
+                  )}
+                  <div className="mt-auto flex items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setOpenId(d.id)}>
+                      Detail
+                    </Button>
+                    {mode === 'harian' && data.canRemind && !data.locked && remindable > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon="notifikasi"
+                        disabled={busy !== null}
+                        onClick={() => remindDivision(d)}
+                        aria-label={`Ingatkan ${remindable} orang Divisi ${d.name}`}
+                      >
+                        {busy === d.id ? 'Mengirim…' : 'Ingatkan'}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {mode === 'harian' && data.totals.unassigned > 0 ? (
+            <p className="t-footnote text-ink-2 mt-3">
+              {data.totals.unassigned} PIC belum masuk divisi mana pun. Atur divisinya di sheet akun atau di formulir proyek.
+            </p>
+          ) : null}
+        </>
       ) : (
         <>
           <ul className="mk-desk-queue">
@@ -204,11 +274,18 @@ export function ComplianceCard({ state, className, onChanged }: { state: Complia
 
 export function ComplianceHeatmapCard({ state, className }: { state: ComplianceState; className?: string }) {
   const data = state.data
+  const phone = useIsPhone()
   const rows = (data?.divisions ?? []).filter((d) => d.history.some((v) => v !== null))
   const avg = (() => {
     const all = rows.flatMap((d) => d.history.filter((v): v is number => v !== null))
     return all.length ? Math.round(all.reduce((a, b) => a + b, 0) / all.length) : null
   })()
+  // Di ponsel barisnya 3 huruf; nama lengkap tiap divisi (urut baris) dibawa
+  // caption agar tabel pembaca layar tetap menyebut nama penuh.
+  const rowLabels = rows.map((d) => (phone ? short3(d.name) : d.name))
+  const caption = data
+    ? `Kepatuhan laporan harian per divisi${phone && rows.length ? `: ${rows.map((d) => d.name).join(', ')}` : ''}, ${data.days.length} hari kerja terakhir`
+    : 'Peta panas kepatuhan'
   return (
     <Card
       className={className}
@@ -225,13 +302,13 @@ export function ComplianceHeatmapCard({ state, className }: { state: ComplianceS
         <div className="mk-scroll-x">
           <Heatmap
             data={rows.map((d) => d.history)}
-            rowLabels={rows.map((d) => d.name)}
+            rowLabels={rowLabels}
             colLabels={data.days.map(dayLabel)}
             max={100}
             cell={30}
             tone="hijau"
             formatCell={(v) => `${v}%`}
-            label={`Kepatuhan laporan harian per divisi, ${data.days.length} hari kerja terakhir`}
+            label={caption}
             lowLabel="0%"
             highLabel="100%"
             showLegend

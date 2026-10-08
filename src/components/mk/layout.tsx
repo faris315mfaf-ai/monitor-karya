@@ -183,3 +183,15 @@ function subscribePhone(cb: () => void) {
 export function useIsPhone() {
   return React.useSyncExternalStore(subscribePhone, () => window.matchMedia(phoneQuery).matches, () => false)
 }
+
+const tabletQuery = '(min-width: 600px) and (max-width: 1023px)'
+function subscribeTablet(cb: () => void) {
+  const mq = window.matchMedia(tabletQuery)
+  mq.addEventListener('change', cb)
+  return () => mq.removeEventListener('change', cb)
+}
+
+/** True di tablet (600–1023px); ponsel dan desktop selalu false. */
+export function useIsTablet() {
+  return React.useSyncExternalStore(subscribeTablet, () => window.matchMedia(tabletQuery).matches, () => false)
+}
