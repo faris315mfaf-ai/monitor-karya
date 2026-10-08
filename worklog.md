@@ -97,3 +97,23 @@ Stage Summary:
 - Files: prisma/schema.prisma (19 models), scripts/seed.ts, src/app/page.tsx, src/app/layout.tsx, src/app/globals.css, 14 API routes under src/app/api/, 7 view components, ~15 shared components, lib/{constants,format,wib}.ts, hooks/use-fetch.ts.
 - Dev server: running on port 3000, all routes return 200, lint passes with zero errors.
 - Verified features: dashboard with real KPIs, treemap drill-down, role-based scoping (admin PT sees scoped subtree), tablet-optimized horizontal tabs, mobile bottom tab bar, sticky footer, glassmorphic UI throughout.
+
+---
+Task ID: T2-D1
+Agent: Documentation Subagent (Tahap 2 swarm)
+Date: 8 October 2026 (Asia/Jakarta)
+Task: Prepare the documentation structure for the 13-agent Tahap 2 release swarm
+
+Work Log:
+- Read AGENTS.md, docs/zcode/README.md, docs/zcode/09-PROMPT-ZCODE.md, docs/zcode/HASIL-TAHAP1.md, docs/zcode/HASIL-GLADI-RILIS.md, and docs/SISA-PEKERJAAN.md for context and reporting style.
+- Checked git state read-only (branch codex/kerja, HEAD 6327963); observed uncommitted changes from other running agents (prisma/schema.prisma, prisma/migrations/0029_auditlog_operational_index/) and left them untouched.
+- Created docs/zcode/laporan-swarm/README.md: index table of all 13 agents (T2-B1..T2-B10, T2-S1/S2, T2-D1) with per-agent report file names (T2-B1-LAPORAN.md etc.) and initial status "berjalan", plus reporting conventions: one file per agent written only by that agent; reports cover changed files, tests actually run, and limitations; no secrets, credentials, or tokens anywhere.
+- Created docs/zcode/HASIL-TAHAP2-SWARM.md as the consolidation skeleton: goal; 13-agent topology; shared parent constraints (no commit, no Supabase/production, separate ports, discrete file zones, integration by parent); test port map (B1 54361; B4 54329+9002+3231; B8 54362; B7 pre-release ranges 5460-5469 and 3240-3249); per-agent result sections left as "menunggu laporan" placeholders; parent-run integration and gates section; operator remainder section.
+- Added both new documents to docs/zcode/11-INDEKS-DOKUMEN.md at alphabetical positions and updated the count line from 118 to 120; no other index lines changed.
+- Appended this entry. Per task constraints: no code files touched, no tests/builds run, no external network, no git add/commit/push, no ports or containers touched.
+
+Stage Summary:
+- Files created: docs/zcode/laporan-swarm/README.md, docs/zcode/HASIL-TAHAP2-SWARM.md.
+- Files modified: docs/zcode/11-INDEKS-DOKUMEN.md (two entries plus count), worklog.md (this entry).
+- Agent report files (T2-B1-LAPORAN.md through T2-B10-LAPORAN.md, T2-S1-LAPORAN.md, T2-S2-LAPORAN.md) were intentionally NOT created; each agent writes its own report into docs/zcode/laporan-swarm/.
+- Nothing committed; no secrets recorded.

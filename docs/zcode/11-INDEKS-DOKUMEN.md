@@ -123,14 +123,16 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/HASIL-DRIFT-MIGRASI.md](../../docs/zcode/HASIL-DRIFT-MIGRASI.md)
 - [docs/zcode/HASIL-GLADI-RILIS.md](../../docs/zcode/HASIL-GLADI-RILIS.md)
 - [docs/zcode/HASIL-TAHAP1.md](../../docs/zcode/HASIL-TAHAP1.md)
+- [docs/zcode/HASIL-TAHAP2-SWARM.md](../../docs/zcode/HASIL-TAHAP2-SWARM.md)
 - [docs/zcode/PENERIMAAN-ZCODE.md](../../docs/zcode/PENERIMAAN-ZCODE.md)
 - [docs/zcode/PROSEDUR-A2-08.md](../../docs/zcode/PROSEDUR-A2-08.md)
 - [docs/zcode/README.md](../../docs/zcode/README.md)
 - [docs/zcode/USULAN-GRAFIK-TERTUNDA.md](../../docs/zcode/USULAN-GRAFIK-TERTUNDA.md)
+- [docs/zcode/laporan-swarm/README.md](../../docs/zcode/laporan-swarm/README.md)
 - [download/README.md](../../download/README.md)
 - [upload/prompt_fullstack_monitoring_bisnis_1.md](../../upload/prompt_fullstack_monitoring_bisnis_1.md)
 - [vendor/braces/README.md](../../vendor/braces/README.md)
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 118 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri tambahan menyusul penerimaan, hasil Tahap 1, dan gladi rilis Zcode — lihat [PENERIMAAN](PENERIMAAN-ZCODE.md), [HASIL-TAHAP1](HASIL-TAHAP1.md), [HASIL-GLADI-RILIS](HASIL-GLADI-RILIS.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 120 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri tambahan menyusul penerimaan, hasil Tahap 1, gladi rilis, dan kerangka swarm Tahap 2 Zcode — lihat [PENERIMAAN](PENERIMAAN-ZCODE.md), [HASIL-TAHAP1](HASIL-TAHAP1.md), [HASIL-GLADI-RILIS](HASIL-GLADI-RILIS.md), [HASIL-TAHAP2-SWARM](HASIL-TAHAP2-SWARM.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.

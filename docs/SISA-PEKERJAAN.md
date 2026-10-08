@@ -2,9 +2,12 @@
 
 Diperbarui 8 Oktober 2026 (Zcode): tiga butir desain Admin/Auditor dan kajian
 drift migrasi tuntas (bagian C), bukti pada [HASIL-TAHAP1](zcode/HASIL-TAHAP1.md);
-gladi rilis Docker dari nol lulus pada commit yang sama,
-[HASIL-GLADI-RILIS](zcode/HASIL-GLADI-RILIS.md); prosedur verifikasi Storage
-nyata (A2-08) siap untuk pemilik: [PROSEDUR-A2-08](zcode/PROSEDUR-A2-08.md).
+gladi rilis Docker dari nol lulus, [HASIL-GLADI-RILIS](zcode/HASIL-GLADI-RILIS.md);
+swarm 13 agen (10 bangun + 2 keamanan + 1 dokumentasi) menutup QA otomatis
+(keyboard Sheet, kontras, invariant warna), verifikasi S3 lokal, migrasi 0029,
+audit otorisasi 74 route, dan dua tambalan keamanan — [HASIL-TAHAP2-SWARM](zcode/HASIL-TAHAP2-SWARM.md)
+(laporan per agen di [laporan-swarm/](zcode/laporan-swarm/README.md)).
+Prosedur verifikasi Storage nyata (A2-08) siap untuk pemilik: [PROSEDUR-A2-08](zcode/PROSEDUR-A2-08.md).
 7 Oktober 2026: lima prioritas akses, sesi, aktivasi, dependensi,
 dan kesiapan layanan telah diimplementasikan. [Hasil CX16–20](codex/CX16-20-HASIL.md).
 
@@ -122,6 +125,9 @@ Ketiga grafik/API tetap menunggu keputusan; memo di atas bukan keputusan.
 - [x] Pencabutan token saat keluar memakai AuthSession; sandi dan sesi pengganti atomik. [CX16–17](codex/CX16-17-AKSES-SESI.md).
 - [x] Dependensi terdampak ditangani: sharp 0.35.5, override deepmerge-ts 8.0.2 khusus Prisma, dan patch lokal braces dengan sumber/lisensi/regresi. Audit npm 0, tetapi patch lokal bukan rilis upstream resmi; pemelihara tetap perlu memantau advisory. [CX19 dan batas pembuktiannya](codex/CX19-DEPENDENSI.md). Pemindaian 8 Okt 2026: registry masih berhenti di 3.0.3 dan rentang advisori `<=3.0.3` — belum ada rilis resmi yang bisa menggantikan patch.
 - [x] Drift skema/migrasi lama tuntas: 40 indeks hasil 0003–0012 kini dideklarasikan `schema.prisma` (14 dengan `map:` nama non-baku); `migrate diff` dari seluruh riwayat ke skema bersih; klaim `approvalChain` NOT NULL terbukti sudah selaras sejak 0012. Tanpa migrasi baru. [HASIL-DRIFT](zcode/HASIL-DRIFT-MIGRASI.md).
+- [x] Indeks komposit AuditLog `(targetType, targetId, at)` untuk kueri heartbeat CX20 sebagai migrasi 0029, teruji DB sekali pakai. [T2-B1](zcode/HASIL-TAHAP2-SWARM.md).
+- [x] Keamanan hasil audit swarm: CSRF `POST /api` persis ditutup; derivasi IP pembatas laju kini entri XFF terakhir (anti bucket-spraying); tabrakan pembuatan laporan bersamaan P2002 → 409 coba-lagi; 85+ tes keamanan baru; audit otorisasi 134 handler tanpa celah kritis. [T2-S1/S2](zcode/HASIL-TAHAP2-SWARM.md).
+- [ ] Jalur tunnel hook backup vs `AllowTcpForwarding no` (harden.sh) — keputusan operator; 7 usulan diff opsional skrip deploy di laporan T2-B8.
 
 ### Infrastruktur yang selesai dalam CX, bukan backlog aktif
 
@@ -143,8 +149,9 @@ Audit otomatis F4-A/F4-B memeriksa semua layar di 1440, 834, 390 px, 720 px (pen
 - [ ] Pembaca layar sungguhan (VoiceOver, TalkBack).
 - [ ] Safari/iOS dan perangkat sentuh sungguhan.
 - [ ] Zoom peramban 200% sungguhan (yang diuji emulasi 720 px).
-- [ ] Simulasi buta warna untuk StatusBadge, Heatmap, dan AreaChart.
-- [ ] Sheet di balik tombol yang mengubah data (Kirim, Setujui, Hapus) dilewati uji keyboard otomatis.
+- [ ] Simulasi buta warna sungguhan untuk StatusBadge, Heatmap, dan AreaChart.
+- [x] Uji keyboard/fokus Sheet yang mengubah data (Kirim, Setujui, Hapus) — tertutup otomatis 8 Okt 2026 (48 tes; siklus Tab primitif Radix dan pembaca layar tetap butuh perangkat). [T2-B2](zcode/HASIL-TAHAP2-SWARM.md).
+- [x] Kontras token kedua tema × enam aksen dan invariant warna+ikon+kata — 24/24 dan 4/4 lolos, skrip berulang `scripts/qa/audit-warna.mjs`. [T2-B3](zcode/HASIL-TAHAP2-SWARM.md).
 
 ---
 
