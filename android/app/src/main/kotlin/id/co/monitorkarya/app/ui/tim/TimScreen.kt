@@ -27,6 +27,7 @@ import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkCard
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
 import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSheet
@@ -75,7 +76,8 @@ fun TimScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = MkSpacing.space5, vertical = MkSpacing.space4),
+            // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
         verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
     ) {
         if (offline) MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
@@ -103,8 +105,14 @@ private fun IsiTim(
         EmptyNote(teks = "Anda belum tercatat sebagai kepala divisi mana pun.")
         return
     }
-    MkCard(modifier = modifier.fillMaxWidth()) {
-        KolomKepalaKartu(tim)
+    // Satu wadah penuh lebar: kepala kartu dan baris anggota dipisah garis 1px
+    // (keputusan pemilik 9 Okt 2026), bukan kartu berjarak.
+    MkCard(modifier = modifier.fillMaxWidth(), padding = MkSpacing.space1) {
+        KolomKepalaKartu(
+            tim = tim,
+            modifier = Modifier.padding(horizontal = MkSpacing.space4, vertical = MkSpacing.space3),
+        )
+        MkDivider()
         if (tim.anggota.isEmpty()) {
             EmptyNote(
                 teks = "Belum ada anggota di divisi ${tim.divisiNama.orEmpty()}. " +
@@ -114,13 +122,14 @@ private fun IsiTim(
             val urut = tim.anggota.sortedWith(
                 compareBy({ URUT_LAPORAN[it.laporan] ?: 0 }, { it.nama }),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space1)) {
-                urut.forEach { anggota ->
+            Column {
+                urut.forEachIndexed { index, anggota ->
                     BarisAnggota(
                         anggota = anggota,
                         terkunci = tim.terkunci,
                         onBuka = { onPilih(anggota.id) },
                     )
+                    if (index < urut.lastIndex) MkDivider()
                 }
             }
         }
@@ -130,8 +139,8 @@ private fun IsiTim(
 
 /** Judul + subjudul kartu: "x dari y masuk · tenggat 17.00". */
 @Composable
-private fun KolomKepalaKartu(tim: TimUi) {
-    Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space1)) {
+private fun KolomKepalaKartu(tim: TimUi, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MkSpacing.space1)) {
         Text(
             text = "Laporan harian tim",
             style = MkTypography.title3,

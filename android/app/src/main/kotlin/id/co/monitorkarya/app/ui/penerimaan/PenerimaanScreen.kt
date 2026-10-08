@@ -40,6 +40,7 @@ import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
 import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkOpsi
@@ -48,6 +49,7 @@ import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.StatusBadge
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
 import id.co.monitorkarya.designsystem.theme.MKTheme
+import id.co.monitorkarya.designsystem.theme.MkSpacing
 import id.co.monitorkarya.designsystem.theme.MkTypography
 import id.co.monitorkarya.designsystem.theme.PreviewGanda
 
@@ -116,7 +118,8 @@ fun PenerimaanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (offline) {
@@ -189,18 +192,23 @@ private fun IsiPenerimaan(
     }
 
     val antrean = if (jenisTab == JenisLaporan.HARIAN) meja.harian else meja.mingguan
+    // Batas antar bagian: kontrol layar vs antrean — garis 1px.
+    MkDivider()
     if (antrean.isEmpty()) {
         EmptyNote(
             teks = if (jenisTab == JenisLaporan.HARIAN) "Tidak ada proyek aktif." else "Tidak ada divisi.",
         )
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            antrean.forEach { item ->
+        // Satu wadah penuh lebar; antar baris cukup garis 1px, tanpa jarak
+        // tambahan (keputusan pemilik 9 Okt 2026).
+        Column {
+            antrean.forEachIndexed { index, item ->
                 BarisAntrean(
                     item = item,
                     sedang = aktivitas.sedangTerusSemua || aktivitas.sedangTerusSatu == item.idLaporan,
                     aksi = aksi,
                 )
+                if (index < antrean.lastIndex) MkDivider()
             }
         }
     }

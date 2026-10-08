@@ -66,6 +66,7 @@ import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkCard
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
 import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkOpsi
@@ -151,7 +152,8 @@ fun KepatuhanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = MkSpacing.space5, vertical = MkSpacing.space4),
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
         ) {
             if (offline) {
@@ -222,6 +224,9 @@ private fun IsiKepatuhan(
         meja.divisi.filter { it.wajib > 0 || it.cuti > 0 }
     }
 
+    // Batas antar bagian: kontrol layar vs daftar divisi — garis 1px.
+    MkDivider()
+
     if (divisiTampil.isEmpty()) {
         MkCard(modifier = Modifier.fillMaxWidth()) {
             EmptyNote(
@@ -233,8 +238,10 @@ private fun IsiKepatuhan(
             )
         }
     } else {
+        // Satu wadah penuh lebar; antar divisi cukup garis 1px (keputusan
+        // pemilik 9 Okt 2026).
         MkCard(modifier = Modifier.fillMaxWidth(), padding = MkSpacing.space1) {
-            divisiTampil.forEach { d ->
+            divisiTampil.forEachIndexed { index, d ->
                 BarisDivisi(
                     divisi = d,
                     meja = meja,
@@ -256,6 +263,7 @@ private fun IsiKepatuhan(
                         onIngatkanDivisi = onIngatkanDivisi,
                     )
                 }
+                if (index < divisiTampil.lastIndex) MkDivider()
             }
         }
     }
@@ -431,7 +439,7 @@ private fun DetailDivisi(
                 color = warna.ink2,
             )
         } else {
-            divisi.belumLapor.forEach { orang ->
+            divisi.belumLapor.forEachIndexed { index, orang ->
                 MkListRow(
                     judul = orang.nama,
                     sub = subjudulOrang(orang),
@@ -460,6 +468,8 @@ private fun DetailDivisi(
                         }
                     },
                 )
+                // Antar baris cukup garis 1px (keputusan pemilik 9 Okt 2026).
+                if (index < divisi.belumLapor.lastIndex) MkDivider()
             }
             if (mode == ModeKepatuhan.HARIAN && divisi.belumDiingatkan > 0) {
                 MkButton(

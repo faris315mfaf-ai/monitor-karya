@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -59,6 +59,7 @@ import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkChip
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkField
 import id.co.monitorkarya.designsystem.components.MkIconBtn
 import id.co.monitorkarya.designsystem.components.MkListRow
@@ -176,7 +177,8 @@ fun AkunScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = MkSpacing.space5),
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                .padding(horizontal = MkSpacing.space3),
             verticalArrangement = Arrangement.spacedBy(MkSpacing.space3),
         ) {
             if (tampilan.offline) {
@@ -190,6 +192,8 @@ fun AkunScreen(
                 placeholder = "Nama, username, email, atau jabatan",
             )
             BarisChip(tampilan, aksi.setSaring)
+            // Batas antar bagian: saringan vs daftar — garis 1px.
+            MkDivider()
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (val state = tampilan.state) {
                     AkunUiState.Memuat -> KolomKerangka()
@@ -298,11 +302,13 @@ private fun DaftarAkun(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(MkSpacing.space1),
         contentPadding = PaddingValues(bottom = MkSpacing.space16),
     ) {
-        items(baris, key = { it.id }) { akun ->
+        // Satu wadah penuh lebar; antar baris cukup garis 1px (keputusan
+        // pemilik 9 Okt 2026).
+        itemsIndexed(baris, key = { _, akun -> akun.id }) { index, akun ->
             BarisAkun(akun = akun, bisaKelola = meja.bisaKelola(akun), onClick = { onPilih(akun.id) })
+            if (index < baris.lastIndex) MkDivider()
         }
     }
 }

@@ -73,6 +73,7 @@ import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkCard
 import id.co.monitorkarya.designsystem.components.MkChip
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSheet
 import id.co.monitorkarya.designsystem.components.MkSkeleton
@@ -162,7 +163,8 @@ fun LaporanHarianScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = MkSpacing.space5, vertical = MkSpacing.space4),
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
         ) {
             if (offline) {
@@ -198,7 +200,8 @@ fun LaporanHarianScreen(
                 contentColor = aksen.on,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(MkSpacing.space5),
+                    // Sejajar dengan margin samping layar 12dp.
+                    .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space5),
             )
         }
         SnackbarHost(
@@ -247,14 +250,19 @@ private fun IsiLaporan(
         teksTenggat(desk)?.let { Text(text = it, style = MkTypography.footnote, color = warna.ink2) }
     }
 
+    // Batas antar bagian: kepala layar vs daftar — garis 1px.
+    MkDivider()
+
     if (desk.proyek.isEmpty()) {
         MkCard(modifier = Modifier.fillMaxWidth()) {
             EmptyNote(teks = "Belum ada proyek yang ditugaskan kepada Anda. Hubungi Admin PT untuk penugasan proyek.")
         }
     } else {
         MkCard(modifier = Modifier.fillMaxWidth(), padding = MkSpacing.space1) {
-            desk.proyek.forEach { proyek ->
+            // Antar baris cukup garis 1px, tanpa jarak/kartu tambahan.
+            desk.proyek.forEachIndexed { index, proyek ->
                 MkListRow(proyek = proyek, desk = desk, onBuka = { onPilih(proyek.id) })
+                if (index < desk.proyek.lastIndex) MkDivider()
             }
         }
     }

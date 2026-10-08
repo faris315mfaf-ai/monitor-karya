@@ -23,6 +23,7 @@ import id.co.monitorkarya.app.ui.penerimaan.PenerimaanScreen
 import id.co.monitorkarya.app.ui.penerimaan.PenerimaanViewModel
 import id.co.monitorkarya.designsystem.components.MkOpsi
 import id.co.monitorkarya.designsystem.components.MkSegmentedControl
+import id.co.monitorkarya.designsystem.theme.MkSpacing
 
 @Composable
 fun MejaAdminScreen(
@@ -32,10 +33,12 @@ fun MejaAdminScreen(
     modifier: Modifier = Modifier,
 ) {
     var pilihan by rememberSaveable { mutableStateOf("penerimaan") }
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = id.co.monitorkarya.designsystem.theme.MkSpacing.space4),
-    ) {
+    // Tanpa padding horizontal di sini — tiap layar anak memasang margin
+    // layarnya sendiri (12dp) supaya tidak ada jarak ganda (keputusan pemilik
+    // 9 Okt 2026: jarak kiri-kanan layar jangan terlalu lebar).
+    Column(modifier = modifier.fillMaxSize()) {
         MkSegmentedControl(
+            modifier = Modifier.padding(horizontal = MkSpacing.space3),
             options = listOf(
                 MkOpsi("penerimaan", "Penerimaan"),
                 MkOpsi("kepatuhan", "Kepatuhan"),

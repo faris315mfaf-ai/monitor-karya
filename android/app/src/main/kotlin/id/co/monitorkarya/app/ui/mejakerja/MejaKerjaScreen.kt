@@ -32,6 +32,7 @@ import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkCard
+import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.MkStatus
@@ -104,7 +105,8 @@ fun MejaKerjaScreen(
 private fun KerangkaMejaKerja(modifier: Modifier = Modifier) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = MkSpacing.space5, vertical = MkSpacing.space4),
+        // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+        contentPadding = PaddingValues(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
         verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
     ) {
         item {
@@ -135,7 +137,8 @@ private fun IsiMejaKerja(
     val warna = LocalMkColors.current
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = MkSpacing.space5, vertical = MkSpacing.space4),
+        // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+        contentPadding = PaddingValues(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
         verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
     ) {
         // Kepala: judul layar (t-title-3) + satu kalimat jawaban + ringkasan.
@@ -158,6 +161,8 @@ private fun IsiMejaKerja(
             item {
                 KartuRingkas(data = data, onBukaLaporan = onBukaLaporan, onBukaTugas = onBukaTugas)
             }
+            // Batas antar bagian: kartu ringkasan vs daftar — garis 1px.
+            item { MkDivider() }
         }
         when {
             data.proyekKosong -> item {
@@ -186,8 +191,10 @@ private fun IsiMejaKerja(
                         padding = MkSpacing.space1,
                     ) {
                         Column {
-                            data.tugas.forEach { tugas ->
+                            // Antar baris cukup garis 1px, tanpa jarak/kartu tambahan.
+                            data.tugas.forEachIndexed { index, tugas ->
                                 BarisTugas(tugas = tugas, onBuka = onBukaTugas)
+                                if (index < data.tugas.lastIndex) MkDivider()
                             }
                         }
                     }

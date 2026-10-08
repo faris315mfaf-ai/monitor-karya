@@ -200,9 +200,10 @@ fun MingguanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
                 .padding(
-                    start = MkSpacing.space5,
-                    end = MkSpacing.space5,
+                    start = MkSpacing.space3,
+                    end = MkSpacing.space3,
                     top = MkSpacing.space4,
                     // Ruang untuk footer sticky + FAB agar isi terakhir tak tertutup.
                     bottom = if (tampilFooter) 148.dp else if (bisaTulisPapan) 96.dp else MkSpacing.space6,
@@ -250,7 +251,7 @@ fun MingguanScreen(
                 onClick = onBukaTambah,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = MkSpacing.space5, bottom = if (tampilFooter) 92.dp else MkSpacing.space5),
+                    .padding(end = MkSpacing.space3, bottom = if (tampilFooter) 92.dp else MkSpacing.space5),
             )
         }
 
@@ -708,7 +709,8 @@ private fun FooterMingguan(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = MkSpacing.space5, vertical = MkSpacing.space3),
+                // Sejajar dengan margin samping layar 12dp.
+                .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space3),
             horizontalArrangement = Arrangement.spacedBy(MkSpacing.space3),
         ) {
             when {

@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import id.co.monitorkarya.designsystem.components.EmptyNote
+import id.co.monitorkarya.designsystem.theme.MkSpacing
 
 /** [label] = nama modul/tab, mis. "Proyek", "Persetujuan", "Kehadiran". */
 @Composable
@@ -17,7 +17,8 @@ fun PlaceholderTabScreen(label: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space8),
         contentAlignment = Alignment.Center,
     ) {
         EmptyNote(teks = "Modul $label menyusul di fase berikutnya.")

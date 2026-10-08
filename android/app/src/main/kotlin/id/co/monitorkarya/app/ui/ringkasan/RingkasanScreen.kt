@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
+import id.co.monitorkarya.designsystem.theme.MkSpacing
 import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkSkeleton
@@ -56,7 +57,8 @@ fun RingkasanScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (offline) MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)

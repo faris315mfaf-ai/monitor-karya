@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
+import id.co.monitorkarya.designsystem.theme.MkSpacing
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
@@ -81,7 +82,8 @@ fun LoginScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp)
+            // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space8)
             .widthIn(max = 480.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
