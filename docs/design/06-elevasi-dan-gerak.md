@@ -53,3 +53,23 @@
 - Tidak ada animasi berulang, berkedip, berdenyut, atau spinner di kartu. Pemuatan memakai blok kerangka `fill-1` berbentuk isi asli.
 - Tidak ada parallax, efek mengetik, atau konfeti.
 - Dengan `prefers-reduced-motion: reduce`, matikan transform dan transisi nilai; perubahan terjadi seketika (sudah diatur di `bundle.css`).
+
+## Interaksi kursor — hover dan tekan (8 Oktober 2026)
+
+Umpan balik kursor seragam untuk semua elemen interaktif, memperluas pola yang
+sudah ada (`mk-btn:active`, kartu `mk-cocard`): **150 ms (`--dur-fast`) dengan
+`--ease-standard`, tanpa pantulan** — cepat terasa, halus mendarat.
+
+| Keluarga | Hover (kursor presisi) | Tekan (`:active`) |
+| --- | --- | --- |
+| Tombol pil / ikon | membesar `scale(1.02)` / latar `--fill-1` | `scale(0.97)` (bawaan) |
+| Chip, segmented, swatch | latar lebih dalam (bawaan) | `scale(0.96)` |
+| Tab, menu navigasi | latar (bawaan) | `scale(0.97)` |
+| Baris & kartu ketuk (proyek, akun, antrean, perusahaan) | kartu interaktif terangkat 2px + `--shadow-float` | `scale(0.99)` |
+| Batang grafik (tombol saring) | (bawaan) | `scale(0.98)` |
+| Sel peta panas | hanya bertambah terang (brightness) — data tidak berpindah | — |
+
+Gerak hanya aktif dengan `@media (hover: hover) and (pointer: fine)` dan
+`prefers-reduced-motion: no-preference`; pada reduced motion tekanan tetap
+terasa lewat perubahan warna/bayangan tanpa gerak. Implementasi:
+`src/app/mk-modules.css` seksi "Interaksi kursor".

@@ -579,3 +579,67 @@
   .mk-desk-ring__arc { transition: none; }
 }
 .mk-desk-pop { display: inline-flex; }
+
+/* ---------- Interaksi kursor: hover dan tekan (8 Okt 2026) ----------
+   Memperluas kosakata yang sudah ada (mk-btn:active, pola mk-cocard) ke
+   seluruh elemen interaktif: umpan balik cepat 150 ms, tanpa pantulan.
+   Gerak hanya dengan gerbang hover-fine + reduced-motion; perubahan warna
+   tetap sah di kedua mode. */
+
+/* Tombol dan ikon: hover mengembang sekejap, tekan mengecil. */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .mk-btn:not(:disabled):hover { transform: scale(1.02); }
+  .mk-iconbtn:not(:disabled):hover { background: var(--fill-1); }
+}
+.mk-chip:active, .mk-seg__btn:active, .mk-swatch:active { transform: scale(0.96); }
+
+/* Navigasi: tab dan menu mengecil halus saat ditekan. */
+.mk-tab:active, .mk-nav:active { transform: scale(0.97); }
+
+/* Baris dan kartu yang bisa diketuk: tekan 0.99 seperti mk-cocard. */
+.mk-prow:active, .mk-attn:active, .mk-userrow:active, .mk-audit-act:active,
+.mk-desk-queue__hit:active, .mk-donut__item:active, .mk-tl__row:active { transform: scale(0.99); }
+button.mk-card--inset:active { transform: scale(0.99); }
+
+/* Batang grafik yang menjadi tombol saring: kolomnya mengecil sekejap. */
+.mk-bars__col:active { transform: scale(0.98); }
+
+/* Kartu interaktif (mis. kartu perusahaan) terangkat ringan saat kursor
+   mendekat — pola yang sama dengan mk-cocard. */
+@media (hover: hover) and (pointer: fine) {
+  button.mk-card--inset { transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard), background-color var(--dur-base) var(--ease-standard); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  button.mk-card--inset:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+}
+
+/* Sel data (peta panas) hanya bertambah terang saat disorot; data tidak
+   berpindah tempat. */
+@media (hover: hover) and (pointer: fine) {
+  .mk-heat__cell { transition: filter var(--dur-fast) var(--ease-standard); }
+  .mk-heat__cell:hover { filter: brightness(1.15) saturate(1.05); }
+}
+
+/* Transisi transform untuk keluarga di atas (warna tetap memakai durasi dasar). */
+@media (prefers-reduced-motion: no-preference) {
+  .mk-chip { transition: background-color var(--dur-base) var(--ease-standard), color var(--dur-base), transform var(--dur-fast) var(--ease-standard); }
+  .mk-seg__btn { transition: background-color var(--dur-base) var(--ease-standard), color var(--dur-base), box-shadow var(--dur-base), transform var(--dur-fast) var(--ease-standard); }
+  .mk-tab { transition: transform var(--dur-fast) var(--ease-standard); }
+  .mk-nav { transition: background-color var(--dur-base) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+  .mk-prow { transition: background-color var(--dur-base) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+  .mk-attn { transition: background-color var(--dur-base) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+  .mk-userrow, .mk-audit-act { transition: background-color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+  .mk-desk-queue__hit { transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+  .mk-donut__item { transition: background-color var(--dur-base), transform var(--dur-fast) var(--ease-standard); }
+  .mk-tl__row { transition: background-color var(--dur-base), transform var(--dur-fast) var(--ease-standard); }
+  .mk-bars__col { transition: transform var(--dur-fast) var(--ease-standard); }
+}
+
+/* Reduced motion: tekanan tetap terasa lewat warna/bayangan, tanpa gerak. */
+@media (prefers-reduced-motion: reduce) {
+  .mk-chip:active, .mk-seg__btn:active, .mk-swatch:active, .mk-tab:active, .mk-nav:active,
+  .mk-prow:active, .mk-attn:active, .mk-userrow:active, .mk-audit-act:active,
+  .mk-desk-queue__hit:active, .mk-donut__item:active, .mk-tl__row:active,
+  .mk-bars__col:active, button.mk-card--inset:active { transform: none; }
+  button.mk-card--inset:hover { transform: none; }
+}
