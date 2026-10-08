@@ -61,8 +61,9 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   ],
 
   // Hands the division's weekly achievement to Admin PT by Thursday and signs
-  // it off before it locks.
-  KEPALA_DIVISI: ['weekly:input', 'weekly:approve', 'escalation:raise'],
+  // it off before it locks. May also propose a project (owner decision
+  // 9 Okt 2026: anyone can create a project), approved by Admin PT, then Direktur.
+  KEPALA_DIVISI: ['weekly:input', 'weekly:approve', 'escalation:raise', 'project:propose'],
 
   // Enters everything on schedule, checks each item passes validation, and
   // forwards both streams upward.
@@ -115,7 +116,9 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Receives reports, decides escalated issues, watches compliance.
   MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:propose', 'project:approve', 'audit:read', 'group:read'],
 
-  AUDITOR: ['audit:read', 'group:read'],
+  // Telaah data & jejak audit (baca). Boleh mengajukan proyek sejak keputusan
+  // pemilik 9 Okt 2026 — rantainya ADMIN_PT lalu DIREKTUR_ENTITAS, sama seperti PIC.
+  AUDITOR: ['audit:read', 'group:read', 'project:propose'],
 }
 
 /**
@@ -125,7 +128,9 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   // Meja kerja (5 Okt 2026): tempat mengerjakan hari ini — tugas & laporan (PIC),
   // capaian minggu berjalan & serah terima (Kepala Divisi).
   PIC_PROYEK: ['dashboard', 'work-desk', 'daily-input', 'projects'],
-  KEPALA_DIVISI: ['dashboard', 'work-desk', 'weekly-input', 'divisions'],
+  // Tab Proyek untuk kepala divisi menyertakan tombol "Ajukan proyek"
+  // (keputusan pemilik 9 Okt 2026: semua peran boleh mengajukan).
+  KEPALA_DIVISI: ['dashboard', 'work-desk', 'weekly-input', 'divisions', 'projects'],
   // Sejak 8 Sep 2026 isian mingguan divisi untuk Admin PT ada di Modul Divisi
   // (pilih entitas & divisi), jadi tab Capaian Mingguan tidak lagi dobel.
   ADMIN_PT: ['dashboard', 'work-desk', 'inbox', 'daily-input', 'projects', 'divisions', 'escalations'],
@@ -184,13 +189,17 @@ export function compactTabsFor(role: string): NavTabId[] | null {
  * Rantai persetujuan proyek menurut peran pengaju (11 Sep 2026): tiap pengaju
  * butuh tanda tangan jenjang di atasnya, berurutan. Pengaju di puncak
  * (Manajemen, Direksi Holding, TI, Super Admin) langsung aktif tanpa rantai.
+ * Keputusan pemilik 9 Okt 2026: semua peran boleh mengajukan — kepala divisi
+ * dan auditor mengikuti pola PIC (ADMIN_PT, lalu DIREKTUR_ENTITAS).
  */
 export const PROJECT_APPROVAL_CHAIN: Record<string, string[]> = {
   PIC_PROYEK: ['ADMIN_PT', 'DIREKTUR_ENTITAS'],
+  KEPALA_DIVISI: ['ADMIN_PT', 'DIREKTUR_ENTITAS'],
   ADMIN_PT: ['DIREKTUR_ENTITAS'],
   DIREKTUR_ENTITAS: ['MANAJEMEN'],
   DIREKTUR_SDM_GA: [],
   MANAJEMEN: [],
+  AUDITOR: ['ADMIN_PT', 'DIREKTUR_ENTITAS'],
   TI: [],
   SUPERADMIN: [],
 }

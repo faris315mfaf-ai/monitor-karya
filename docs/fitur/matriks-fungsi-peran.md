@@ -34,6 +34,8 @@ Keputusan pemilik produk:
 - Laporan harian yang sudah diteruskan ke holding **dibekukan**. Ubah, kirim ulang, atau hapus dijawab 409 "Laporan sudah diteruskan ke holding. Ajukan buka kunci untuk mengubahnya." Perubahan hanya lewat buka kunci yang disetujui dan dijalankan.
 - Tenggat mingguan: **serah Kamis 17.00 WIB, kunci Jumat 17.00 WIB**.
 - Berkas bukti tetap di **Supabase Storage**. Deploy sasaran adalah **VPS** (`deploy/`); cron dijadwalkan lewat [`deploy/app-vps/cron.sh`](../../deploy/app-vps/cron.sh).
+- **Pengajuan proyek dibuka untuk semua peran** (9 Okt 2026): siapapun bisa membuat proyek. Kepala divisi dan auditor mengikuti pola PIC — rantai persetujuan Admin PT → Direktur Entitas; peran lain sudah punya jalurnya masing-masing.
+- **Kehadiran dihapus dari Ringkasan Manajemen** (9 Okt 2026): ubin KPI dan kartu "Kehadiran hari ini" tidak lagi tampil; KPI kedua menjadi "Tepat waktu 30 hari". Kehadiran tim kepala divisi tidak berubah.
 
 Keputusan bawaan orkestrator (belum dikonfirmasi pemilik produk, bisa diubah):
 
@@ -78,7 +80,7 @@ Tab: Ringkasan ("Hari ini") · Meja kerja · Laporan harian · Proyek. Rincian: 
 
 ## Kepala divisi (`KEPALA_DIVISI`)
 
-Tab: Ringkasan · Meja kerja · Capaian mingguan · Divisi. Rincian: [peran-kadiv.md](peran-kadiv.md).
+Tab: Ringkasan · Meja kerja · Capaian mingguan · Divisi · Proyek. Rincian: [peran-kadiv.md](peran-kadiv.md).
 
 | Fungsi | Layar | Endpoint | Status | Fase |
 | --- | --- | --- | --- | --- |
@@ -100,6 +102,7 @@ Tab: Ringkasan · Meja kerja · Capaian mingguan · Divisi. Rincian: [peran-kadi
 | Ajukan persetujuan materi, anggaran, atau cuti | `work-desk` | `/api/approval-requests` (0023) | selesai | 2 |
 | Ajukan permintaan akses untuk anggota tim | `work-desk` (`RequestAccessCard`) | `POST /api/access-requests` (0016) | selesai | 2 |
 | Ajukan eskalasi dari item mingguan | `weekly-input` | `POST /api/escalations/actions { raise }` | selesai | 0 |
+| Ajukan proyek (rantai Admin PT → Direktur), ajukan ulang | `projects` | `POST /api/projects`, `PATCH /api/projects { resubmit }` | selesai: dibuka untuk semua peran 9 Okt 2026 | 0 → 2 |
 | Arsip laporan mingguan divisi | `divisions` | `GET /api/weekly-reports` | selesai | 0 |
 | Aktivitas tim | `dashboard` | `GET /api/kadiv/team` (dari `AuditLog`) | selesai | 0 |
 | Pencarian ⌘K (divisi dan tim sendiri) | kerangka | `GET /api/search` | selesai | 2 |
@@ -180,7 +183,7 @@ Tab: Ringkasan · Proyek · Divisi · Persetujuan · Eskalasi · Entitas · Log 
 | Fungsi | Layar | Endpoint | Status | Fase |
 | --- | --- | --- | --- | --- |
 | Ringkasan: periode Minggu/Bulan/Kuartal, cincin, 4 KPI, output 8 periode, perlu perhatian, kinerja divisi | `dashboard` | `GET /api/ringkasan` | selesai | 0 → 2 |
-| Kehadiran hari ini dengan kategori Terlambat | `dashboard` | `GET /api/ringkasan` (0015, 0023) | selesai | 2 |
+| Kehadiran hari ini dengan kategori Terlambat | `dashboard` | `GET /api/ringkasan` (0015, 0023) | dihapus dari Ringkasan Manajemen atas keputusan pemilik 9 Okt 2026 | 2 |
 | Persetujuan: materi/anggaran/cuti, pengajuan proyek, usulan tenggat (Urungkan) | `approvals`, `dashboard` | `/api/approval-requests`, `/api/projects/approve`, `/api/deadline-proposals`, `/api/undo` | selesai | 2 |
 | Putuskan eskalasi (Urungkan) | `escalations` | `POST /api/escalations/actions { decide }` | selesai | 0 → 2 |
 | Laporan mingguan divisi: baca, tanggapi, tandai dibaca | `dashboard` | `/api/ringkasan/laporan-dibaca`, `/api/weekly-comments` | selesai | 0 → 2 |
@@ -219,7 +222,8 @@ Tab: Ringkasan · Proyek · Divisi · Entitas · Log aktivitas. Rincian: [peran-
 | Klik eskalasi membuka Log aktivitas | `dashboard` | — | selesai | 2 |
 | Log aktivitas: saringan peran dan rentang tanggal, Sheet saringan di ponsel, Unduh CSV | `audit` | `GET /api/audit-logs`, `GET /api/audit-logs/export` | sebagian: di ponsel memakai baris kartu log, belum `ActivityItem` | 2 |
 | Baca Proyek, Divisi, Entitas | `projects`, `divisions`, `entities` | `/api/projects`, `/api/weekly-reports`, `/api/entities` | selesai | 0 |
-| Hanya-baca di semua API | — | `tests/api/auditor-readonly.test.ts` memeriksa setiap route tulis | selesai | 2 |
+| Ajukan proyek (rantai Admin PT → Direktur), ajukan ulang | `projects` | `POST /api/projects`, `PATCH /api/projects { resubmit }` | selesai: dibuka untuk semua peran 9 Okt 2026 | 0 → 2 |
+| Hanya-baca di semua API kecuali pengajuan proyek | — | `tests/api/auditor-readonly.test.ts` memeriksa setiap route tulis | selesai: pengecualian satu-satunya `POST /api/projects` (keputusan pemilik 9 Okt 2026); permintaan akses dan route tulis lain tetap ditolak | 2 |
 
 ## Super Admin (`SUPERADMIN`)
 

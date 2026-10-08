@@ -151,21 +151,14 @@ export function ManagementDashboard({ data }: { data: ManagementData; reload: ()
         kpis={
           <>
             <StatTile label="Rata-rata progres" value={`${avgProgress}%`} delta={data.progressComparison ? `${data.progressComparison.delta > 0 ? '+' : ''}${data.progressComparison.delta} poin vs akhir minggu lalu` : `${counts.done} proyek selesai`} tone="neutral" />
-            {data.attendance ? (
-              <StatTile
-                label="Kehadiran"
-                value={`${pct(data.attendance.present, data.attendance.people)}%`}
-                delta={`${formatNumber(data.attendance.present)} dari ${formatNumber(data.attendance.people)} orang`}
-                tone={pct(data.attendance.present, data.attendance.people) >= 85 ? 'on' : 'risk'}
-              />
-            ) : (
-              <StatTile
-                label="Tepat waktu 30 hari"
-                value={`${data.daily.onTime30Pct}%`}
-                delta={`${formatNumber(data.daily.onTime30)} dari ${formatNumber(data.daily.total30)} laporan`}
-                tone={data.daily.onTime30Pct >= 85 ? 'on' : 'risk'}
-              />
-            )}
+            {/* Kehadiran dihapus dari KPI atas keputusan pemilik 9 Okt 2026;
+                tepat waktu 30 hari menjadi KPI kedua yang tetap. */}
+            <StatTile
+              label="Tepat waktu 30 hari"
+              value={`${data.daily.onTime30Pct}%`}
+              delta={`${formatNumber(data.daily.onTime30)} dari ${formatNumber(data.daily.total30)} laporan`}
+              tone={data.daily.onTime30Pct >= 85 ? 'on' : 'risk'}
+            />
           </>
         }
       />
@@ -217,11 +210,7 @@ export function ManagementDashboard({ data }: { data: ManagementData; reload: ()
         )}
       </div>
 
-      {data.attendance ? (
-        <div className="mk-row">
-          <AttendanceCard {...data.attendance} late={data.attendance.late ?? 0} />
-        </div>
-      ) : null}
+      {/* Kartu "Kehadiran hari ini" dihapus atas keputusan pemilik 9 Okt 2026. */}
 
       {/* [F2-GRUP] panel khusus SDM GA / TI / Super Admin / Auditor */}
       <GroupRolePanel data={{ ...data, projects }} />
@@ -237,32 +226,5 @@ export function ManagementDashboard({ data }: { data: ManagementData; reload: ()
         onClose={() => setReport(null)}
       />
     </>
-  )
-}
-
-/** Kehadiran hari ini: angka besar + batang bertumpuk Hadir / Terlambat / Izin-cuti [F2-DIREKTUR]. */
-function AttendanceCard({ people, present, leave, late }: { people: number; present: number; leave: number; late: number }) {
-  const p = pct(present, people)
-  const onTime = Math.max(0, present - late)
-  return (
-    <Card className="is-narrow" title="Kehadiran hari ini" subtitle={`${formatNumber(people)} orang di cakupan Anda`}>
-      <div className="t-large-title tabular-nums">{p}%</div>
-      <div className="mt-3 mk-attbar" role="img" aria-label={`Hadir ${onTime}, terlambat ${late}, izin atau cuti ${leave}`}>
-        <span className="mk-bg--on" style={{ width: `${pct(onTime, people)}%` }} />
-        <span className="mk-bg--risk" style={{ width: `${pct(late, people)}%` }} />
-        <span className="mk-bg--info" style={{ width: `${pct(leave, people)}%` }} />
-      </div>
-      <div className="mt-3 flex flex-col gap-1 t-footnote text-ink-2">
-        <span className="flex items-center gap-2">
-          <span className="mk-dot mk-bg--on" aria-hidden /> Hadir {formatNumber(onTime)}
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="mk-dot mk-bg--risk" aria-hidden /> Terlambat {formatNumber(late)}
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="mk-dot mk-bg--info" aria-hidden /> Izin, sakit, atau cuti {formatNumber(leave)}
-        </span>
-      </div>
-    </Card>
   )
 }

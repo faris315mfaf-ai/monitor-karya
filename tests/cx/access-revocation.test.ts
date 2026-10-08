@@ -108,12 +108,25 @@ describe('pencabutan peran kepala divisi', () => {
 })
 
 describe('undo memakai hak sekarang', () => {
-  it.each(UNDO_ACTIONS)('Auditor ditolak untuk %s sebelum klaim tiket', async (action) => {
+  // RESUBMIT_PROJECT dibahas terpisah: sejak 9 Okt 2026 auditor boleh mengajukan
+  // proyek, jadi pengaju-auditor tetap boleh mengurungkan ajuan ulangnya
+  // sendiri (jalur pengaju didasarkan kepemilikan, bukan peran).
+  it.each(UNDO_ACTIONS.filter((a) => a !== 'RESUBMIT_PROJECT'))('Auditor ditolak untuk %s sebelum klaim tiket', async (action) => {
     db.undoToken.findUnique.mockResolvedValue(ticket(action))
     expect(await applyUndo(user('AUDITOR'), 'ticket-1', undefined, now)).toMatchObject({ ok: false, status: 403 })
     expect(db.$transaction).not.toHaveBeenCalled()
     expect(db.undoToken.updateMany).not.toHaveBeenCalled()
     expect(db.auditLog.create).not.toHaveBeenCalled()
+  })
+  it('Auditor pengaju boleh mengurungkan ajuan ulang proyeknya sendiri (keputusan 9 Okt 2026)', async () => {
+    db.undoToken.findUnique.mockResolvedValue(ticket('RESUBMIT_PROJECT'))
+    expect(await applyUndo(user('AUDITOR'), 'ticket-1', undefined, now)).toMatchObject({ ok: true, action: 'RESUBMIT_PROJECT' })
+  })
+  it('Auditor bukan pengaju tetap ditolak untuk RESUBMIT_PROJECT', async () => {
+    db.undoToken.findUnique.mockResolvedValue(ticket('RESUBMIT_PROJECT'))
+    db.project.findUnique.mockResolvedValue({ lifecycle: 'DIUSULKAN', updatedAt: now, approvals: [], proposedById: 'other-user' })
+    expect(await applyUndo(user('AUDITOR'), 'ticket-1', undefined, now)).toMatchObject({ ok: false, status: 403 })
+    expect(db.undoToken.updateMany).not.toHaveBeenCalled()
   })
   it.each([
     ['APPROVE_PROJECT', 'ADMIN_PT'], ['REJECT_PROJECT', 'ADMIN_PT'],

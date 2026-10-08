@@ -5,9 +5,13 @@ import { cronHealth, entityCompliance, groupPanelKind, isReadOnlyRole, workloadL
 /* [F2-GRUP] Aturan murni panel peran grup (src/lib/group-panel.ts). */
 
 describe('isReadOnlyRole', () => {
-  it('hanya Auditor yang hanya-baca di antara peran yang dikenal', () => {
+  it('sejak 9 Okt 2026 tidak ada peran dikenal yang hanya-baca (auditor mengajukan proyek)', () => {
+    // Keputusan pemilik 9 Okt 2026 membuka pengajuan proyek untuk semua peran,
+    // jadi AUDITOR kini punya satu kapabilitas tulis (project:propose).
+    // Pemeriksaan ini tetap ketat: bila ada peran lain yang tanpa disengaja
+    // hanya menyisakan kapabilitas baca, ia muncul di sini.
     const readOnly = Object.keys(ROLE_CAPABILITIES).filter(isReadOnlyRole)
-    expect(readOnly).toEqual(['AUDITOR'])
+    expect(readOnly).toEqual([])
   })
   it('peran tak dikenal dianggap hanya-baca', () => {
     expect(isReadOnlyRole('PERAN_BARU')).toBe(true)

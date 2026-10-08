@@ -27,6 +27,10 @@ const ALLOWED: Record<string, string> = {
   'profile:PATCH': 'mengubah profil sendiri',
   'profile/password:POST': 'mengganti kata sandi sendiri',
   'notifications:PATCH': 'menandai notifikasi sendiri sudah dibaca',
+  // Keputusan pemilik 9 Okt 2026: semua peran boleh mengajukan proyek,
+  // termasuk auditor (rantai ADMIN_PT → DIREKTUR_ENTITAS, seperti PIC).
+  // Satu-satunya tulisan auditor; route lain tetap harus menolaknya.
+  'projects:POST': 'pengajuan proyek dibuka untuk semua peran (9 Okt 2026)',
 }
 const METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 

@@ -135,8 +135,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  // [F2-GRUP] Auditor hanya membaca: tidak mengajukan perubahan akses.
-  if (isReadOnlyRole(user.role)) return NextResponse.json({ error: READ_ONLY_MESSAGE }, { status: 403 })
+  // [F2-GRUP] Auditor tidak mengajukan perubahan akses. Sejak 9 Okt 2026
+  // auditor boleh mengajukan proyek sehingga tidak lagi terdeteksi sebagai
+  // peran hanya-baca lewat kapabilitas; blokirnya dibuat eksplisit di sini.
+  if (user.role === 'AUDITOR' || isReadOnlyRole(user.role)) return NextResponse.json({ error: READ_ONLY_MESSAGE }, { status: 403 })
   const unscoped = refuseUnscoped(user)
   if (unscoped) return unscoped
 
