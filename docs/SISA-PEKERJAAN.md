@@ -1,7 +1,10 @@
 # Sisa pekerjaan — backlog global dan hasil CX
 
 Diperbarui 8 Oktober 2026 (Zcode): tiga butir desain Admin/Auditor dan kajian
-drift migrasi tuntas (bagian C), bukti pada [HASIL-TAHAP1](zcode/HASIL-TAHAP1.md).
+drift migrasi tuntas (bagian C), bukti pada [HASIL-TAHAP1](zcode/HASIL-TAHAP1.md);
+gladi rilis Docker dari nol lulus pada commit yang sama,
+[HASIL-GLADI-RILIS](zcode/HASIL-GLADI-RILIS.md); prosedur verifikasi Storage
+nyata (A2-08) siap untuk pemilik: [PROSEDUR-A2-08](zcode/PROSEDUR-A2-08.md).
 7 Oktober 2026: lima prioritas akses, sesi, aktivasi, dependensi,
 dan kesiapan layanan telah diimplementasikan. [Hasil CX16–20](codex/CX16-20-HASIL.md).
 
@@ -67,7 +70,7 @@ menutupnya. Data lama dan lingkungan produksi tetap memerlukan verifikasi operat
 
 ### A3. Rilis ke VPS
 
-Deploy sasaran adalah VPS ([`deploy/README.md`](../deploy/README.md)); berkas bukti tetap di Supabase Storage.
+Deploy sasaran adalah VPS ([`deploy/README.md`](../deploy/README.md)); berkas bukti tetap di Supabase Storage. Gladi lokal dari nol (build image, 25 migrasi bersih, health/login/ganti sandi/cron-401/pratinjau-404/CSP) lulus 8 Oktober 2026 — [HASIL-GLADI-RILIS](zcode/HASIL-GLADI-RILIS.md); yang tetap butuh operator: unggah Storage nyata (A2-08, [prosedur](zcode/PROSEDUR-A2-08.md)), Caddy/WireGuard, cron host, hook backup, dan restore offsite.
 
 - [ ] Isi `.env.production` di server: `AUTH_SECRET` ≥ 32 karakter acak, `CRON_SECRET` ≥ 16 karakter, `NEXT_PUBLIC_SUPABASE_URL` (saat build, supaya CSP mengizinkan gambar bukti), `SUPABASE_SERVICE_ROLE_KEY`, dan `APP_ORIGINS` bila aplikasi di balik proxy yang mengubah Host.
 - [ ] Pasang crontab host dari kepala [`deploy/app-vps/cron.sh`](../deploy/app-vps/cron.sh): `remind-divisions` (09.00 Sen–Jum), `reminder-rules` (tiap 30 menit sepanjang hari), `kpi-snapshot` (17.30 WIB). Pasang monitor/hook backup, OPS_HEALTH_SECRET, BACKUP_REPORT_SECRET, dan objek probe privat sesuai [CX20](codex/CX20-OPERASIONAL.md).
