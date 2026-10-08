@@ -4,6 +4,8 @@ Disusun Zcode, 8 Oktober 2026, atas permintaan pemilik. Dokumen ini memetakan **
 
 ## 1. Keputusan jalur (baca dulu)
 
+> **Keputusan pemilik 8 Okt 2026 (sore): klien Android dibuat NATIVE MURNI (Kotlin + Compose).** Rencana kerja lengkapnya ada di [RANCANGAN-ANDROID-NATIVE](RANCANGAN-ANDROID-NATIVE.md) (12–13 minggu efektif, 5 fase). Bagian TWA di bawah tetap berguna sebagai jembatan opsional selama native dibangun, dan fondasi PWA yang sudah masuk repo (manifest/ikon/luring) tetap dipakai pengguna web-terpasang.
+
 | Jalur | Bentuk | Usaha | Kapan cocok |
 |---|---|---|---|
 | **A. TWA (Trusted Web Activity) — disarankan** | Aplikasi Play Store asli (APK/AAB) yang memuat situs produksi Anda layar penuh tanpa bilah peramban; ikon launcher, splash screen, tombol kembali, pembaruan mengikuti web (tanpa review ulang) | Kecil (hari) | Aplikasi Anda = web app bisnis internal; ingin cepat hadir di Play Store |

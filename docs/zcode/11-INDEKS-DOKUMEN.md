@@ -130,6 +130,7 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/PENERIMAAN-ZCODE.md](../../docs/zcode/PENERIMAAN-ZCODE.md)
 - [docs/zcode/PERSIAPAN-ANDROID.md](../../docs/zcode/PERSIAPAN-ANDROID.md)
 - [docs/zcode/PROSEDUR-A2-08.md](../../docs/zcode/PROSEDUR-A2-08.md)
+- [docs/zcode/RANCANGAN-ANDROID-NATIVE.md](../../docs/zcode/RANCANGAN-ANDROID-NATIVE.md)
 - [docs/zcode/README.md](../../docs/zcode/README.md)
 - [docs/zcode/USULAN-GRAFIK-TERTUNDA.md](../../docs/zcode/USULAN-GRAFIK-TERTUNDA.md)
 - [docs/zcode/laporan-swarm/README.md](../../docs/zcode/laporan-swarm/README.md)
@@ -139,4 +140,4 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 124 entri terindeks di atas; total berkas Markdown tercatat Git 139 — selisih 15 adalah laporan per-agen `T2-*/T3-*` di [laporan-swarm/](laporan-swarm/README.md) yang diindeks folder-nya, bukan per berkas. Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 125 entri terindeks di atas; total berkas Markdown tercatat Git 139 — selisih 15 adalah laporan per-agen `T2-*/T3-*` di [laporan-swarm/](laporan-swarm/README.md) yang diindeks folder-nya, bukan per berkas. Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
