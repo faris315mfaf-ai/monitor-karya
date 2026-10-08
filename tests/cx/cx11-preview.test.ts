@@ -278,8 +278,45 @@ describe('CX11 pratinjau: API yang sama, state lintas peran', () => {
     expect(system.access.users).toHaveLength(companies.totals.users)
     expect(system.access.byRole.reduce((n: number, r: { count: number }) => n + r.count, 0)).toBe(companies.totals.users)
     const audit = (await request('AUDITOR', '/api/system/grup')).data
-    expect(audit.late.byEntity.map((e: { id: string }) => e.id).sort()).toEqual(['e1', 'e2', 'e3'])
+    // [T3-A4] PT. SPKD (e4) ikut terhitung sejak menjadi PT contoh drill-down Manajemen.
+    expect(audit.late.byEntity.map((e: { id: string }) => e.id).sort()).toEqual(['e1', 'e2', 'e3', 'e4'])
     expect(audit.audit.total).toBe((await request('AUDITOR', '/api/audit-logs')).data.total)
+  })
+
+  it('drill-down per perusahaan: proyek PT. SPKD, eskalasi proyek, dan arsip laporan harian per proyek', async () => {
+    const mgr = (await request('MANAJEMEN', '/api/ringkasan')).data
+    const spkd = mgr.projects.filter((p: { entityName: string }) => p.entityName === 'PT. SPKD')
+    expect(spkd.map((p: { name: string }) => p.name).sort()).toEqual(['MEDCREATIX', 'MEDPAY', 'SIM RS'])
+    expect(mgr.byEntity.map((e: { id: string }) => e.id)).toContain('e4')
+    // Eskalasi menempel pada beberapa proyek: campur DIAJUKAN/DITINJAU, tepat satu overdue.
+    const withEsc = mgr.projects.filter((p: { escalations?: unknown[] }) => (p.escalations ?? []).length > 0)
+    expect(withEsc.map((p: { name: string }) => p.name).sort()).toEqual(['MEDCREATIX', 'MEDPAY', 'Renovasi Gudang Cikarang', 'SIM RS'])
+    const escalations = withEsc.flatMap((p: { escalations: { status: string; overdue: boolean; ageDays: number; raisedAt: string }[] }) => p.escalations)
+    expect(new Set(escalations.map((e) => e.status))).toEqual(new Set(['DIAJUKAN', 'DITINJAU']))
+    expect(escalations.filter((e) => e.overdue)).toHaveLength(1)
+    for (const e of escalations) expect(e.ageDays).toBe(Math.floor((Date.now() - Date.parse(e.raisedAt)) / 86400000))
+    // Arsip laporan harian: filter per proyek + halaman, status beragam, satu terlambat.
+    const sim = (await request('MANAJEMEN', '/api/daily-reports?projectId=sp1&pageSize=14')).data
+    expect(sim).toMatchObject({ total: 12, page: 1, pageSize: 14 })
+    expect(sim.items).toHaveLength(12)
+    expect(sim.items.every((i: { projectId: string }) => i.projectId === 'sp1')).toBe(true)
+    expect(new Set(sim.items.map((i: { status: string }) => i.status))).toEqual(new Set(['SELESAI', 'ON_PROGRESS', 'TERKENDALA', 'TIDAK_ADA_PERUBAHAN']))
+    expect(sim.items.filter((i: { isLate: boolean }) => i.isLate)).toHaveLength(1)
+    expect(Date.parse(sim.items[0].reportDate)).toBeGreaterThan(Date.parse(sim.items.at(-1).reportDate))
+    expect(sim.items[0].project).toMatchObject({ id: 'sp1', name: 'SIM RS' })
+    const paged = (await request('MANAJEMEN', '/api/daily-reports?projectId=sp1&pageSize=5&page=2')).data
+    expect(paged.items).toHaveLength(5)
+    expect(paged.items[0].id).toBe(sim.items[5].id)
+    expect((await request('SUPERADMIN', '/api/daily-reports?projectId=sp2')).data.total).toBe(10)
+    // Parameter lama tetap berfungsi dan cakupan entitas tetap dijaga.
+    const done = (await request('MANAJEMEN', '/api/daily-reports?projectId=sp1&status=SELESAI')).data
+    expect(done.items.every((i: { status: string }) => i.status === 'SELESAI')).toBe(true)
+    expect(done.total).toBe(sim.items.filter((i: { status: string }) => i.status === 'SELESAI').length)
+    const found = (await request('MANAJEMEN', '/api/daily-reports?search=sim%20rs&pageSize=50')).data
+    expect(new Set(found.items.map((i: { projectId: string }) => i.projectId))).toEqual(new Set(['sp1']))
+    expect((await request('ADMIN_PT', '/api/daily-reports?projectId=sp1')).data.total).toBe(0)
+    const unlock = (await request('ADMIN_PT', '/api/daily-reports?for=unlock&pageSize=40')).data
+    expect(unlock.items.length).toBeGreaterThan(0)
   })
 
   it('butir mingguan dibuat, dipindah dan dihapus dengan total penerimaan yang sama', async () => {

@@ -3,6 +3,8 @@ export const entities = [
   { id: 'e1', name: 'PT Ratu Karya', code: 'RTK', region: 'Jakarta' },
   { id: 'e2', name: 'PT Sigma Daya', code: 'SGD', region: 'Bandung' },
   { id: 'e3', name: 'PT Bumi Lestari', code: 'BML', region: 'Surabaya' },
+  // [T3-A4] PT contoh drill-down Manajemen per perusahaan (SIM RS, MEDCREATIX, MEDPAY).
+  { id: 'e4', name: 'PT. SPKD', code: 'SPK', region: 'Semarang' },
 ]
 export const roleNames: Record<string, string> = {
   MANAJEMEN: 'Ris Hartanto', DIREKTUR_ENTITAS: 'Hadi Santoso', KEPALA_DIVISI: 'Andi Wijaya', ADMIN_PT: 'Maya Lestari',
@@ -42,6 +44,6 @@ export const visibleDivisions = (role: string) => divisions.filter((d) => role =
 export const visiblePeople = (role: string) => people.filter((p) => role === 'PIC_PROYEK' ? false : role === 'KEPALA_DIVISI' ? p.divisionId === 'dv-tek' : groupRoles.includes(role) || p.scopeEntityId === 'e1')
 // Cuplikan historis bulanan: identik di pohon, Sheet dan ringkasan PT.
 export const entityKpis = Object.fromEntries(entities.map((e, i) => [e.id, {
-  complianceScore: [91, 94, 66][i], onTimeDailyPct: [86, 94, 66][i], weeklyCompletenessPct: [83, 100, 50][i],
-  evidenceCompletenessPct: [90, 96, 75][i], highPriorityCompletionPct: [95, 86, 68][i], lateToday: [0, 0, 1][i], pendingReports: [2, 0, 2][i],
+  complianceScore: [91, 94, 66, 88][i], onTimeDailyPct: [86, 94, 66, 90][i], weeklyCompletenessPct: [83, 100, 50, 92][i],
+  evidenceCompletenessPct: [90, 96, 75, 93][i], highPriorityCompletionPct: [95, 86, 68, 91][i], lateToday: [0, 0, 1, 0][i], pendingReports: [2, 0, 2, 1][i],
 }]))

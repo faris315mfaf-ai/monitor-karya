@@ -11,6 +11,25 @@ import { canSeeTab } from '@/lib/rbac'
 import { ROLE_LABELS, type NavTabId } from '@/lib/constants'
 import type { ComplianceData } from '@/lib/admin-compliance'
 
+const DAY = 86400000
+const agoDays = (d: number) => new Date(Date.now() - d * DAY).toISOString()
+
+/**
+ * [T3-A4] Eskalasi terbuka yang menempel pada proyek ringkasan
+ * (projects[].escalations) untuk drill-down Manajemen per perusahaan.
+ * SLA peninjauan 7 hari, seperti daftar eskalasi (mock-proyek).
+ */
+type ProjectEscalation = { id: string; summary: string; needed: string; status: string; raisedAt: string; raisedBy: string; ageDays: number; overdue: boolean }
+const esc = (id: string, summary: string, needed: string, status: string, ageDays: number, raisedBy: string): ProjectEscalation => ({
+  id, summary, needed, status, raisedBy, ageDays, raisedAt: agoDays(ageDays), overdue: ageDays > 7,
+})
+const projectEscalations: Record<string, ProjectEscalation[]> = {
+  sp1: [esc('pe1', 'Sandbox bridging BPJS belum diaktifkan mitra integrasi', 'KEPUTUSAN', 'DIAJUKAN', 9, 'Tio Prasetyo')],
+  sp2: [esc('pe2', 'Kuota penyimpanan konten klinik perlu ditambah Rp 21 jt', 'ANGGARAN', 'DITINJAU', 3, 'Mira Anjani')],
+  sp3: [esc('pe3', 'Kunci lisensi payment gateway belum diterbitkan vendor', 'DUKUNGAN_LINTAS_FUNGSI', 'DIAJUKAN', 2, 'Galih Purnama')],
+  p5: [esc('pe4', 'Rak gudang blok B belum terpasang seluruhnya', 'KEPUTUSAN', 'DITINJAU', 5, 'Bayu Prakoso')],
+}
+
 export function summaryFor(role: string) {
   const projects = projectSnapshots(role).filter((p) => p.lifecycle === 'AKTIF')
   const outs = outputSnapshots(role)
@@ -43,7 +62,7 @@ export function summaryFor(role: string) {
   return {
     ...mock.ringkasan, week: week.isoWeek,
     scope: { entities: scopedEntities.length, divisions: divs.length, global: groupRoles.includes(role) },
-    projects: projects.map((p) => ({ ...p, outputsDone: outs.filter((o) => o.projectId === p.id && o.status === 'DITERIMA').length, outputsTotal: outs.filter((o) => o.projectId === p.id).length })),
+    projects: projects.map((p) => ({ ...p, outputsDone: outs.filter((o) => o.projectId === p.id && o.status === 'DITERIMA').length, outputsTotal: outs.filter((o) => o.projectId === p.id).length, escalations: projectEscalations[p.id] ?? [] })),
     counts,
     progressComparison: compareProgress(
       projects.map((p) => { const at = dailyProjects().find((d) => d.id === p.id)?.report?.submittedAt; return { id: p.id, progress: p.progress, submittedAt: at ? new Date(at) : null } }),

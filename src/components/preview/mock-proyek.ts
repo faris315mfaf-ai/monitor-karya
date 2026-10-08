@@ -137,6 +137,20 @@ const projects: Proj[] = [
     id: 'bm3', code: 'BML-PRJ-03', name: 'Digitalisasi Arsip', entityId: 'e3', phase: 'PERENCANAAN', picUserId: 'u-maya3', picName: 'Maya Anggraini',
     divisionId: 'dv-bm-huk', startDate: ago(5), targetEndDate: ahead(60), approvedByName: 'Sri Rahayu', fallbackReport: { status: 'ON_PROGRESS', progressPct: 22, days: 0, isLate: false },
   }),
+  // [T3-A4] PT. SPKD — tiga proyek contoh drill-down "Laporan per perusahaan"
+  // (dashboard Manajemen per perusahaan). Nama dipakai persisi oleh tes pratinjau.
+  base({
+    id: 'sp1', code: 'SPK-PRJ-01', name: 'SIM RS', entityId: 'e4', picName: 'Tio Prasetyo',
+    startDate: ago(80), targetEndDate: ahead(40), fallbackReport: { status: 'ON_PROGRESS', progressPct: 64, days: 1, isLate: false },
+  }),
+  base({
+    id: 'sp2', code: 'SPK-PRJ-02', name: 'MEDCREATIX', entityId: 'e4', picName: 'Mira Anjani',
+    startDate: ago(60), targetEndDate: ahead(12), fallbackReport: { status: 'TERKENDALA', progressPct: 46, days: 1, isLate: false },
+  }),
+  base({
+    id: 'sp3', code: 'SPK-PRJ-03', name: 'MEDPAY', entityId: 'e4', picName: 'Galih Purnama',
+    startDate: ago(30), targetEndDate: ahead(25), fallbackReport: { status: 'ON_PROGRESS', progressPct: 25, days: 1, isLate: false },
+  }),
   // Pengajuan
   base({
     id: 'pp1', code: 'RTK-PRJ-08', name: 'Digitalisasi Arsip Kontrak', entityId: 'e1', phase: 'INISIASI', lifecycle: 'DIUSULKAN', picUserId: 'pratinjau-PIC_PROYEK',

@@ -1,8 +1,10 @@
 import { ROLE_LABELS } from '@/lib/constants'
 import { complianceFor, companiesFor } from './mock-summary'
-import { people, divisions, actor } from './mock-catalog'
+import { people, divisions, entities, groupRoles, actor } from './mock-catalog'
 import { projectSnapshots } from './mock-proyek'
+import { reportHistory } from './mock-history'
 import { unlockItems, dailyProjects, deskWeeklyReports } from './mock-laporan'
+import { isWorkingDay, startOfWibDay } from '@/lib/lock'
 import { can } from '@/lib/rbac'
 /**
  * Rute pratinjau tambahan untuk area ini (P2). Kembalikan Response untuk path
@@ -248,6 +250,193 @@ function requestOptions(role: string) {
   })
 }
 
+// ------------------------------------------------------------------
+// [T3-A4] Arsip laporan harian (/api/daily-reports) — drill-down dashboard
+// Manajemen per perusahaan. Parameter lama (entityId, status, dateFrom,
+// dateTo, search, page) mengikuti route produksi; `projectId` memfilter
+// satu proyek untuk kartu "Laporan per perusahaan". Bentuk kolom sama
+// dengan model DailyProjectReport + include project/entity/submittedBy.
+// ------------------------------------------------------------------
+
+const DAY = 86400000
+
+type DailyReportItem = {
+  id: string; projectId: string; entityId: string; reportDate: string
+  status: string; progressPct: number; phase: string
+  achievementToday: string; obstacle: string | null; followUp: string | null
+  followUpTargetDate: string | null; decisionRequestedFrom: string | null
+  needsEscalation: boolean; evidenceCount: number
+  isLocked: boolean; lockedAt: string | null; isLate: boolean
+  submittedById: string | null; submittedBy: { id: string; name: string; email: string } | null; submittedAt: string | null
+  forwardedById: string | null; forwardedBy: { id: string; name: string } | null; forwardedAt: string | null
+  createdAt: string; updatedAt: string
+  project: { id: string; name: string; code: string }
+  entity: { id: string; name: string; code: string; region: string }
+}
+
+type DailySeed = { status: string; progressPct: number; isLate?: boolean; evidenceCount?: number }
+
+/** Laporan contoh khusus proyek PT. SPKD (urutan index 0 = hari kerja terbaru sebelum hari ini). */
+const RICH_DAILY: Record<string, DailySeed[]> = {
+  sp1: [
+    { status: 'ON_PROGRESS', progressPct: 64, evidenceCount: 2 },
+    { status: 'SELESAI', progressPct: 62, evidenceCount: 2 },
+    { status: 'ON_PROGRESS', progressPct: 60, evidenceCount: 1 },
+    { status: 'TERKENDALA', progressPct: 58, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 58, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 56, evidenceCount: 2 },
+    { status: 'SELESAI', progressPct: 54, evidenceCount: 1 },
+    { status: 'TIDAK_ADA_PERUBAHAN', progressPct: 54, evidenceCount: 0 },
+    { status: 'ON_PROGRESS', progressPct: 54, isLate: true, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 52, evidenceCount: 1 },
+    { status: 'SELESAI', progressPct: 50, evidenceCount: 2 },
+    { status: 'ON_PROGRESS', progressPct: 48, evidenceCount: 1 },
+  ],
+  sp2: [
+    { status: 'ON_PROGRESS', progressPct: 48, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 46, evidenceCount: 2 },
+    { status: 'TERKENDALA', progressPct: 45, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 44, evidenceCount: 1 },
+    { status: 'TIDAK_ADA_PERUBAHAN', progressPct: 44, evidenceCount: 0 },
+    { status: 'SELESAI', progressPct: 42, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 40, isLate: true, evidenceCount: 1 },
+    { status: 'SELESAI', progressPct: 38, evidenceCount: 2 },
+    { status: 'ON_PROGRESS', progressPct: 36, evidenceCount: 1 },
+    { status: 'SELESAI', progressPct: 34, evidenceCount: 1 },
+  ],
+  sp3: [
+    { status: 'ON_PROGRESS', progressPct: 25, evidenceCount: 1 },
+    { status: 'SELESAI', progressPct: 22, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 20, evidenceCount: 0 },
+    { status: 'TIDAK_ADA_PERUBAHAN', progressPct: 20, evidenceCount: 0 },
+    { status: 'ON_PROGRESS', progressPct: 18, evidenceCount: 1 },
+    { status: 'ON_PROGRESS', progressPct: 15, evidenceCount: 1 },
+  ],
+}
+
+const ACHIEVEMENTS: Record<string, string> = {
+  SELESAI: 'Seluruh pekerjaan hari ini selesai sesuai rencana.',
+  ON_PROGRESS: 'Pekerjaan berjalan sesuai rencana hari ini.',
+  TERKENDALA: 'Pekerjaan tertahan; kendala sedang dikawal bersama mitra.',
+  TIDAK_ADA_PERUBAHAN: 'Tidak ada perubahan yang bisa dikerjakan hari ini.',
+  MENUNGGU_KEPUTUSAN: 'Menunggu keputusan manajemen sebelum pekerjaan dilanjutkan.',
+}
+const OBSTACLES: Record<string, string> = {
+  sp1: 'Sandbox bridging BPJS belum diaktifkan mitra integrasi.',
+  sp2: 'Kuota penyimpanan konten klinik penuh; menunggu persetujuan anggaran.',
+  sp3: 'Kunci lisensi payment gateway belum diterbitkan vendor.',
+}
+const FOLLOW_UPS: Record<string, string> = {
+  sp1: 'Dorong mitra mengaktifkan sandbox pekan ini.',
+  sp2: 'Arsip sementara dipindah ke penyimpanan lokal sementara menunggu kuota.',
+  sp3: 'Menagih kunci lisensi ke vendor paling lambat Jumat.',
+}
+
+/** Hari kerja terakhir sebelum hari ini (baru → lama), tanpa menyentuh hari berjalan. */
+function pastWorkdays(count: number): Date[] {
+  const out: Date[] = []
+  for (let t = startOfWibDay(new Date()).getTime() - DAY; out.length < count; t -= DAY) {
+    const d = new Date(t)
+    if (isWorkingDay(d)) out.push(d)
+  }
+  return out
+}
+
+const emailOfName = (name: string) => `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@karya.co.id`
+
+type SnapshotLite = { id: string; name: string; code: string; phase: string; picName: string | null; entityId: string }
+
+/** Satu baris laporan harian dari benih status, dengan jam kirim/terus yang tetap. */
+function seedItem(p: SnapshotLite, entity: DailyReportItem['entity'], seed: DailySeed, day: Date, seq: number): DailyReportItem {
+  const blocked = seed.status === 'TERKENDALA' || seed.status === 'MENUNGGU_KEPUTUSAN'
+  const lateAt = seed.isLate ? 17 * HOUR + 25 * 60000 : 10 * HOUR + 5 * 60000
+  const submittedAt = new Date(day.getTime() + lateAt).toISOString()
+  const submitter = p.picName ? { id: `u-${p.id}`, name: p.picName, email: emailOfName(p.picName) } : null
+  return {
+    id: `dr-${p.id}-${seq}`, projectId: p.id, entityId: entity.id, reportDate: day.toISOString(),
+    status: seed.status, progressPct: seed.progressPct, phase: p.phase,
+    achievementToday: ACHIEVEMENTS[seed.status] ?? ACHIEVEMENTS.ON_PROGRESS,
+    obstacle: seed.status === 'TERKENDALA' ? OBSTACLES[p.id] ?? null : null,
+    followUp: seed.status === 'TERKENDALA' ? FOLLOW_UPS[p.id] ?? null : null,
+    followUpTargetDate: null, decisionRequestedFrom: null,
+    needsEscalation: blocked, evidenceCount: seed.evidenceCount ?? 1,
+    isLocked: true, lockedAt: new Date(day.getTime() + 17 * HOUR).toISOString(),
+    isLate: Boolean(seed.isLate),
+    submittedById: submitter?.id ?? null, submittedBy: submitter, submittedAt,
+    forwardedById: null, forwardedBy: null, forwardedAt: new Date(day.getTime() + 13 * HOUR).toISOString(),
+    createdAt: submittedAt, updatedAt: submittedAt,
+    project: { id: p.id, name: p.name, code: p.code }, entity,
+  }
+}
+
+/** Baris laporan proyek lain mengikuti riwayat contoh (mock-history) agar konsisten dengan pratinjau lain. */
+function historyItems(p: SnapshotLite, entity: DailyReportItem['entity']): DailyReportItem[] {
+  return reportHistory(p.id)
+    .filter((r) => r.submitted && r.submittedAt)
+    .map((r, i) => {
+      const day = new Date(r.date)
+      const submitter = p.picName ? { id: `u-${p.id}`, name: p.picName, email: emailOfName(p.picName) } : null
+      return {
+        id: `dr-${p.id}-${r.key}`, projectId: p.id, entityId: entity.id, reportDate: r.date,
+        status: r.status ?? 'ON_PROGRESS', progressPct: r.progressPct ?? 0, phase: p.phase,
+        achievementToday: ACHIEVEMENTS[r.status ?? 'ON_PROGRESS'] ?? ACHIEVEMENTS.ON_PROGRESS,
+        obstacle: r.status === 'TERKENDALA' ? OBSTACLES[p.id] ?? 'Kendala sedang ditindaklanjuti bersama pihak terkait.' : null,
+        followUp: null, followUpTargetDate: null, decisionRequestedFrom: null,
+        needsEscalation: r.status === 'TERKENDALA', evidenceCount: (i % 3 === 0 ? 2 : 1),
+        isLocked: true, lockedAt: new Date(day.getTime() + 17 * HOUR).toISOString(),
+        isLate: Boolean(r.isLate),
+        submittedById: submitter?.id ?? null, submittedBy: submitter, submittedAt: r.submittedAt,
+        forwardedById: null, forwardedBy: null, forwardedAt: r.forwarded ? new Date(day.getTime() + 13 * HOUR).toISOString() : null,
+        createdAt: r.submittedAt!, updatedAt: r.updatedAt,
+        project: { id: p.id, name: p.name, code: p.code }, entity,
+      }
+    })
+    .reverse()
+}
+
+/** Seluruh laporan harian contoh: proyek aktif semua PT, diurutkan terbaru dulu. */
+function allDailyItems(): DailyReportItem[] {
+  const catalog = Object.fromEntries(entities.map((e) => [e.id, e]))
+  const out: DailyReportItem[] = []
+  for (const p of projectSnapshots('SUPERADMIN').filter((x) => x.lifecycle === 'AKTIF')) {
+    const entity = catalog[p.entityId]
+    if (!entity) continue
+    if (RICH_DAILY[p.id]) out.push(...pastWorkdays(RICH_DAILY[p.id].length).map((day, i) => seedItem(p, entity, RICH_DAILY[p.id][i], day, i)))
+    else out.push(...historyItems(p, entity))
+  }
+  return out.sort((a, b) => b.reportDate.localeCompare(a.reportDate) || b.createdAt.localeCompare(a.createdAt))
+}
+
+function dailyReportsRoute(url: string, role: string) {
+  const sp = new URL(url, 'http://x').searchParams
+  const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
+  const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10) || 20))
+  const projectId = sp.get('projectId') || ''
+  // [T3-A1] projectId exact match; string pendek (≤ 64 karakter) seperti route produksi.
+  if (projectId.length > 64) return json({ error: 'Parameter projectId tidak valid' }, 400)
+  const entityId = sp.get('entityId') || ''
+  const status = sp.get('status') || ''
+  const search = (sp.get('search') || '').trim().toLowerCase()
+  const rawFrom = sp.get('dateFrom')
+  const rawTo = sp.get('dateTo')
+  const from = rawFrom ? Date.parse(rawFrom) : null
+  const to = rawTo ? Date.parse(rawTo) : null
+  if ((from !== null && Number.isNaN(from)) || (to !== null && Number.isNaN(to))) return json({ error: 'Format tanggal tidak valid' }, 400)
+  // Peran grup membaca seluruh grup; peran lain terikat PT Ratu Karya (scopeEntityIds produksi).
+  const scope = groupRoles.includes(role) ? null : ['e1']
+  const rows = allDailyItems().filter(
+    (r) =>
+      (!projectId || r.projectId === projectId) &&
+      (!entityId || r.entityId === entityId) &&
+      (!status || r.status === status) &&
+      (!scope || scope.includes(r.entityId)) &&
+      (!search || r.project.name.toLowerCase().includes(search)) &&
+      (from === null || Date.parse(r.reportDate) >= from) &&
+      (to === null || Date.parse(r.reportDate) <= to),
+  )
+  return json({ items: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize })
+}
+
 export function handle(path: string, url: string, init: RequestInit | undefined, role: string): Promise<Response> | null {
   const method = init?.method ?? 'GET'
   if (path === '/api/admin/compliance') return json(complianceFor())
@@ -265,6 +454,8 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
   if (path === '/api/admin/overview') return json(overviewFor())
   // Hanya panggilan kartu Admin (penanda ?for=…) supaya rute area lain tidak tertimpa.
   if (url.includes('for=unlock') && path === '/api/daily-reports') return json({ items: dailyProjects().filter((p) => p.entityId === 'e1' && p.report).map((p) => ({ ...p.report, reportDate: mock.deskAdmin.today, project: { name: p.name } })) })
+  // [T3-A4] Arsip umum (tanpa penanda for=…): dukung projectId & pageSize untuk drill-down.
+  if (path === '/api/daily-reports' && method === 'GET') return dailyReportsRoute(url, role)
   if (url.includes('for=unlock') && path === '/api/weekly-reports') return json({ items: deskWeeklyReports().filter((d) => d.report).map((d) => ({ ...d.report, isoYear: mock.weeklyInput.week.isoYear, isoWeek: mock.weeklyInput.week.isoWeek, division: { name: d.name } })) })
   if (url.includes('for=access') && path === '/api/companies' && role === 'ADMIN_PT') return json(companiesFor(role))
   return null
