@@ -122,11 +122,13 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/11-INDEKS-DOKUMEN.md](../../docs/zcode/11-INDEKS-DOKUMEN.md)
 - [docs/zcode/DEPLOY-RENCANA-VPS-BIZNET.md](../../docs/zcode/DEPLOY-RENCANA-VPS-BIZNET.md)
 - [docs/zcode/HASIL-DRIFT-MIGRASI.md](../../docs/zcode/HASIL-DRIFT-MIGRASI.md)
+- [docs/zcode/PERSIAPAN-ANDROID.md](../../docs/zcode/PERSIAPAN-ANDROID.md)
 - [docs/zcode/HASIL-GLADI-RILIS.md](../../docs/zcode/HASIL-GLADI-RILIS.md)
 - [docs/zcode/HASIL-TAHAP1.md](../../docs/zcode/HASIL-TAHAP1.md)
 - [docs/zcode/HASIL-TAHAP2-SWARM.md](../../docs/zcode/HASIL-TAHAP2-SWARM.md)
 - [docs/zcode/HASIL-TAHAP3-DASH-MANAJEMEN.md](../../docs/zcode/HASIL-TAHAP3-DASH-MANAJEMEN.md)
 - [docs/zcode/PENERIMAAN-ZCODE.md](../../docs/zcode/PENERIMAAN-ZCODE.md)
+- [docs/zcode/PERSIAPAN-ANDROID.md](../../docs/zcode/PERSIAPAN-ANDROID.md)
 - [docs/zcode/PROSEDUR-A2-08.md](../../docs/zcode/PROSEDUR-A2-08.md)
 - [docs/zcode/README.md](../../docs/zcode/README.md)
 - [docs/zcode/USULAN-GRAFIK-TERTUNDA.md](../../docs/zcode/USULAN-GRAFIK-TERTUNDA.md)
@@ -137,4 +139,4 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 122 dokumen Markdown dalam cakupan ini (121 setelah persiapan deploy Biznet; bertambah [HASIL-TAHAP3-DASH-MANAJEMEN](HASIL-TAHAP3-DASH-MANAJEMEN.md) untuk swarm Tahap 3 dashboard Manajemen per perusahaan, 8 Okt 2026). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 124 entri terindeks di atas; total berkas Markdown tercatat Git 139 — selisih 15 adalah laporan per-agen `T2-*/T3-*` di [laporan-swarm/](laporan-swarm/README.md) yang diindeks folder-nya, bukan per berkas. Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.

@@ -21,6 +21,20 @@ export const metadata: Metadata = {
   description:
     "Pemantauan kerja holding dan anak perusahaan: laporan harian proyek, capaian mingguan divisi, persetujuan, dan eskalasi.",
   authors: [{ name: "Monitor Karya" }],
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "512x512", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Monitor Karya",
+  },
 };
 
 export const viewport: Viewport = {
