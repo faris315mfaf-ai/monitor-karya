@@ -47,6 +47,12 @@ model Entity {
   tasks          Task[]
   progressReports ProjectProgressReport[]
   relatedProjects ProjectEntity[]
+
+  // Indeks FK hasil migrasi 0003–0012; dideklarasikan agar prisma migrate
+  // tidak mengusulkan penghapusannya (drift lama 0001–0012, tuntas 8 Okt 2026).
+  // Nama peta mengikuti nama indeks yang sudah ada di basis data nyata.
+  @@index([parentId])
+  @@index([path])
 }
 
 model DivisionType {
@@ -79,6 +85,9 @@ model Division {
   projects      Project[] @relation("DivisionProjects")
 
   @@unique([entityId, name])
+  @@index([divisionTypeId])
+  @@index([entityId], map: "Division_entityId")
+  @@index([headUserId])
 }
 
 model Project {
@@ -123,6 +132,9 @@ model Project {
   division          Division? @relation("DivisionProjects", fields: [divisionId], references: [id], onDelete: SetNull)
 
   @@index([divisionId])
+  @@index([entityId], map: "Project_entityId")
+  @@index([picUserId])
+  @@index([proposedById])
 }
 
 /// PT-PT lain yang berkaitan dengan sebuah proyek (11 Sep 2026) — selain PT
@@ -154,6 +166,7 @@ model ProjectApproval {
 
   @@unique([projectId, role])
   @@index([projectId])
+  @@index([decidedById])
 }
 
 /// Laporan kemajuan proyek per MINGGU atau per BULAN — pelengkap laporan
@@ -184,6 +197,7 @@ model ProjectProgressReport {
 
   @@unique([projectId, cadence, periodKey])
   @@index([entityId, cadence, periodKey])
+  @@index([submittedById])
 }
 
 model AdminAppointment {
@@ -199,6 +213,8 @@ model AdminAppointment {
   status     String   // AKTIF | BERAKHIR | DITOLAK
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([entityId])
 }
 
 // ============================================================
@@ -245,6 +261,8 @@ model Holiday {
   scope           String   // GRUP | ENTITAS
   entityId        String?
   createdAt       DateTime @default(now())
+
+  @@index([workCalendarId])
 }
 
 // ============================================================
@@ -331,6 +349,7 @@ model User {
   attendances            Attendance[] @relation("AttendanceUser")
   attendanceRecorded     Attendance[] @relation("AttendanceRecorder")
   @@index([divisionId])
+  @@index([role, scopeEntityId], map: "User_role_scope")
   // [P2-C] relasi permintaan akses / aturan pengingat ditambahkan di sini
   accessRequested        AccessRequest[] @relation("AccessRequester")
   accessDecided          AccessRequest[] @relation("AccessDecider")
@@ -372,6 +391,10 @@ model DailyProjectReport {
   updatedAt              DateTime @updatedAt
 
   @@unique([projectId, reportDate])
+  @@index([entityId, reportDate], map: "DailyProjectReport_entity_date")
+  @@index([reportDate], map: "DailyProjectReport_reportDate")
+  @@index([submittedById])
+  @@index([forwardedById])
 }
 
 // ============================================================
@@ -408,6 +431,10 @@ model WeeklyDivisionReport {
   items WeeklyReportItem[]
 
   @@unique([divisionId, isoYear, isoWeek])
+  @@index([entityId, isoYear, isoWeek], map: "WeeklyDivisionReport_entity")
+  @@index([submittedById])
+  @@index([forwardedById])
+  @@index([approvedById])
 }
 
 model WeeklyReportItem {
@@ -442,6 +469,9 @@ model WeeklyReportItem {
   updatedAt           DateTime @updatedAt
 
   @@index([weeklyReportId, workDate])
+  @@index([weeklyReportId], map: "WeeklyReportItem_report")
+  @@index([aspectCategoryId])
+  @@index([priorityId])
 }
 
 // ============================================================
@@ -492,6 +522,11 @@ model Escalation {
   tasks         Task[]   @relation("TaskEscalation")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([entityId], map: "Escalation_entityId")
+  @@index([raisedById])
+  @@index([decidedById])
+  @@index([status, raisedAt], map: "Escalation_status_raisedAt")
 }
 
 // ============================================================
@@ -516,6 +551,10 @@ model UnlockRequest {
   reLockedAt    DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([requestedById])
+  @@index([approvedById])
+  @@index([executedById])
 }
 
 model AuditLog {
@@ -530,6 +569,9 @@ model AuditLog {
   ip         String?
   userAgent  String?
   at         DateTime @default(now())
+
+  @@index([actorId], map: "AuditLog_actorId")
+  @@index([at], map: "AuditLog_at")
 }
 
 model LateIncident {
@@ -540,6 +582,8 @@ model LateIncident {
   occurrenceInMonth  Int      @default(1)
   actionTaken        String?
   createdAt          DateTime @default(now())
+
+  @@index([entityId], map: "LateIncident_entityId")
 }
 
 model SpotCheck {
@@ -555,6 +599,8 @@ model SpotCheck {
   notes        String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([checkedById])
 }
 
 model NotificationLog {
@@ -573,6 +619,8 @@ model NotificationLog {
   createdAt   DateTime @default(now())
 
   @@index([userId, readAt])
+  @@index([userId])
+  @@index([createdAt], map: "NotificationLog_createdAt")
 }
 
 model KpiSnapshot {
@@ -596,6 +644,7 @@ model KpiSnapshot {
   updatedAt             DateTime @updatedAt
 
   @@unique([entityId, periodType, periodKey])
+  @@index([periodType, periodKey], map: "KpiSnapshot_period")
 }
 
 // ============================================================
@@ -649,6 +698,8 @@ model Task {
   @@index([projectId, workDate])
   @@index([entityId, workDate])
   @@index([picUserId, workDate])
+  @@index([createdById])
+  @@index([escalationId])
 }
 
 /// A checklist line under either a daily task or a weekly division item.
