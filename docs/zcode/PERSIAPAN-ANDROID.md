@@ -41,7 +41,9 @@ Catatan desain: `theme_color` manifest memakai token terang; `themeColor` viewpo
 ### Tahap A-1: finalisasi PWA (½ hari)
 1. Buka `https://<domain>` di Chrome Android → pastikan "Instal aplikasi" muncul (manifest+ikon sudah dari repo).
 2. Uji alur kritis di dalam mode terpasang: login (cookie `__Host-` bekerja normal di TWA), buka Sheet, unggah bukti (pemilih berkas Chrome), tema gelap, tombol kembali fisik.
-3. Opsional tapi disarankan: halaman luring sederhana (service worker cache shell + halaman "Anda sedang luring") — aplikasi ini butuh jaringan ke DB; tanpa ini pengguna luring melihat galat peramban. Bisa dikerjakan Zcode setelahnya sebagai tugas terpisah.
+3. **Lapisan luring SUDAH diimplementasikan** (8 Okt 2026, sore — keputusan pemilik "tetap bisa dipakai sementara saat offline"): `public/sw.js` (daring-duluan untuk navigasi dan GET `/api/*` dengan salinan terakhir maks 80 entri; halaman `/luring.html`; tulis tidak pernah diantrekan karena tenggat/pembekuan/409 wajib divalidasi server), `src/components/sw-provider.tsx` (pasang SW di produksi + toast "Anda sedang luring"/"Koneksi kembali"). Terverifikasi lokal pada build produksi: SW aktif, pracashe 5 berkas lengkap, navigasi memuat lewat SW. Tugas tersisa: verifikasi di perangkat Android sungguhan setelah redeploy.
+
+> **Catatan penting soal "native + offline"**: kemampuan offline datang dari lapisan ini, bukan dari pilihan TWA vs WebView vs React Native — ketiganya memakai lapisan yang sama. Yang didapat sekarang: aplikasi terbuka saat luring, data yang pernah dimuat tetap terbaca (bertanda basi), tulis ditahan dengan pesan jelas. Mengirim/mengubah laporan sepenuhnya offline menuntut mesin sinkronisasi perangkat (basis data lokal + resolusi konflik terhadap kunci 17.00 WIB dan status beku) — proyek besar terpisah, buat hanya bila benar-benar dibutuhkan lapangan.
 
 ### Tahap A-2: bangun APK/AAB TWA (½ hari, tanpa Android Studio)
 1. Siapkan Node + `npm i -g @bubblewrap/cli` (atau pakai [PWABuilder](https://www.pwabuilder.com) berbasis web: masukkan URL, unduh paket Android).

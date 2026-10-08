@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster as SonnerToaster } from "@/components/mk/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SwProvider } from "@/components/sw-provider";
 import { PREFS_BOOT_SCRIPT } from "@/lib/tampilan-boot";
 
 const geistSans = Geist({
@@ -72,6 +73,8 @@ export default async function RootLayout({
           disableTransitionOnChange
           nonce={nonce}
         >
+          {/* Service worker + indikator luring; null-kan dirinya sendiri. */}
+          <SwProvider />
           {children}
           {/* [F1-D] Toast bergaya token: latar surface (wrapper bawaan memakai
               --popover yang tidak ada di tokens.css → toast tembus pandang),
