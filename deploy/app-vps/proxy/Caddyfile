@@ -1,0 +1,24 @@
+{
+	# Ganti dengan email Anda untuk pemberitahuan sertifikat.
+	email admin@contoh.id
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+# Pola bersama: header keamanan dasar. Aplikasi menambah CSP-nya sendiri.
+(aman) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+		-X-Powered-By
+	}
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+}
+
+# Satu berkas per proyek: /srv/proxy/sites/<proyek>.caddy
+import /etc/caddy/sites/*.caddy

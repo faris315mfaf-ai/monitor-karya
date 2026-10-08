@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "id.co.monitorkarya.app",
+      "sha256_cert_fingerprints": [
+        "GANTI:DENGAN:SHA256:SIDIK:JARI:UPLOAD:KEY:DARI:KEYTOOL"
+      ]
+    }
+  }
+]

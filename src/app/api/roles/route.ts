@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isGlobalRole, requireApiUser } from '@/lib/auth'
+import { ROLE_LABELS } from '@/lib/constants'
 
-// Role display labels
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN_PT: 'Admin PT',
-  KEPALA_DIVISI: 'Kepala Divisi',
-  PIC_PROYEK: 'PIC Proyek',
-  DIREKTUR_ENTITAS: 'Direktur Entitas',
-  DIREKTUR_SDM_GA: 'Direktur SDM & GA',
-  MANAJEMEN: 'Manajemen',
-  TI: 'TI',
-  SUPERADMIN: 'Super Admin',
-  AUDITOR: 'Auditor',
-}
+// Label peran sentence case dari satu sumber (src/lib/constants.ts) [F1-D].
 
 // Preferred ordering of roles in the response
 const ROLE_ORDER = [
@@ -73,7 +63,7 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({ roles })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[roles] GET:', err instanceof Error ? err.message : err)
+    return NextResponse.json({ error: 'Daftar peran belum termuat' }, { status: 500 })
   }
 }

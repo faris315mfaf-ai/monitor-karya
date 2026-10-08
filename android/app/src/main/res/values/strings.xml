@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- String layar Fase 0 (Rancangan §6: bahasa Indonesia, sapaan "Anda",
+     sentence case, tanpa tanda seru/emoji). Label tab = cermin TabId.label di
+     core/domain/.../roles/RoleTabs.kt; dua penyesuaian peran dari shell.tsx
+     ada di tab_hari_ini dan tab_tim_divisi. -->
+<resources>
+    <string name="app_name">Monitor Karya</string>
+
+    <!-- Label tab (NavTabId di src/lib/constants.ts) -->
+    <string name="tab_ringkasan">Ringkasan</string>
+    <string name="tab_meja_kerja">Meja kerja</string>
+    <string name="tab_laporan_harian">Laporan harian</string>
+    <string name="tab_capaian_mingguan">Capaian mingguan</string>
+    <string name="tab_penerimaan">Penerimaan</string>
+    <string name="tab_proyek">Proyek</string>
+    <string name="tab_divisi">Divisi</string>
+    <string name="tab_eskalasi">Eskalasi</string>
+    <string name="tab_persetujuan">Persetujuan</string>
+    <string name="tab_entitas">Entitas</string>
+    <string name="tab_perusahaan">Perusahaan &amp; akun</string>
+    <string name="tab_log_audit">Log aktivitas</string>
+    <string name="tab_sistem_akses">Sistem &amp; akses</string>
+    <!-- Penyesuaian label peran (tabLabel di src/components/shell.tsx) -->
+    <string name="tab_hari_ini">Hari ini</string>
+    <string name="tab_tim_divisi">Tim &amp; divisi</string>
+
+    <!-- Umum -->
+    <string name="umum_memuat">Memuat…</string>
+    <string name="umum_coba_lagi">Coba lagi</string>
+    <string name="umum_keluar">Keluar</string>
+    <string name="umum_ganti_sandi">Ganti kata sandi</string>
+    <string name="umum_luring">Anda sedang luring. Periksa koneksi internet Anda, lalu coba lagi.</string>
+
+    <!-- Navigasi & Fase 0 -->
+    <string name="nav_utama">Navigasi utama</string>
+    <string name="fase0_belum_dibangun">Modul ini dibangun pada fase berikutnya.</string>
+
+    <!-- Fase 1: judul layar tab PIC (MejaKerjaScreen B4, LaporanHarianScreen B5,
+         ProyekScreen B7) — teks sama dengan label tab, dipisah agar judul layar
+         bisa berbeda dari label navigasi tanpa menyentuh tab. -->
+    <string name="layar_meja_kerja">Meja kerja</string>
+    <string name="layar_laporan_harian">Laporan harian</string>
+    <string name="layar_proyek">Proyek</string>
+</resources>

@@ -1,762 +1,819 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+/**
+ * Perusahaan & akun — modul khusus Super Admin (dan versi terbatas Admin PT).
+ * Jawaban dulu ("9 perusahaan aktif dengan 42 akun."), lalu tiga cara melihat:
+ * Perusahaan (kartu), Akun (daftar lintas perusahaan dengan aksi massal), dan
+ * Struktur (pohon holding → perusahaan → divisi & proyek). Semua detail dan
+ * perubahan terjadi di Sheet, tidak pindah halaman.
+ */
+
+import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { useApp } from '@/components/app-provider'
 import { useResource } from '@/hooks/use-resource'
-import { LoadingSpinner, EmptyState, ErrorState } from '@/components/loading-states'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AccountDialog, ResetPasswordDialog } from '@/components/account-dialog'
-import { AccountManager } from '@/components/account-manager'
-import { HOLDING_POSITION_OPTIONS, POSITION_OPTIONS } from '@/lib/constants'
-import { formatRelative } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import {
-  DEFAULT_PASSWORD, call, field, initialsOf, roleLabel, selectClass, sheetClass, slugify,
-  type CompaniesData, type Company, type UserRow,
-} from '@/lib/accounts'
-import {
-  AlertTriangle, Building2, Check, CheckCircle2, ChevronDown, FolderKanban, Globe, ImagePlus, KeyRound, Loader2, Mail,
-  MapPin, Pencil, Phone, Plus, Power, Shield, Trash2, UserCog, UserPlus, Users, X,
-} from 'lucide-react'
+  ActivityRings, Avatar, Button, Card, Chip, DashboardSkeleton, EmptyNote, ErrorNote, Hero, Icon, PageHeader,
+  ProgressBar, SegmentedControl, StatTile, StatusBadge, cx,
+} from '@/components/mk'
+import { NotificationButton } from '@/components/shell'
+import { AccountSheet, type AccountTarget } from '@/components/companies/account-sheet'
+import { CompanySheet, UserRowButton, completeness, type CompanyTab } from '@/components/companies/company-sheet'
+import { CompanyWizard } from '@/components/companies/company-wizard'
+import { CompanyLogo, InfoLine, selectCls } from '@/components/companies/parts'
+import { call, initialsOf, roleLabel, type CompaniesData, type Company, type UserRow } from '@/lib/accounts'
+import { ALL_ROLES } from '@/lib/rbac'
+import { formatNumber } from '@/lib/format'
 
-type Data = CompaniesData
+type View = 'perusahaan' | 'akun' | 'struktur'
+type CoFilter = 'all' | 'holding' | 'pt' | 'incomplete' | 'inactive'
+type AccFilter = 'all' | 'active' | 'never' | 'nopass' | 'inactive'
 
-// ------------------------------------------------------------------
-// Halaman
-// ------------------------------------------------------------------
+const tones = ['data-1', 'data-2', 'data-3', 'data-4', 'data-5', 'data-6'] as const
 
-/**
- * Perusahaan & Akun — meja Super Admin (10 Sep 2026). Satu kartu per
- * perusahaan (holding & anak perusahaan) dengan logo, identitas, dan
- * orang-orangnya; pop-up besar untuk menambah perusahaan berikut posisi
- * pertamanya, dan pop-up kelola untuk mengubah apa pun sesudahnya.
- */
 export function CompaniesView() {
-  const { data, loading, error, reload } = useResource<Data>('/api/companies')
-  const [creating, setCreating] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [holdingUser, setHoldingUser] = useState<{ user: UserRow | null } | null>(null)
+  const { data, loading, error, reload } = useResource<CompaniesData>('/api/companies')
+  const [view, setView] = useState<View>('perusahaan')
+  const [q, setQ] = useState('')
+  const [wizard, setWizard] = useState(false)
+  const [openCo, setOpenCo] = useState<{ id: string; tab: CompanyTab } | null>(null)
+  const [account, setAccount] = useState<AccountTarget | null>(null)
 
-  // Tombol "Tambah Perusahaan" di dashboard meninggalkan penanda ini lalu
-  // pindah ke tab ini; pop-upnya dibuka setelah render pertama.
+  // Tombol "Tambah perusahaan" di dashboard Super Admin meninggalkan penanda ini.
   useEffect(() => {
     let flag = false
     try {
       flag = window.sessionStorage.getItem('mk-open-add-company') === '1'
       if (flag) window.sessionStorage.removeItem('mk-open-add-company')
     } catch {}
-    if (flag) Promise.resolve().then(() => setCreating(true))
+    if (flag) Promise.resolve().then(() => setWizard(true))
   }, [])
 
-  if (loading && !data) return <LoadingSpinner className="py-10" />
-  if (error || !data) return <ErrorState message={error ?? 'Data tidak tersedia'} />
-
-  const editing = editingId ? (data.companies.find((c) => c.id === editingId) ?? null) : null
-  const holdings = data.companies.filter((c) => c.type === 'HOLDING')
-
-  return (
-    <div className="space-y-4 sm:space-y-5 animate-fade-in">
-      <div className="hero-strip p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Perusahaan &amp; Akun</h1>
-          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-0.5">
-            Tambah perusahaan, atur posisi, kelola akun dan kata sandi seluruh grup.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5 stagger">
-            <Chip icon={Building2}>{data.totals.companies} perusahaan</Chip>
-            <Chip icon={Users}>{data.totals.users} akun</Chip>
-            <Chip icon={Shield}>{data.totals.divisions} divisi</Chip>
-            <Chip icon={FolderKanban}>{data.totals.projects} proyek</Chip>
-          </div>
-        </div>
-        <Button
-          onClick={() => setCreating(true)}
-          className="icon-rotate-hover h-14 px-6 text-base font-semibold bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white btn-primary-glow shrink-0"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} /> Tambah Perusahaan
-        </Button>
-      </div>
-
-      {/* Akun tingkat holding */}
-      <section className="glass rounded-2xl p-4 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="h-9 w-9 rounded-xl bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 flex items-center justify-center">
-            <Shield className="h-4.5 w-4.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-semibold text-slate-800 dark:text-slate-100">Akun tingkat grup</div>
-            <div className="text-[13px] text-slate-500 dark:text-slate-400">Super Admin, Manajemen, Direksi Holding, Tim TI, Auditor — tidak terpaku pada satu perusahaan.</div>
-          </div>
-          <Button size="sm" variant="outline" className="h-10" onClick={() => setHoldingUser({ user: null })}>
-            <UserPlus className="h-4 w-4" /> Tambah akun
-          </Button>
-        </div>
-        <UserList users={data.holdingUsers} me={data.me} onEdit={(u) => setHoldingUser({ user: u })} onChanged={reload} />
-      </section>
-
-      {/* Kartu perusahaan */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 stagger">
-        {data.companies.map((c) => (
-          <CompanyCard key={c.id} company={c} onManage={() => setEditingId(c.id)} onChanged={reload} />
-        ))}
-      </div>
-      {data.companies.length === 0 && <EmptyState title="Belum ada perusahaan" description="Mulai dengan menambahkan holding." />}
-
-      {/* Semua akun grup — pencarian lintas perusahaan */}
-      <section className="glass rounded-2xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-            <UserCog className="h-4.5 w-4.5 text-violet-600 dark:text-violet-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-base font-semibold text-slate-800 dark:text-slate-100">Semua akun</div>
-            <div className="text-[13px] text-slate-500 dark:text-slate-400">
-              Cari akun mana pun lintas perusahaan, lalu buat, ubah, setel ulang kata sandi, nonaktifkan, atau hapus.
-            </div>
-          </div>
-        </div>
-        <AccountManager />
-      </section>
-
-      {creating && <CompanyDialog mode="create" holdings={holdings} onClose={() => setCreating(false)} onSaved={reload} />}
-      {editing && (
-        <CompanyDialog
-          mode="edit"
-          company={editing}
-          holdings={holdings}
-          me={data.me}
-          onClose={() => setEditingId(null)}
-          onSaved={reload}
-        />
-      )}
-      {holdingUser && (
-        <AccountDialog
-          companies={data.companies}
-          company={null}
-          user={holdingUser.user}
-          me={data.me}
-          onClose={() => setHoldingUser(null)}
-          onSaved={reload}
-        />
-      )}
-    </div>
-  )
-}
-
-function Chip({ icon: Icon, children }: { icon: typeof Users; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 dark:bg-slate-900/50 border border-white/60 dark:border-white/10 px-2.5 py-1 text-[13px] font-medium text-slate-700 dark:text-slate-200">
-      <Icon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> {children}
-    </span>
-  )
-}
-
-function Logo({ company, size = 'md' }: { company: Pick<Company, 'name' | 'logoData' | 'type'>; size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'h-20 w-20 rounded-2xl text-2xl' : 'h-14 w-14 rounded-xl text-lg'
-  if (company.logoData) {
-    return <img src={company.logoData} alt={`Logo ${company.name}`} className={cn(box, 'object-contain bg-white/80 dark:bg-slate-900/60 ring-1 ring-black/5 dark:ring-white/10 p-1 animate-fade-in')} />
-  }
-  return (
-    <div className={cn(box, 'flex items-center justify-center font-bold text-white shadow-glow-blue', company.type === 'HOLDING' ? 'bg-gradient-to-br from-slate-700 to-slate-900' : 'bg-gradient-to-br from-blue-600 to-cyan-500')}>
-      {initialsOf(company.name)}
-    </div>
-  )
-}
-
-function CompanyCard({ company: c, onManage, onChanged }: { company: Company; onManage: () => void; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false)
-  const people = c.users.slice(0, 6)
-
-  async function toggleActive() {
-    if (!window.confirm(c.isActive ? `Nonaktifkan ${c.name}? Akunnya tetap ada, perusahaan disembunyikan dari daftar aktif.` : `Aktifkan kembali ${c.name}?`)) return
-    setBusy(true)
-    const r = await call('/api/companies', 'PATCH', { id: c.id, isActive: !c.isActive })
-    setBusy(false)
-    if (!r.ok) window.alert(r.error)
-    else onChanged()
+  if (loading && !data) return <DashboardSkeleton />
+  if (error || !data) {
+    return (
+      <>
+        <PageHeader title="Perusahaan & akun" />
+        <Card>
+          <ErrorNote message={error ? `Data belum termuat. ${error}` : undefined} onRetry={reload} />
+        </Card>
+      </>
+    )
   }
 
+  const full = data.scope !== 'ENTITY'
+  const canManage = Boolean(data.canManageCompanies)
+  const companies = data.companies
+  const holdings = companies.filter((c) => c.type === 'HOLDING')
+  const allUsers = [...data.holdingUsers, ...companies.flatMap((c) => c.users)]
+  const activeUsers = allUsers.filter((u) => u.isActive)
+  const loggedIn = activeUsers.filter((u) => u.lastLoginAt)
+  const noPass = allUsers.filter((u) => !u.hasPassword)
+  const headless = companies.flatMap((c) => c.divisions.filter((d) => !d.headUserId))
+  const picless = companies.flatMap((c) => c.projects.filter((p) => !p.picUserId))
+  const incomplete = companies.filter((c) => completeness(c).pct < 100)
+  const activeCos = companies.filter((c) => c.isActive)
+  // [F4-B] Angka tombol "Tinjau n hal" = jumlah hal yang disebut di kalimat pendukung (tanpa hitung ganda).
+  const neverIn = activeUsers.filter((u) => !u.lastLoginAt && u.hasPassword)
+  const issues = neverIn.length + noPass.length + headless.length + picless.length + incomplete.length
+  const openCompany = openCo ? (companies.find((c) => c.id === openCo.id) ?? null) : null
+  const companyOf = (u: UserRow) => companies.find((c) => c.id === u.scopeEntityId) ?? null
+
+  const support = [
+    neverIn.length ? `${neverIn.length} akun belum pernah masuk.` : noPass.length ? null : 'Semua akun aktif sudah pernah masuk.',
+    noPass.length ? `${noPass.length} akun belum punya kata sandi.` : null,
+    headless.length ? `${headless.length} divisi belum punya kepala.` : null,
+    picless.length ? `${picless.length} proyek belum punya manager.` : null,
+    incomplete.length ? `${incomplete.length} profil perusahaan belum lengkap.` : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <article className={cn('glass rounded-2xl p-4 flex flex-col gap-3 card-hover transition-all', !c.isActive && 'opacity-60')}>
-      <div className="flex items-start gap-3">
-        <Logo company={c} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight truncate">{c.name}</h3>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Badge className={cn('text-[11px] h-5', c.type === 'HOLDING' ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'bg-blue-500/15 text-blue-700 dark:text-blue-300')}>
-              {c.type === 'HOLDING' ? 'Holding' : 'Anak perusahaan'}
-            </Badge>
-            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{c.code}</span>
-            {!c.isActive && <Badge variant="outline" className="text-[11px] h-5 text-rose-600 border-rose-500/40">Nonaktif</Badge>}
-          </div>
+    <>
+      <PageHeader
+        context={full ? 'Super Admin · seluruh grup' : `Admin PT · ${companies[0]?.name ?? 'perusahaan Anda'}`}
+        title="Perusahaan & akun"
+        tools={
+          <>
+            {canManage ? (
+              <Button variant="secondary" size="sm" icon="tambah" onClick={() => setWizard(true)}>
+                Tambah perusahaan
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" icon="tambah" onClick={() => setAccount({ user: null, company: companies[0] ?? null })}>
+                Tambah akun
+              </Button>
+            )}
+            <span className="mk-desktop-only">
+              <NotificationButton />
+            </span>
+          </>
+        }
+      />
+
+      <Hero
+        eyebrow={full ? `${holdings.length} holding · ${companies.length - holdings.length} anak perusahaan` : 'Akun di perusahaan Anda'}
+        answer={
+          full
+            ? `${formatNumber(activeCos.length)} perusahaan aktif dengan ${formatNumber(activeUsers.length)} akun.`
+            : `${formatNumber(activeUsers.length)} akun aktif di ${companies[0]?.name ?? 'perusahaan Anda'}.`
+        }
+        support={support}
+        actions={
+          <>
+            {issues > 0 ? (
+              <Button variant="primary" iconAfter="kanan" onClick={() => setView(incomplete.length && full ? 'perusahaan' : 'akun')}>
+                Tinjau {formatNumber(issues)} hal
+              </Button>
+            ) : canManage ? (
+              <Button variant="primary" icon="tambah" onClick={() => setWizard(true)}>
+                Tambah perusahaan
+              </Button>
+            ) : null}
+            <Button variant="plain" onClick={() => setView('struktur')}>
+              Lihat struktur grup
+            </Button>
+          </>
+        }
+        art={
+          <ActivityRings
+            size={176}
+            rings={[
+              { label: 'Akun aktif', value: pct(activeUsers.length, allUsers.length), tone: 'accent', display: `${activeUsers.length} dari ${allUsers.length}` },
+              { label: 'Pernah masuk', value: pct(loggedIn.length, activeUsers.length), tone: 'hijau', display: `${loggedIn.length} dari ${activeUsers.length}`, sub: 'akun aktif' },
+              {
+                label: 'Profil lengkap',
+                value: pct(companies.length - incomplete.length, companies.length),
+                tone: 'biru',
+                display: `${companies.length - incomplete.length} dari ${companies.length}`,
+                sub: 'perusahaan',
+              },
+            ]}
+          />
+        }
+        kpis={
+          <>
+            <StatTile variant="gradient" label="Perusahaan" value={companies.length} delta={`${activeCos.length} aktif · ${companies.length - activeCos.length} nonaktif`} />
+            <StatTile label="Akun" value={allUsers.length} delta={noPass.length ? `${noPass.length} tanpa kata sandi` : `${data.holdingUsers.length} tingkat grup`} tone={noPass.length ? 'late' : 'neutral'} onClick={() => setView('akun')} />
+            <StatTile label="Divisi" value={data.totals.divisions} delta={headless.length ? `${headless.length} tanpa kepala` : 'Semua berkepala'} tone={headless.length ? 'risk' : 'on'} onClick={() => setView('struktur')} />
+            <StatTile label="Proyek" value={data.totals.projects} delta={picless.length ? `${picless.length} tanpa manager` : 'Semua bermanager'} tone={picless.length ? 'risk' : 'on'} onClick={() => setView('struktur')} />
+          </>
+        }
+      />
+
+      <div className="mk-toolbar">
+        <SegmentedControl
+          label="Tampilan"
+          value={view}
+          onChange={(v) => setView(v as View)}
+          options={[
+            { value: 'perusahaan', label: 'Perusahaan' },
+            { value: 'akun', label: 'Akun' },
+            { value: 'struktur', label: 'Struktur' },
+          ]}
+        />
+        <div className="mk-search mk-toolbar__search">
+          <Icon name="cari" size={18} />
+          <label htmlFor="co-q" className="mk-sr">
+            Cari
+          </label>
+          <input
+            id="co-q"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={view === 'akun' ? 'Cari nama, username, email, jabatan' : 'Cari perusahaan, kode, kota'}
+          />
         </div>
       </div>
 
-      {(c.address || c.email || c.phone) && (
-        <div className="space-y-0.5 text-[13px] text-slate-600 dark:text-slate-300">
-          {c.address && <div className="flex items-start gap-1.5"><MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400" /> <span className="line-clamp-1">{c.address}</span></div>}
-          {c.phone && <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" /> {c.phone}</div>}
-          {c.email && <div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" /> <span className="truncate">{c.email}</span></div>}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-1.5 text-[12px]">
-        <span className="rounded-full bg-slate-500/10 px-2 py-0.5 text-slate-700 dark:text-slate-200">{c.counts.users} akun</span>
-        <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-violet-700 dark:text-violet-300">{c.counts.divisions} divisi</span>
-        <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-blue-700 dark:text-blue-300">{c.counts.projects} proyek</span>
-        {c.counts.dailyReports + c.counts.weeklyReports > 0 && (
-          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">{c.counts.dailyReports + c.counts.weeklyReports} laporan</span>
+      <div key={view} className="mk-tabpane">
+        {view === 'perusahaan' && (
+          <CompaniesGrid
+            companies={companies}
+            q={q}
+            canManage={canManage}
+            onOpen={(c, tab = 'ringkasan') => setOpenCo({ id: c.id, tab })}
+            onAddAccount={(c) => setAccount({ user: null, company: c })}
+            onAdd={() => setWizard(true)}
+          />
+        )}
+        {view === 'akun' && (
+          <AccountsPanel
+            data={data}
+            q={q}
+            onOpen={(u) => setAccount({ user: u, company: companyOf(u) })}
+            onAdd={() => setAccount({ user: null, company: full ? null : (companies[0] ?? null) })}
+            onChanged={reload}
+          />
+        )}
+        {view === 'struktur' && (
+          <StructureTree data={data} q={q} onOpenCompany={(c, tab) => setOpenCo({ id: c.id, tab })} onOpenUser={(u) => setAccount({ user: u, company: companyOf(u) })} />
         )}
       </div>
 
-      <div className="flex items-center gap-2 mt-auto">
-        <div className="flex -space-x-2">
-          {people.map((u) => (
-            <span
-              key={u.id}
-              title={`${u.name} · ${roleLabel(u.role)}`}
-              className="h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 flex items-center justify-center text-[11px] font-bold text-white"
-              style={{ background: u.avatarColor ?? '#2563eb' }}
-            >
-              {initialsOf(u.name)}
-            </span>
+      <CompanySheet
+        company={openCompany}
+        tab={openCo?.tab ?? 'ringkasan'}
+        onTab={(t) => setOpenCo((o) => (o ? { ...o, tab: t } : o))}
+        me={data.me}
+        canManage={canManage}
+        onClose={() => setOpenCo(null)}
+        onChanged={reload}
+        onOpenUser={(u, c) => setAccount({ user: u, company: c })}
+      />
+      <AccountSheet
+        target={account}
+        companies={full ? companies : companies}
+        me={data.me}
+        lockCompany={!full}
+        allowedRoles={data.manageableRoles}
+        onClose={() => setAccount(null)}
+        onSaved={reload}
+      />
+      {canManage ? (
+        <CompanyWizard
+          open={wizard}
+          holdings={holdings}
+          onClose={() => setWizard(false)}
+          onSaved={(id) => {
+            reload()
+            if (id) setTimeout(() => setOpenCo({ id, tab: 'ringkasan' }), 450)
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
+
+/* ------------------------------------------------------------------
+   Perusahaan — kartu
+   ------------------------------------------------------------------ */
+
+function CompaniesGrid({
+  companies,
+  q,
+  canManage,
+  onOpen,
+  onAddAccount,
+  onAdd,
+}: {
+  companies: Company[]
+  q: string
+  canManage: boolean
+  onOpen: (c: Company, tab?: CompanyTab) => void
+  onAddAccount: (c: Company) => void
+  onAdd: () => void
+}) {
+  const [filter, setFilter] = useState<CoFilter>('all')
+  const [sort, setSort] = useState<'name' | 'users' | 'complete'>('name')
+  const needle = q.trim().toLowerCase()
+
+  const counts: Record<CoFilter, number> = {
+    all: companies.length,
+    holding: companies.filter((c) => c.type === 'HOLDING').length,
+    pt: companies.filter((c) => c.type === 'PT').length,
+    incomplete: companies.filter((c) => completeness(c).pct < 100).length,
+    inactive: companies.filter((c) => !c.isActive).length,
+  }
+
+  const list = companies
+    .filter((c) =>
+      filter === 'all' ? true : filter === 'holding' ? c.type === 'HOLDING' : filter === 'pt' ? c.type === 'PT' : filter === 'incomplete' ? completeness(c).pct < 100 : !c.isActive
+    )
+    .filter((c) => !needle || [c.name, c.code, c.address, c.email, c.parentName].some((v) => (v ?? '').toLowerCase().includes(needle)))
+    .sort((a, b) =>
+      sort === 'users'
+        ? b.users.length - a.users.length
+        : sort === 'complete'
+          ? completeness(a).pct - completeness(b).pct
+          : a.type === b.type
+            ? a.name.localeCompare(b.name)
+            : a.type === 'HOLDING'
+              ? -1
+              : 1
+    )
+
+  const FILTERS: { v: CoFilter; label: string; status?: 'risk' | 'neutral' }[] = [
+    { v: 'all', label: 'Semua' },
+    { v: 'holding', label: 'Holding' },
+    { v: 'pt', label: 'Anak perusahaan' },
+    { v: 'incomplete', label: 'Perlu dilengkapi', status: 'risk' },
+    { v: 'inactive', label: 'Nonaktif', status: 'neutral' },
+  ]
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="mk-filterbar">
+        <div className="mk-chips">
+          {FILTERS.map((f) => (
+            <Chip key={f.v} selected={filter === f.v} status={f.status} count={counts[f.v]} onClick={() => setFilter(f.v)}>
+              {f.label}
+            </Chip>
           ))}
-          {c.users.length > people.length && (
-            <span className="h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-slate-200 dark:bg-slate-700 text-[11px] font-semibold flex items-center justify-center text-slate-700 dark:text-slate-200">
-              +{c.users.length - people.length}
-            </span>
-          )}
         </div>
-        <div className="flex-1" />
-        <Button size="sm" variant="ghost" className="h-10 w-10 p-0 text-slate-500" aria-label={c.isActive ? 'Nonaktifkan' : 'Aktifkan'} onClick={toggleActive} disabled={busy}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className={cn('h-4 w-4', c.isActive ? 'text-emerald-600' : 'text-slate-400')} />}
-        </Button>
-        <Button size="sm" onClick={onManage} className="h-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white">
-          <Pencil className="h-4 w-4" /> Kelola
-        </Button>
+        <label className="mk-sortsel">
+          <span className="mk-sr">Urutkan</span>
+          <select className={selectCls} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="name">Urut: nama</option>
+            <option value="users">Urut: akun terbanyak</option>
+            <option value="complete">Urut: paling belum lengkap</option>
+          </select>
+        </label>
       </div>
+
+      {list.length === 0 ? (
+        <Card>
+          <EmptyNote icon="gedung" action={canManage && companies.length === 0 ? <Button variant="primary" icon="tambah" onClick={onAdd}>Tambah holding</Button> : undefined}>
+            {companies.length === 0 ? 'Belum ada perusahaan. Mulai dengan menambahkan holding.' : 'Tidak ada perusahaan yang cocok.'}
+          </EmptyNote>
+        </Card>
+      ) : (
+        <div className="mk-cogrid">
+          {list.map((c, i) => (
+            <CompanyCard key={c.id} c={c} index={i} onOpen={onOpen} onAddAccount={onAddAccount} />
+          ))}
+          {canManage && filter === 'all' && !needle ? (
+            <button type="button" className="mk-cocard mk-cocard--add" onClick={onAdd}>
+              <span className="mk-cocard__plus" aria-hidden>
+                <Icon name="tambah" size={28} strokeWidth={2} />
+              </span>
+              <span className="t-headline">Tambah perusahaan</span>
+              <span className="t-footnote text-ink-2">Identitas, kontak, lalu akun pertamanya</span>
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CompanyCard({
+  c,
+  index,
+  onOpen,
+  onAddAccount,
+}: {
+  c: Company
+  index: number
+  onOpen: (c: Company, tab?: CompanyTab) => void
+  onAddAccount: (c: Company) => void
+}) {
+  const comp = completeness(c)
+  const people = c.users.slice(0, 5)
+  const headless = c.divisions.filter((d) => !d.headUserId).length
+  return (
+    <article className={cx('mk-cocard', !c.isActive && 'is-off')} style={{ ['--i' as string]: index }}>
+      <button type="button" className="mk-cocard__hit" onClick={() => onOpen(c)} aria-label={`Buka ${c.name}`} />
+      <header className="mk-cocard__head">
+        <CompanyLogo company={c} size={52} />
+        <div className="min-w-0 flex-1">
+          <h3 className="mk-cocard__name">{c.name}</h3>
+          <div className="mk-cocard__meta">
+            <span className={cx('mk-tag', c.type === 'HOLDING' && 'is-strong')}>{c.type === 'HOLDING' ? 'Holding' : 'Anak perusahaan'}</span>
+            <span className="font-mono">{c.code}</span>
+          </div>
+        </div>
+        {!c.isActive ? <StatusBadge status="neutral" size="sm">Nonaktif</StatusBadge> : null}
+      </header>
+
+      <div className="mk-cocard__info">
+        <InfoLine icon="gedung">{c.address || <span className="text-ink-2">Alamat belum diisi</span>}</InfoLine>
+        <InfoLine icon="kirim">{c.email || c.phone || <span className="text-ink-2">Kontak belum diisi</span>}</InfoLine>
+      </div>
+
+      <div className="mk-cocard__stats">
+        <button type="button" onClick={() => onOpen(c, 'akun')}>
+          <strong>{c.counts.users}</strong> akun
+        </button>
+        <button type="button" onClick={() => onOpen(c, 'divisi')} className={headless ? 'is-warn' : undefined}>
+          <strong>{c.counts.divisions}</strong> divisi
+        </button>
+        <button type="button" onClick={() => onOpen(c, 'proyek')}>
+          <strong>{c.counts.projects}</strong> proyek
+        </button>
+        <span>
+          <strong>{formatNumber(c.counts.dailyReports + c.counts.weeklyReports)}</strong> laporan
+        </span>
+      </div>
+
+      <div className="mk-cocard__comp">
+        <div className="flex items-center justify-between t-footnote">
+          <span className="text-ink-2">Kelengkapan profil</span>
+          <span className={comp.pct === 100 ? 'text-sukses font-semibold' : 'text-ink font-semibold'}>{comp.pct}%</span>
+        </div>
+        <ProgressBar value={comp.pct} status={comp.pct === 100 ? 'done' : comp.pct >= 60 ? 'accent' : 'risk'} showValue={false} label={`Kelengkapan ${c.name}`} />
+      </div>
+
+      <footer className="mk-cocard__foot">
+        <div className="mk-stack" aria-label={`${c.users.length} akun`}>
+          {people.map((u) => (
+            <Avatar key={u.id} initials={initialsOf(u.name)} tone={tones[index % 6]} size={30} name={`${u.name} · ${roleLabel(u.role)}`} />
+          ))}
+          {c.users.length > people.length ? <span className="mk-stack__more">+{c.users.length - people.length}</span> : null}
+          {c.users.length === 0 ? <span className="t-footnote text-ink-2">Belum ada akun</span> : null}
+        </div>
+        <Button size="sm" variant="plain" icon="tambah" onClick={() => onAddAccount(c)}>
+          Tambah akun
+        </Button>
+        <Button size="sm" onClick={() => onOpen(c)}>
+          Kelola
+        </Button>
+      </footer>
     </article>
   )
 }
 
-// ------------------------------------------------------------------
-// Daftar akun dengan aksi
-// ------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   Akun — daftar lintas perusahaan, saringan, aksi massal
+   ------------------------------------------------------------------ */
 
-function UserList({ users, me, onEdit, onChanged, compact }: { users: UserRow[]; me: string; onEdit: (u: UserRow) => void; onChanged: () => void; compact?: boolean }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [resetting, setResetting] = useState<UserRow | null>(null)
+const PAGE = 40
 
-  async function toggleActive(u: UserRow) {
-    setBusy(u.id)
-    const r = await call('/api/companies/users', 'PATCH', { id: u.id, isActive: !u.isActive })
-    setBusy(null)
-    if (!r.ok) window.alert(r.error)
-    else onChanged()
-  }
-
-  async function remove(u: UserRow) {
-    if (!window.confirm(`Hapus akun ${u.username ?? u.email} (${u.name})? Laporan yang pernah dibuatnya tetap tersimpan.`)) return
-    setBusy(u.id)
-    const r = await call(`/api/companies/users?id=${u.id}`, 'DELETE')
-    setBusy(null)
-    if (!r.ok) window.alert(r.error)
-    else onChanged()
-  }
-
-  if (users.length === 0) return <p className="text-sm text-slate-500 dark:text-slate-400">Belum ada akun.</p>
-
-  return (
-    <ul className="divide-y divide-white/40 dark:divide-white/10">
-      {users.map((u) => (
-        <li key={u.id} className={cn('flex items-center gap-3 py-2.5', !u.isActive && 'opacity-60')}>
-          <span className="h-10 w-10 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0" style={{ background: u.avatarColor ?? '#2563eb' }}>
-            {initialsOf(u.name)}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{u.name}</span>
-              {u.id === me && <Badge variant="outline" className="text-[10px] h-4 px-1">Anda</Badge>}
-              {!u.isActive && <Badge variant="outline" className="text-[10px] h-4 px-1 text-rose-600 border-rose-500/40">Nonaktif</Badge>}
-            </div>
-            <div className="text-[12px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-1.5">
-              <span className="font-mono text-slate-700 dark:text-slate-200">{u.username ?? '—'}</span>
-              <span>· {u.title || roleLabel(u.role)}</span>
-              {!compact && u.divisionName && <span>· {u.divisionName}</span>}
-              {!compact && u.projectName && <span>· {u.projectName}</span>}
-              {!compact && <span className="hidden sm:inline">· {u.email}</span>}
-              {u.lastLoginAt && <span className="hidden sm:inline">· masuk {formatRelative(u.lastLoginAt)}</span>}
-            </div>
-          </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            <IconBtn label="Ubah" onClick={() => onEdit(u)}><Pencil className="h-4 w-4" /></IconBtn>
-            <IconBtn label="Setel ulang kata sandi" onClick={() => setResetting(u)}><KeyRound className="h-4 w-4" /></IconBtn>
-            <IconBtn label={u.isActive ? 'Nonaktifkan' : 'Aktifkan'} onClick={() => toggleActive(u)} disabled={busy === u.id || u.id === me}>
-              <Power className={cn('h-4 w-4', u.isActive ? 'text-emerald-600' : 'text-slate-400')} />
-            </IconBtn>
-            <IconBtn label="Hapus" onClick={() => remove(u)} disabled={busy === u.id || u.id === me} danger>
-              {busy === u.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </IconBtn>
-          </div>
-        </li>
-      ))}
-      {resetting && <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} onSaved={onChanged} />}
-    </ul>
-  )
-}
-
-function IconBtn({ label, onClick, disabled, danger, children }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className={cn('h-10 w-10 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-500/10 disabled:opacity-40', danger && 'hover:text-rose-600 hover:bg-rose-500/10')}
-    >
-      {children}
-    </button>
-  )
-}
-
-// ------------------------------------------------------------------
-// Pop-up perusahaan (tambah / kelola)
-// ------------------------------------------------------------------
-
-type PositionDraft = {
-  key: string
-  role: string
-  name: string
-  username: string
-  usernameTouched: boolean
-  email: string
-  password: string
-  title: string
-  divisionName: string
-  projectName: string
-}
-
-function newDraft(role = 'ADMIN_PT'): PositionDraft {
-  return { key: Math.random().toString(36).slice(2), role, name: '', username: '', usernameTouched: false, email: '', password: DEFAULT_PASSWORD, title: '', divisionName: '', projectName: '' }
-}
-
-/** Menyusutkan gambar ke ≤ 256 px lalu mengembalikannya sebagai data URL PNG. */
-function shrinkImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (file.type === 'image/svg+xml') {
-      if (file.size > 150_000) return reject(new Error('SVG terlalu besar (maks. 150 KB).'))
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(new Error('Gagal membaca berkas.'))
-      reader.readAsDataURL(file)
-      return
-    }
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => {
-      const max = 256
-      const scale = Math.min(1, max / Math.max(img.width, img.height))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, Math.round(img.width * scale))
-      canvas.height = Math.max(1, Math.round(img.height * scale))
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return reject(new Error('Browser tidak mendukung kanvas.'))
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/png'))
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('Berkas bukan gambar yang dikenali.'))
-    }
-    img.src = url
-  })
-}
-
-function LogoPicker({ value, name, type, onChange, disabled }: { value: string | null; name: string; type: 'HOLDING' | 'PT'; onChange: (v: string | null) => void; disabled?: boolean }) {
-  const ref = useRef<HTMLInputElement>(null)
-  const [err, setErr] = useState<string | null>(null)
-  return (
-    <div className="flex flex-col items-start gap-3">
-      <Logo company={{ name: name || 'Perusahaan', logoData: value, type }} size="lg" />
-      <div className="space-y-1.5">
-        <input ref={ref} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={async (e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
-          setErr(null)
-          try {
-            onChange(await shrinkImage(f))
-          } catch (ex) {
-            setErr(ex instanceof Error ? ex.message : 'Gagal memuat logo')
-          } finally {
-            if (ref.current) ref.current.value = ''
-          }
-        }} />
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-10" disabled={disabled} onClick={() => ref.current?.click()}>
-            <ImagePlus className="h-4 w-4" /> {value ? 'Ganti logo' : 'Unggah logo'}
-          </Button>
-          {value && (
-            <Button type="button" variant="ghost" size="sm" className="h-10 text-rose-600" disabled={disabled} onClick={() => onChange(null)}>
-              <X className="h-4 w-4" /> Hapus
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">PNG/JPEG/WebP/SVG, disusutkan otomatis ke 256 px.</p>
-        {err && <p className="text-xs text-rose-600">{err}</p>}
-      </div>
-    </div>
-  )
-}
-
-function Section({ icon: Icon, title, hint, children, tone = 'blue' }: { icon: typeof Users; title: React.ReactNode; hint?: string; children: React.ReactNode; tone?: 'blue' | 'violet' | 'rose' }) {
-  const tones = { blue: 'text-blue-600 dark:text-blue-400', violet: 'text-violet-600 dark:text-violet-400', rose: 'text-rose-600 dark:text-rose-400' }
-  return (
-    <section className="rounded-2xl border border-white/50 dark:border-white/10 bg-white/50 dark:bg-slate-900/40 p-4 sm:p-5 space-y-3">
-      <div className="flex items-start gap-2">
-        <Icon className={cn('h-5 w-5 mt-0.5 shrink-0', tones[tone])} />
-        <div>
-          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
-          {hint && <p className="text-sm text-slate-500 dark:text-slate-400">{hint}</p>}
-        </div>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function CompanyDialog({
-  mode,
-  company,
-  holdings,
-  me = '',
-  onClose,
-  onSaved,
+function AccountsPanel({
+  data,
+  q,
+  onOpen,
+  onAdd,
+  onChanged,
 }: {
-  mode: 'create' | 'edit'
-  company?: Company
-  holdings: Company[]
-  me?: string
-  onClose: () => void
-  onSaved: () => void
+  data: CompaniesData
+  q: string
+  onOpen: (u: UserRow) => void
+  onAdd: () => void
+  onChanged: () => void
 }) {
-  const editing = mode === 'edit' && company
-  const [name, setName] = useState(company?.name ?? '')
-  const [isHolding, setIsHolding] = useState(company?.type === 'HOLDING')
-  const [parentId, setParentId] = useState(company?.parentId ?? holdings[0]?.id ?? '')
-  const [code, setCode] = useState(company?.code ?? '')
-  const [codeTouched, setCodeTouched] = useState(Boolean(company))
-  const [address, setAddress] = useState(company?.address ?? '')
-  const [phone, setPhone] = useState(company?.phone ?? '')
-  const [email, setEmail] = useState(company?.email ?? '')
-  const [website, setWebsite] = useState(company?.website ?? '')
-  const [logo, setLogo] = useState<string | null>(company?.logoData ?? null)
-  const [drafts, setDrafts] = useState<PositionDraft[]>(mode === 'create' ? [newDraft('ADMIN_PT')] : [])
-  const [userDialog, setUserDialog] = useState<{ user: UserRow | null } | null>(null)
-  const [busy, setBusy] = useState<'save' | 'delete' | null>(null)
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [status, setStatus] = useState<AccFilter>('all')
+  const [place, setPlace] = useState('all')
+  const [role, setRole] = useState('all')
+  const [limit, setLimit] = useState(PAGE)
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const full = data.scope !== 'ENTITY'
+  const allowed = data.manageableRoles
 
-  const derivedCode = useMemo(() => {
-    const slug = slugify(name.replace(/^(pt|holding)\s+/i, '')) || slugify(name)
-    return slug ? `${isHolding ? 'HOLDING' : 'PT'}-${slug.toUpperCase()}` : ''
-  }, [name, isHolding])
-  const shownCode = codeTouched ? code : derivedCode
+  const rows = useMemo(() => {
+    const flat = [
+      ...data.holdingUsers.map((u) => ({ u, c: null as Company | null })),
+      ...data.companies.flatMap((c) => c.users.map((u) => ({ u, c }))),
+    ]
+    const needle = q.trim().toLowerCase()
+    return flat
+      .filter(({ u }) =>
+        status === 'all' ? true : status === 'active' ? u.isActive : status === 'never' ? u.isActive && !u.lastLoginAt : status === 'nopass' ? !u.hasPassword : !u.isActive
+      )
+      .filter(({ c }) => (place === 'all' ? true : place === 'group' ? c === null : c?.id === place))
+      .filter(({ u }) => (role === 'all' ? true : u.role === role))
+      .filter(({ u, c }) => !needle || [u.name, u.username, u.email, u.title, roleLabel(u.role), c?.name].some((v) => (v ?? '').toLowerCase().includes(needle)))
+      .sort((a, b) => (a.c?.name ?? '').localeCompare(b.c?.name ?? '') || a.u.name.localeCompare(b.u.name))
+  }, [data, q, status, place, role])
 
-  function updateDraft(key: string, patch: Partial<PositionDraft>) {
-    setDrafts((ds) =>
-      ds.map((d) => {
-        if (d.key !== key) return d
-        const next = { ...d, ...patch }
-        if (patch.name !== undefined && !next.usernameTouched) next.username = slugify(patch.name)
-        if (patch.username !== undefined) next.usernameTouched = true
-        return next
+  const all = [...data.holdingUsers, ...data.companies.flatMap((c) => c.users)]
+  const counts: Record<AccFilter, number> = {
+    all: all.length,
+    active: all.filter((u) => u.isActive).length,
+    never: all.filter((u) => u.isActive && !u.lastLoginAt).length,
+    nopass: all.filter((u) => !u.hasPassword).length,
+    inactive: all.filter((u) => !u.isActive).length,
+  }
+  const rolesPresent = (ALL_ROLES as readonly string[]).filter((r) => all.some((u) => u.role === r))
+  const canTouch = (u: UserRow) => u.id !== data.me && (!allowed || allowed.includes(u.role))
+  const pickable = rows.filter(({ u }) => canTouch(u))
+  const allPicked = pickable.length > 0 && pickable.every(({ u }) => picked.has(u.id))
+
+  function toggle(id: string) {
+    setPicked((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  async function bulk(active: boolean) {
+    const targets = all.filter((u) => picked.has(u.id) && u.isActive !== active)
+    if (targets.length === 0) return
+    setBusy(true)
+    const results = await Promise.all(targets.map((u) => call('/api/companies/users', 'PATCH', { id: u.id, isActive: active })))
+    setBusy(false)
+    const okIds = targets.filter((_, i) => results[i].ok).map((u) => u.id)
+    const failed = results.find((r) => !r.ok)
+    onChanged()
+    setPicked(new Set())
+    setSelecting(false)
+    if (okIds.length) {
+      toast(`${okIds.length} akun ${active ? 'diaktifkan' : 'dinonaktifkan'}.`, {
+        description: failed ? `Sebagian gagal: ${failed.error}` : undefined,
+        action: {
+          label: 'Urungkan',
+          onClick: async () => {
+            await Promise.all(okIds.map((id) => call('/api/companies/users', 'PATCH', { id, isActive: !active })))
+            onChanged()
+          },
+        },
       })
-    )
-  }
-
-  async function save() {
-    setBusy('save')
-    setMsg(null)
-    const identity = { name, address, phone, email, website, logoData: logo }
-    const r = editing
-      ? await call('/api/companies', 'PATCH', { id: company!.id, ...identity })
-      : await call('/api/companies', 'POST', {
-          ...identity,
-          isHolding,
-          parentId: isHolding ? null : parentId || null,
-          code: codeTouched ? code : undefined,
-          positions: drafts.map((d) => ({
-            role: d.role,
-            name: d.name,
-            username: d.username,
-            email: d.email || undefined,
-            password: d.password || undefined,
-            title: d.title || undefined,
-            divisionName: d.role === 'KEPALA_DIVISI' ? d.divisionName || undefined : undefined,
-            projectName: d.role === 'PIC_PROYEK' ? d.projectName || undefined : undefined,
-          })),
-        })
-    setBusy(null)
-    if (!r.ok) {
-      setMsg({ kind: 'err', text: r.error ?? 'Gagal menyimpan' })
-      return
+    } else if (failed) {
+      toast.error(failed.error ?? 'Status belum berubah.')
     }
-    onSaved()
-    if (editing) setMsg({ kind: 'ok', text: 'Perubahan tersimpan.' })
-    else onClose()
   }
 
-  async function removeCompany() {
-    if (!company) return
-    if (!window.confirm(`Hapus ${company.name} beserta ${company.counts.users} akun, ${company.counts.divisions} divisi, dan ${company.counts.projects} proyeknya? Tindakan ini tidak bisa dibatalkan.`)) return
-    setBusy('delete')
-    const r = await call(`/api/companies?id=${company.id}`, 'DELETE')
-    setBusy(null)
-    if (!r.ok) {
-      setMsg({ kind: 'err', text: r.error ?? 'Gagal menghapus' })
-      return
-    }
-    onSaved()
-    onClose()
-  }
-
-  const positionOptions = isHolding ? [...POSITION_OPTIONS, ...HOLDING_POSITION_OPTIONS] : POSITION_OPTIONS
+  const FILTERS: { v: AccFilter; label: string; status?: 'on' | 'risk' | 'late' | 'neutral' }[] = [
+    { v: 'all', label: 'Semua' },
+    { v: 'active', label: 'Aktif', status: 'on' },
+    { v: 'never', label: 'Belum pernah masuk', status: 'risk' },
+    { v: 'nopass', label: 'Tanpa kata sandi', status: 'late' },
+    { v: 'inactive', label: 'Nonaktif', status: 'neutral' },
+  ]
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent showCloseButton={false} className={sheetClass}>
-        <DialogHeader className="px-5 sm:px-7 pt-5 pb-4 border-b border-white/40 dark:border-white/10 text-left">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex items-center gap-3">
-              <Logo company={{ name: name || 'Perusahaan', logoData: logo, type: isHolding ? 'HOLDING' : 'PT' }} />
-              <div className="min-w-0">
-                <DialogTitle className="text-2xl font-bold tracking-tight truncate">{editing ? company!.name : 'Tambah Perusahaan'}</DialogTitle>
-                <DialogDescription className="text-sm mt-0.5">
-                  {editing ? `${company!.code} · ${company!.type === 'HOLDING' ? 'Holding' : `Anak perusahaan${company!.parentName ? ` dari ${company!.parentName}` : ''}`}` : 'Identitas, logo, lalu posisi dan akun pertamanya.'}
-                </DialogDescription>
-              </div>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Tutup" className="shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-500/10 dark:hover:bg-white/10">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-5 sm:px-7 py-5 space-y-4">
-          <Section icon={Building2} title="Identitas perusahaan">
-            <div className="grid gap-4 lg:grid-cols-[14rem_1fr] lg:gap-6">
-              <LogoPicker value={logo} name={name} type={isHolding ? 'HOLDING' : 'PT'} onChange={setLogo} />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="co-name" className="text-sm">Nama perusahaan <span className="text-rose-500">*</span></Label>
-                  <Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. PT Sigma" className={field} />
-                </div>
-                {!editing && (
-                  <>
-                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 px-3 h-11 cursor-pointer select-none sm:col-span-2">
-                      <input type="checkbox" checked={isHolding} onChange={(e) => setIsHolding(e.target.checked)} className="h-5 w-5 accent-blue-600" />
-                      <span className="text-sm text-slate-700 dark:text-slate-200">Perusahaan ini adalah <strong>holding</strong> (induk), bukan anak perusahaan</span>
-                    </label>
-                    {!isHolding && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor="co-parent" className="text-sm">Induk (holding)</Label>
-                        <select id="co-parent" value={parentId} onChange={(e) => setParentId(e.target.value)} className={selectClass}>
-                          {holdings.length === 0 && <option value="">— belum ada holding —</option>}
-                          {holdings.map((h) => (
-                            <option key={h.id} value={h.id}>{h.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="co-code" className="text-sm">Kode</Label>
-                      <Input id="co-code" value={shownCode} onChange={(e) => { setCode(e.target.value.toUpperCase()); setCodeTouched(true) }} placeholder="otomatis dari nama" className={cn(field, 'font-mono')} />
-                    </div>
-                  </>
-                )}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="co-address" className="text-sm flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Alamat</Label>
-                  <Textarea id="co-address" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} className="bg-white/80 dark:bg-slate-900/60 text-base" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="co-phone" className="text-sm flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> Telepon</Label>
-                  <Input id="co-phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={field} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="co-email" className="text-sm flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</Label>
-                  <Input id="co-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="co-web" className="text-sm flex items-center gap-1.5"><Globe className="h-3.5 w-3.5" /> Situs web</Label>
-                  <Input id="co-web" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" className={field} />
-                </div>
-              </div>
-            </div>
-          </Section>
-
-          {editing ? (
-            <>
-              <Section icon={Users} tone="violet" title={<>Posisi &amp; akun <span className="text-sm font-normal text-slate-500">· {company!.users.length}</span></>} hint="Ubah nama, username, email, jabatan, peran; setel ulang kata sandi; nonaktifkan atau hapus.">
-                <UserList users={company!.users} me={me} onEdit={(u) => setUserDialog({ user: u })} onChanged={onSaved} />
-                <Button type="button" variant="outline" className="h-11 icon-rotate-hover" onClick={() => setUserDialog({ user: null })}>
-                  <Plus className="h-5 w-5" /> Tambah posisi
-                </Button>
-              </Section>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Section icon={Shield} tone="violet" title={<>Divisi <span className="text-sm font-normal text-slate-500">· {company!.divisions.length}</span></>}>
-                  {company!.divisions.length === 0 ? <p className="text-sm text-slate-500">Belum ada divisi — tambahkan Kepala Divisi dengan nama divisi baru.</p> : (
-                    <ul className="text-sm space-y-1">
-                      {company!.divisions.map((d) => (
-                        <li key={d.id} className="flex justify-between gap-2"><span className="font-medium text-slate-800 dark:text-slate-100">{d.name}</span><span className="text-slate-500 truncate">{d.headName ?? 'belum ada kepala'}</span></li>
-                      ))}
-                    </ul>
-                  )}
-                </Section>
-                <Section icon={FolderKanban} title={<>Proyek <span className="text-sm font-normal text-slate-500">· {company!.projects.length}</span></>}>
-                  {company!.projects.length === 0 ? <p className="text-sm text-slate-500">Belum ada proyek — tambahkan Manager Proyek dengan nama proyek baru.</p> : (
-                    <ul className="text-sm space-y-1">
-                      {company!.projects.map((p) => (
-                        <li key={p.id} className="flex justify-between gap-2"><span className="font-medium text-slate-800 dark:text-slate-100 truncate">{p.name}</span><span className="text-slate-500 truncate">{p.picName ?? 'belum ada manager'}</span></li>
-                      ))}
-                    </ul>
-                  )}
-                </Section>
-              </div>
-              <Section icon={AlertTriangle} tone="rose" title="Zona hati-hati">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="h-11" onClick={async () => { const r = await call('/api/companies', 'PATCH', { id: company!.id, isActive: !company!.isActive }); if (!r.ok) setMsg({ kind: 'err', text: r.error ?? 'Gagal' }); else onSaved() }}>
-                    <Power className="h-4 w-4" /> {company!.isActive ? 'Nonaktifkan perusahaan' : 'Aktifkan perusahaan'}
-                  </Button>
-                  <Button type="button" variant="outline" className="h-11 border-rose-500/40 text-rose-700 dark:text-rose-300" disabled={busy !== null} onClick={removeCompany}>
-                    {busy === 'delete' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Hapus perusahaan
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-500">Perusahaan yang sudah punya laporan tidak bisa dihapus, hanya dinonaktifkan.</p>
-              </Section>
-            </>
-          ) : (
-            <Section icon={Users} tone="violet" title="Posisi & akun pertama" hint="Tambahkan Admin PT, Kepala Divisi, Manager Proyek, atau Direktur. Username dan email otomatis dari nama; kata sandi awal 1234.">
-              <div className="space-y-3">
-                {drafts.map((d, idx) => (
-                  <PositionRow key={d.key} draft={d} index={idx} options={positionOptions} onChange={(patch) => updateDraft(d.key, patch)} onRemove={() => setDrafts((ds) => ds.filter((x) => x.key !== d.key))} />
-                ))}
-                <Button type="button" variant="outline" className="h-11 icon-rotate-hover" onClick={() => setDrafts((ds) => [...ds, newDraft(ds.length === 0 ? 'ADMIN_PT' : 'KEPALA_DIVISI')])}>
-                  <Plus className="h-5 w-5" /> Tambah posisi
-                </Button>
-              </div>
-            </Section>
-          )}
-
-          {msg && (
-            <div className={cn('flex items-start gap-2 rounded-lg p-2.5 text-[13px]', msg.kind === 'ok' ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300')}>
-              {msg.kind === 'ok' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
-              {msg.text}
-            </div>
-          )}
-        </div>
-
-        <div className="px-5 sm:px-7 py-4 border-t border-white/40 dark:border-white/10 flex gap-2 justify-end bg-white/40 dark:bg-slate-900/40">
-          <Button variant="ghost" onClick={onClose} disabled={busy !== null} className="h-12 px-5 text-base">{editing ? 'Tutup' : 'Batal'}</Button>
-          <Button onClick={save} disabled={busy !== null || name.trim().length < 2 || (!editing && !isHolding && !parentId)} className="h-12 px-6 text-base bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-glow-blue">
-            {busy === 'save' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-            {editing ? 'Simpan identitas' : 'Simpan perusahaan'}
+    <Card
+      title="Akun"
+      subtitle={`${formatNumber(rows.length)} dari ${formatNumber(all.length)} akun`}
+      action={
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={selecting ? 'secondary' : 'plain'}
+            onClick={() => {
+              setSelecting((v) => !v)
+              setPicked(new Set())
+            }}
+          >
+            {selecting ? 'Selesai memilih' : 'Pilih'}
+          </Button>
+          <Button size="sm" variant="primary" icon="tambah" onClick={onAdd}>
+            Tambah akun
           </Button>
         </div>
-
-        {userDialog && company && (
-          <AccountDialog
-            company={company}
-            user={userDialog.user}
-            me={me}
-            lockCompany
-            onClose={() => setUserDialog(null)}
-            onSaved={onSaved}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function PositionRow({ draft: d, index, options, onChange, onRemove }: { draft: PositionDraft; index: number; options: { role: string; label: string; hint: string }[]; onChange: (p: Partial<PositionDraft>) => void; onRemove: () => void }) {
-  const [open, setOpen] = useState(true)
-  const label = options.find((o) => o.role === d.role)?.label ?? d.role
-  return (
-    <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 space-y-3">
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex-1 flex items-center gap-2 text-left min-h-9">
-          <span className="h-7 w-7 rounded-lg bg-violet-500/15 text-violet-700 dark:text-violet-300 text-xs font-bold flex items-center justify-center">{index + 1}</span>
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
-          {d.name && <span className="text-sm text-slate-500 truncate">· {d.name}{d.username ? ` (${d.username})` : ''}</span>}
-          <ChevronDown className={cn('h-4 w-4 text-slate-400 ml-auto transition-transform', open && 'rotate-180')} />
-        </button>
-        <IconBtn label="Hapus posisi" onClick={onRemove} danger><Trash2 className="h-4 w-4" /></IconBtn>
-      </div>
-      {open && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-sm">Posisi</Label>
-            <select value={d.role} onChange={(e) => onChange({ role: e.target.value, title: '' })} className={selectClass}>
-              {options.map((o) => (
-                <option key={o.role} value={o.role}>{o.label}</option>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div className="mk-chips">
+          {FILTERS.map((f) => (
+            <Chip key={f.v} selected={status === f.v} status={f.status} count={counts[f.v]} onClick={() => setStatus(f.v)}>
+              {f.label}
+            </Chip>
+          ))}
+        </div>
+        <div className="mk-filterrow">
+          {full ? (
+            <label className="flex-1 min-w-[180px]">
+              <span className="mk-sr">Penempatan</span>
+              <select className={selectCls} value={place} onChange={(e) => setPlace(e.target.value)}>
+                <option value="all">Semua penempatan</option>
+                <option value="group">Tingkat grup</option>
+                {data.companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="flex-1 min-w-[180px]">
+            <span className="mk-sr">Posisi</span>
+            <select className={selectCls} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="all">Semua posisi</option>
+              {rolesPresent.map((r) => (
+                <option key={r} value={r}>
+                  {roleLabel(r)}
+                </option>
               ))}
             </select>
-            <p className="text-xs text-slate-500">{options.find((o) => o.role === d.role)?.hint}</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Nama <span className="text-rose-500">*</span></Label>
-            <Input value={d.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Nama pemegang posisi" className={field} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Username <span className="text-rose-500">*</span></Label>
-            <Input value={d.username} onChange={(e) => onChange({ username: e.target.value.toLowerCase() })} placeholder="otomatis dari nama" className={cn(field, 'font-mono')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Kata sandi awal</Label>
-            <Input value={d.password} onChange={(e) => onChange({ password: e.target.value })} className={cn(field, 'font-mono')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Email</Label>
-            <Input value={d.email} onChange={(e) => onChange({ email: e.target.value })} placeholder={d.username ? `${d.username}@karya.co.id` : 'otomatis dari username'} className={field} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Jabatan (opsional)</Label>
-            <Input value={d.title} onChange={(e) => onChange({ title: e.target.value })} placeholder={label} className={field} />
-          </div>
-          {d.role === 'KEPALA_DIVISI' && (
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-sm">Nama divisi yang dipimpin</Label>
-              <Input value={d.divisionName} onChange={(e) => onChange({ divisionName: e.target.value })} placeholder="mis. Keuangan — dibuat otomatis" className={field} />
-            </div>
-          )}
-          {d.role === 'PIC_PROYEK' && (
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-sm">Nama proyek yang dipegang</Label>
-              <Input value={d.projectName} onChange={(e) => onChange({ projectName: e.target.value })} placeholder="mis. Pembangunan Gudang — dibuat otomatis" className={field} />
-            </div>
-          )}
+          </label>
         </div>
-      )}
-    </div>
+
+        {selecting ? (
+          <div className="mk-bulkbar" role="toolbar" aria-label="Aksi untuk akun terpilih">
+            <label className="flex items-center gap-2 t-callout">
+              <input
+                type="checkbox"
+                className="mk-check"
+                checked={allPicked}
+                onChange={() => setPicked(allPicked ? new Set() : new Set(pickable.map(({ u }) => u.id)))}
+              />
+              {picked.size ? `${picked.size} dipilih` : 'Pilih semua yang tampil'}
+            </label>
+            <div className="flex-1" />
+            <Button size="sm" disabled={!picked.size || busy} onClick={() => bulk(true)}>
+              Aktifkan
+            </Button>
+            <Button size="sm" variant="destructive" disabled={!picked.size || busy} onClick={() => bulk(false)}>
+              Nonaktifkan
+            </Button>
+          </div>
+        ) : null}
+
+        {rows.length === 0 ? (
+          <EmptyNote icon="pengguna">Tidak ada akun yang cocok dengan saringan ini.</EmptyNote>
+        ) : (
+          <div className="mk-list">
+            {rows.slice(0, limit).map(({ u, c }) => (
+              <div key={u.id} className="mk-pickrow">
+                {selecting ? (
+                  <input
+                    type="checkbox"
+                    className="mk-check"
+                    aria-label={`Pilih ${u.name}`}
+                    disabled={!canTouch(u)}
+                    checked={picked.has(u.id)}
+                    onChange={() => toggle(u.id)}
+                  />
+                ) : null}
+                <UserRowButton u={u} me={data.me} onClick={() => (selecting && canTouch(u) ? toggle(u.id) : onOpen(u))} sub={`${u.title || roleLabel(u.role)} · ${c ? c.name : 'Tingkat grup'}`} />
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.length > limit ? (
+          <Button variant="secondary" onClick={() => setLimit((l) => l + PAGE)}>
+            Tampilkan {Math.min(PAGE, rows.length - limit)} akun lagi
+          </Button>
+        ) : null}
+      </div>
+    </Card>
   )
 }
 
-// ------------------------------------------------------------------
-// Pop-up akun (tambah / ubah)
-// ------------------------------------------------------------------
+/* ------------------------------------------------------------------
+   Struktur — pohon grup
+   ------------------------------------------------------------------ */
 
-/** Pita kecil di dashboard Super Admin: hitungan + tombol tambah perusahaan. */
+function StructureTree({
+  data,
+  q,
+  onOpenCompany,
+  onOpenUser,
+}: {
+  data: CompaniesData
+  q: string
+  onOpenCompany: (c: Company, tab: CompanyTab) => void
+  onOpenUser: (u: UserRow) => void
+}) {
+  const holdings = data.companies.filter((c) => c.type === 'HOLDING')
+  const orphans = data.companies.filter((c) => c.type !== 'HOLDING' && !holdings.some((h) => h.id === c.parentId))
+  const [open, setOpen] = useState<Set<string>>(() => new Set(['grup', ...holdings.map((h) => h.id)]))
+  const needle = q.trim().toLowerCase()
+  const match = (c: Company) =>
+    !needle ||
+    [c.name, c.code].some((v) => v.toLowerCase().includes(needle)) ||
+    c.users.some((u) => u.name.toLowerCase().includes(needle)) ||
+    c.divisions.some((d) => d.name.toLowerCase().includes(needle)) ||
+    c.projects.some((p) => p.name.toLowerCase().includes(needle))
+
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  const isOpen = (id: string) => open.has(id) || Boolean(needle)
+
+  const allIds = ['grup', ...data.companies.map((c) => c.id)]
+
+  return (
+    <Card
+      title="Struktur grup"
+      subtitle="Holding, anak perusahaan, divisi, dan proyek beserta penanggung jawabnya"
+      action={
+        <Button size="sm" variant="secondary" onClick={() => setOpen(open.size >= allIds.length ? new Set() : new Set(allIds))}>
+          {open.size >= allIds.length ? 'Ciutkan semua' : 'Buka semua'}
+        </Button>
+      }
+    >
+      <ul className="mk-tree" role="tree" aria-label="Struktur grup">
+        {data.holdingUsers.length > 0 ? (
+          <TreeNode id="grup" open={isOpen('grup')} onToggle={toggle} icon="kunci" title="Akun tingkat grup" meta={`${data.holdingUsers.length} akun`}>
+            {data.holdingUsers
+              .filter((u) => !needle || u.name.toLowerCase().includes(needle))
+              .map((u) => (
+                <li key={u.id} role="treeitem" aria-selected={false}>
+                  <button type="button" className="mk-tree__leaf" onClick={() => onOpenUser(u)}>
+                    <Avatar initials={initialsOf(u.name)} size={26} />
+                    <span className="truncate">{u.name}</span>
+                    <span className="mk-tree__sub">{roleLabel(u.role)}</span>
+                  </button>
+                </li>
+              ))}
+          </TreeNode>
+        ) : null}
+        {[...holdings, ...orphans].map((h) => {
+          const kids = data.companies.filter((c) => c.parentId === h.id && c.type !== 'HOLDING')
+          if (!match(h) && !kids.some(match)) return null
+          return (
+            <CompanyNode key={h.id} c={h} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany}>
+              {kids.filter(match).map((k) => (
+                <CompanyNode key={k.id} c={k} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany} />
+              ))}
+            </CompanyNode>
+          )
+        })}
+      </ul>
+    </Card>
+  )
+}
+
+function CompanyNode({
+  c,
+  isOpen,
+  onToggle,
+  onOpenCompany,
+  children,
+}: {
+  c: Company
+  isOpen: (id: string) => boolean
+  onToggle: (id: string) => void
+  onOpenCompany: (c: Company, tab: CompanyTab) => void
+  children?: React.ReactNode
+}) {
+  return (
+    <TreeNode
+      id={c.id}
+      open={isOpen(c.id)}
+      onToggle={onToggle}
+      logo={<CompanyLogo company={c} size={28} />}
+      title={c.name}
+      meta={`${c.users.length} akun · ${c.divisions.length} divisi · ${c.projects.length} proyek`}
+      onOpen={() => onOpenCompany(c, 'ringkasan')}
+      dim={!c.isActive}
+    >
+      {c.divisions.map((d) => (
+        <li key={d.id} role="treeitem" aria-selected={false}>
+          <button type="button" className="mk-tree__leaf" onClick={() => onOpenCompany(c, 'divisi')}>
+            <Icon name="tim" size={16} className="text-ink-3" />
+            <span className="truncate">Divisi {d.name}</span>
+            <span className={cx('mk-tree__sub', !d.headName && 'is-warn')}>{d.headName ?? 'Belum ada kepala'}</span>
+          </button>
+        </li>
+      ))}
+      {c.projects.map((p) => (
+        <li key={p.id} role="treeitem" aria-selected={false}>
+          <button type="button" className="mk-tree__leaf" onClick={() => onOpenCompany(c, 'proyek')}>
+            <Icon name="proyek" size={16} className="text-ink-3" />
+            <span className="truncate">{p.name}</span>
+            <span className={cx('mk-tree__sub', !p.picName && 'is-warn')}>{p.picName ?? 'Belum ada manager'}</span>
+          </button>
+        </li>
+      ))}
+      {children}
+    </TreeNode>
+  )
+}
+
+function TreeNode({
+  id,
+  open,
+  onToggle,
+  icon,
+  logo,
+  title,
+  meta,
+  onOpen,
+  dim,
+  children,
+}: {
+  id: string
+  open: boolean
+  onToggle: (id: string) => void
+  icon?: Parameters<typeof Icon>[0]['name']
+  logo?: React.ReactNode
+  title: string
+  meta?: string
+  onOpen?: () => void
+  dim?: boolean
+  children?: React.ReactNode
+}) {
+  return (
+    <li role="treeitem" aria-expanded={open} aria-selected={false} className={cx('mk-tree__node', dim && 'is-dim')}>
+      <div className="mk-tree__row">
+        <button type="button" className="mk-tree__twisty" aria-label={open ? `Ciutkan ${title}` : `Buka ${title}`} onClick={() => onToggle(id)}>
+          <Icon name="kanan" size={16} className={cx('mk-tree__chev', open && 'is-open')} />
+        </button>
+        {logo ?? (icon ? <span className="mk-tree__icon"><Icon name={icon} size={16} /></span> : null)}
+        <button type="button" className="mk-tree__title" onClick={onOpen ?? (() => onToggle(id))}>
+          <span className="truncate">{title}</span>
+          {meta ? <span className="mk-tree__sub">{meta}</span> : null}
+        </button>
+      </div>
+      <div className={cx('mk-tree__kids', open && 'is-open')}>
+        <ul role="group">{children}</ul>
+      </div>
+    </li>
+  )
+}
+
+/* ------------------------------------------------------------------
+   Pita di dashboard Super Admin
+   ------------------------------------------------------------------ */
+
 export function SuperadminStrip() {
   const { setActiveTab } = useApp()
-  const { data } = useResource<Data>('/api/companies')
+  const { data } = useResource<CompaniesData>('/api/companies')
   function openAdd() {
     try {
       window.sessionStorage.setItem('mk-open-add-company', '1')
@@ -764,24 +821,23 @@ export function SuperadminStrip() {
     setActiveTab('companies')
   }
   return (
-    <div className="hero-strip p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Super Admin</div>
-        <div className="text-xl font-bold text-slate-800 dark:text-slate-100 leading-tight mt-0.5">Perusahaan &amp; akun seluruh grup</div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Chip icon={Building2}>{data?.totals.companies ?? '…'} perusahaan</Chip>
-          <Chip icon={Users}>{data?.totals.users ?? '…'} akun</Chip>
-          <Chip icon={FolderKanban}>{data?.totals.projects ?? '…'} proyek</Chip>
+    <Card
+      title="Perusahaan & akun seluruh grup"
+      subtitle={
+        data
+          ? `${formatNumber(data.totals.companies)} perusahaan · ${formatNumber(data.totals.users)} akun · ${formatNumber(data.totals.divisions)} divisi · ${formatNumber(data.totals.projects)} proyek`
+          : 'Memuat ringkasan…'
+      }
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => setActiveTab('companies')}>
+            Kelola akun
+          </Button>
+          <Button size="sm" variant="primary" icon="tambah" onClick={openAdd}>
+            Tambah perusahaan
+          </Button>
         </div>
-      </div>
-      <div className="flex gap-2 shrink-0">
-        <Button variant="outline" className="h-12" onClick={() => setActiveTab('companies')}>
-          <Users className="h-5 w-5" /> Kelola akun
-        </Button>
-        <Button onClick={openAdd} className="icon-rotate-hover h-12 px-5 text-base font-semibold bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white btn-primary-glow">
-          <Plus className="h-5 w-5" strokeWidth={2.5} /> Tambah Perusahaan
-        </Button>
-      </div>
-    </div>
+      }
+    />
   )
 }

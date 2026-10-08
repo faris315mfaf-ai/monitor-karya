@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, resolveScopeEntityId } from '@/lib/auth'
 import { lastNMonthKeys } from '@/lib/wib'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 // Indonesian short month names
 const SHORT_MONTHS_ID = [
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ months })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Tren KPI belum termuat. Coba lagi.', 'kpi-trends GET')
   }
 }

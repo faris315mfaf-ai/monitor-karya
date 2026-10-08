@@ -1,0 +1,30 @@
+.git
+.next
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+coverage
+tests
+docs
+deploy
+design-system/**/*.html
+.claude
+.vercel
+Dockerfile
+.dockerignore
+
+# Berkas kredensial dan cadangan lokal tidak masuk konteks build.
+*.pem
+*.key
+*.dump
+*.dump.age
+*.sql.age
+.ssh
+.aws
+.agents
+.codex
+
+# Runner E2E mengimpor tests/; keduanya hanya di-mount saat uji terisolasi.
+scripts/uji-alur-lokal.ts

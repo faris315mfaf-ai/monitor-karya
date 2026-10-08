@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
+import { cleanText, clientIp, safeDisplayName } from '@/lib/security'
 
 /**
  * Supporting evidence attached to a report line.
@@ -14,6 +15,16 @@ import { syncEvidenceCount } from '@/lib/daily-rollup'
  * Storage; both kinds share these rows, so the "at least one piece of evidence"
  * validation counts them together.
  */
+
+/** URL http(s) yang benar-benar bisa diurai, tanpa kredensial tertanam. */
+function isHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password && !!u.hostname
+  } catch {
+    return false
+  }
+}
 
 export async function GET(req: NextRequest) {
   const user = await requireApiUser()
@@ -41,10 +52,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const targetType = typeof body.targetType === 'string' ? body.targetType : ''
-  const targetId = typeof body.targetId === 'string' ? body.targetId : ''
-  const fileName = typeof body.fileName === 'string' ? body.fileName.trim() : ''
-  const url = typeof body.url === 'string' ? body.url.trim() : ''
+  const targetType = cleanText(body.targetType, 40)
+  const targetId = cleanText(body.targetId, 64)
+  const fileNameRaw = cleanText(body.fileName, 200)
+  const fileName = fileNameRaw ? safeDisplayName(fileNameRaw) : ''
+  // Tautan lebih dari 2.000 karakter ditolak, bukan dipotong diam-diam.
+  const url = typeof body.url === 'string' && body.url.length <= 2000 ? cleanText(body.url, 2000) : ''
 
   const guard = await canWriteEvidence(user, targetType, targetId)
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
@@ -52,7 +65,7 @@ export async function POST(req: NextRequest) {
   if (!fileName) {
     return NextResponse.json({ error: 'Nama/keterangan bukti wajib diisi' }, { status: 422 })
   }
-  if (!/^https?:\/\/\S+$/i.test(url)) {
+  if (!/^https?:\/\/\S+$/i.test(url) || !isHttpUrl(url)) {
     return NextResponse.json(
       { error: 'Tautan bukti harus berupa URL yang diawali http:// atau https://' },
       { status: 422 }
@@ -81,8 +94,8 @@ export async function POST(req: NextRequest) {
       targetType,
       targetId,
       afterData: JSON.stringify({ fileName, url }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-      userAgent: req.headers.get('user-agent') || null,
+      ip: clientIp(req),
+      userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
     },
   })
 

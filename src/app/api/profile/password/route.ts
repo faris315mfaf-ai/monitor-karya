@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireApiUser } from '@/lib/auth'
+import { requireApiUser, setSessionCookie } from '@/lib/auth'
 import { hashPassword, verifyPassword } from '@/lib/password'
-import { MIN_PASSWORD } from '@/lib/companies'
+import { passwordProblem } from '@/lib/password-policy'
+import { MAX_PASSWORD_LENGTH, clientIp, hit, peek, resetRate, tooManyRequests } from '@/lib/security'
+
+/** Penebakan kata sandi lama dari layar yang tertinggal terbuka: 5 salah / 15 menit per akun. */
+const FAIL_LIMIT = 5
+const FAIL_WINDOW_MS = 15 * 60_000
 
 /**
  * Ganti kata sandi sendiri (15 Sep 2026).
@@ -12,9 +17,13 @@ import { MIN_PASSWORD } from '@/lib/companies'
  * Kata sandi lama wajib benar, jadi orang lain yang menemukan layar terbuka
  * tidak bisa mengunci pemiliknya. Super Admin tetap bisa menyetel ulang kata
  * sandi orang lain lewat meja Perusahaan & Akun — itu jalur yang berbeda.
+ *
+ * F1-C (6 Okt 2026): minimal 8 karakter (src/lib/password-policy.ts). Rute ini
+ * satu-satunya yang tetap terbuka bagi akun dengan mustChangePassword; begitu
+ * berhasil, tanda itu dihapus dan aplikasi bisa dipakai.
  */
 export async function POST(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowPendingPasswordChange: true })
   if (user instanceof NextResponse) return user
 
   let body: Record<string, unknown>
@@ -27,33 +36,51 @@ export async function POST(req: NextRequest) {
   const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : ''
   const newPassword = typeof body.newPassword === 'string' ? body.newPassword : ''
 
-  if (newPassword.length < MIN_PASSWORD) {
-    return NextResponse.json({ error: `Kata sandi baru minimal ${MIN_PASSWORD} karakter.` }, { status: 422 })
+  if (newPassword.length > MAX_PASSWORD_LENGTH || currentPassword.length > MAX_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: `Kata sandi maksimal ${MAX_PASSWORD_LENGTH} karakter.` }, { status: 422 })
   }
-  if (newPassword === currentPassword) {
-    return NextResponse.json({ error: 'Kata sandi baru masih sama dengan yang lama.' }, { status: 422 })
-  }
+  const problem = passwordProblem(newPassword, { current: currentPassword, label: 'Kata sandi baru' })
+  if (problem) return NextResponse.json({ error: problem }, { status: 422 })
 
   const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } })
   if (!row) return NextResponse.json({ error: 'Akun tidak ditemukan' }, { status: 404 })
 
+  const failKey = `pwchange:${user.id}`
+  const blocked = peek(failKey, FAIL_LIMIT)
+  if (!blocked.ok) return tooManyRequests(blocked.retryAfterSec)
+
   // Akun yang belum pernah punya kata sandi boleh menyetelnya tanpa yang lama.
   if (row.passwordHash && !(await verifyPassword(currentPassword, row.passwordHash))) {
+    hit(failKey, FAIL_LIMIT, FAIL_WINDOW_MS)
     return NextResponse.json({ error: 'Kata sandi saat ini salah.' }, { status: 422 })
   }
+  resetRate(failKey)
 
-  await db.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'CHANGE_OWN_PASSWORD',
-        targetType: 'USER',
-        targetId: user.id,
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-      },
+  const newHash = await hashPassword(newPassword)
+  const res = NextResponse.json({ ok: true })
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        // Hanya disentuh bila memang true, supaya rute tetap jalan sebelum migrasi 0018 diterapkan.
+        data: { passwordHash: newHash, ...(user.mustChangePassword ? { mustChangePassword: false } : {}) },
+      })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'CHANGE_OWN_PASSWORD',
+          targetType: 'USER',
+          targetId: user.id,
+          afterData: user.mustChangePassword ? JSON.stringify({ forced: true }) : null,
+          ip: clientIp(req),
+        },
+      })
+      // Simpan sandi, audit, dan sesi pengganti dalam satu transaksi.
+      // Cookie hanya dikirim jika seluruh transaksi berhasil.
+      await setSessionCookie(res, user.id, newHash, tx)
     })
-  })
-
-  return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ error: 'Kata sandi belum berhasil diubah. Coba lagi.' }, { status: 503 })
+  }
+  return res
 }

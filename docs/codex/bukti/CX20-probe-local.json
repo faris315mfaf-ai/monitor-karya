@@ -1,0 +1,8 @@
+{
+  "results": [
+    "PASS status sehat sesudah DB, storage HTTP fixture S3, dan seluruh heartbeat sehat",
+    "PASS storage terputus: status internal503, readiness200 degraded",
+    "PASS database terputus: readiness503 unavailable"
+  ],
+  "storage": "LOCAL_HTTP_FIXTURE_ONLY"
+}

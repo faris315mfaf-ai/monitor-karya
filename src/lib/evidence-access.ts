@@ -3,7 +3,16 @@ import 'server-only'
 import { db } from '@/lib/db'
 import { isMasterRole } from '@/lib/rbac'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
-import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence } from '@/lib/lock'
+import {
+  isDailyLocked,
+  isProgressLocked,
+  startOfWibDay,
+  weekPeriodOf,
+  weeklyWriteBlock,
+  type ProgressCadence,
+} from '@/lib/lock'
+import { dailyGate, frozenMessage, FORWARDED_FROZEN_MESSAGE } from '@/lib/daily-rollup'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * Who may attach evidence to a report line, and who may read it back.
@@ -14,7 +23,7 @@ import { isDailyLocked, isProgressLocked, isWeeklyLocked, type ProgressCadence }
  * minted for a file inside the caller's own subtree.
  */
 
-export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT'])
+export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT', 'OUTPUT'])
 
 type Result = { ok: true; entityId: string } | { ok: false; status: number; error: string }
 
@@ -27,7 +36,11 @@ async function targetEntity(
   picUserId?: string | null
   headUserId?: string | null
   locked?: boolean
+  lockMessage?: string
 } | null> {
+  // [INTEGRASI] Kunci bukti mengikuti kunci laporannya (F1-A/F1-B): laporan
+  // yang diteruskan/dikunci atau lewat 17.00 dibekukan, kecuali ada buka kunci
+  // yang sedang berlaku (activeUnlockFor) untuk laporan itu.
   if (targetType === 'DAILY_REPORT') {
     const r = await db.dailyProjectReport.findUnique({
       where: { id: targetId },
@@ -35,16 +48,19 @@ async function targetEntity(
         entityId: true,
         reportDate: true,
         isLocked: true,
+        forwardedAt: true,
         project: { select: { picUserId: true } },
       },
     })
-    return r
-      ? {
-          entityId: r.entityId,
-          picUserId: r.project.picUserId,
-          locked: r.isLocked || isDailyLocked(r.reportDate),
-        }
-      : null
+    if (!r) return null
+    const blocked = r.isLocked || Boolean(r.forwardedAt) || isDailyLocked(r.reportDate)
+    const unlocked = blocked ? Boolean(await activeUnlockFor('DAILY_REPORT', targetId)) : false
+    return {
+      entityId: r.entityId,
+      picUserId: r.project.picUserId,
+      locked: blocked && !unlocked,
+      lockMessage: r.forwardedAt ? FORWARDED_FROZEN_MESSAGE : undefined,
+    }
   }
 
   if (targetType === 'WEEKLY_ITEM') {
@@ -53,7 +69,9 @@ async function targetEntity(
       select: {
         weeklyReport: {
           select: {
+            id: true,
             entityId: true,
+            forwardedAt: true,
             periodStart: true,
             isLocked: true,
             statusHeader: true,
@@ -62,16 +80,16 @@ async function targetEntity(
         },
       },
     })
-    return item
-      ? {
-          entityId: item.weeklyReport.entityId,
-          headUserId: item.weeklyReport.division.headUserId,
-          locked:
-            item.weeklyReport.isLocked ||
-            item.weeklyReport.statusHeader === 'TERKUNCI' ||
-            isWeeklyLocked(item.weeklyReport.periodStart),
-        }
-      : null
+    if (!item) return null
+    const report = item.weeklyReport
+    const unlocked = Boolean(await activeUnlockFor('WEEKLY_REPORT', report.id))
+    const block = weeklyWriteBlock({ period: weekPeriodOf(report.periodStart), report, unlocked })
+    return {
+      entityId: report.entityId,
+      headUserId: report.division.headUserId,
+      locked: Boolean(block),
+      lockMessage: block?.message,
+    }
   }
 
   if (targetType === 'TASK') {
@@ -79,17 +97,25 @@ async function targetEntity(
       where: { id: targetId },
       select: {
         entityId: true,
+        projectId: true,
         workDate: true,
+        scope: true,
         project: { select: { picUserId: true } },
       },
     })
-    return t
-      ? {
-          entityId: t.entityId,
-          picUserId: t.project.picUserId,
-          locked: isDailyLocked(t.workDate),
-        }
-      : null
+    if (!t) return null
+    // Task HARIAN ikut laporan hariannya (beku/buka kunci); task MINGGUAN
+    // tetap memakai kunci 17.00 hari kerjanya seperti sebelumnya.
+    if (t.scope === 'MINGGUAN') {
+      return { entityId: t.entityId, picUserId: t.project.picUserId, locked: isDailyLocked(t.workDate) }
+    }
+    const gate = await dailyGate(t.projectId, startOfWibDay(t.workDate))
+    return {
+      entityId: t.entityId,
+      picUserId: t.project.picUserId,
+      locked: Boolean(gate.frozen) || gate.timeLocked,
+      lockMessage: frozenMessage(gate) ?? undefined,
+    }
   }
 
   if (targetType === 'PROGRESS_REPORT') {
@@ -121,6 +147,26 @@ async function targetEntity(
       : null
   }
 
+  // Output proyek (6 Okt 2026): bukti dibekukan selama menunggu review dan
+  // setelah diterima, supaya yang direview sama dengan yang dikirim.
+  if (targetType === 'OUTPUT') {
+    const o = await db.output.findUnique({
+      where: { id: targetId },
+      select: { status: true, project: { select: { entityId: true, picUserId: true } } },
+    })
+    return o
+      ? {
+          entityId: o.project.entityId,
+          picUserId: o.project.picUserId,
+          locked: o.status === 'MENUNGGU_REVIEW' || o.status === 'DITERIMA',
+          lockMessage:
+            o.status === 'DITERIMA'
+              ? 'Output ini sudah diterima; buktinya tidak dapat diubah.'
+              : 'Output ini sedang direview; batalkan pengiriman dulu untuk mengubah bukti.',
+        }
+      : null
+  }
+
   if (targetType === 'PROJECT_CLOSING') {
     const p = await db.project.findUnique({
       where: { id: targetId },
@@ -145,6 +191,9 @@ export async function canWriteEvidence(
   const target = await targetEntity(targetType, targetId)
   if (!target) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }
 
+  // Hanya pemilik pekerjaan yang menulis bukti: PIC proyeknya, kepala
+  // divisinya, Admin PT di PT itu, atau akun induk. Peran pantau (Direktur,
+  // Manajemen, Auditor) membaca saja walau berada di PT yang sama (6 Okt 2026).
   const owns =
     user.role === 'PIC_PROYEK'
       ? target.picUserId === user.id
@@ -152,7 +201,7 @@ export async function canWriteEvidence(
         ? target.headUserId === user.id
         : isMasterRole(user.role)
           ? true
-          : target.entityId === user.scopeEntityId
+          : user.role === 'ADMIN_PT' && !!user.scopeEntityId && target.entityId === user.scopeEntityId
 
   if (!owns) {
     return { ok: false, status: 403, error: 'Bukti ini di luar tanggung jawab Anda' }
@@ -164,7 +213,7 @@ export async function canWriteEvidence(
     return {
       ok: false,
       status: 409,
-      error: 'Laporan ini sudah dikunci, bukti tidak dapat diubah. Ajukan permohonan buka kunci.',
+      error: target.lockMessage ?? 'Laporan ini sudah dikunci, bukti tidak dapat diubah. Ajukan permohonan buka kunci.',
     }
   }
 

@@ -1,13 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  AlertTriangle, ExternalLink, FileText, Image as ImageIcon, Link2, Loader2,
-  Paperclip, Trash2, Upload,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
+import { Button, Icon, IconButton, Skeleton, cx } from '@/components/mk'
+import { useConfirm } from '@/components/companies/parts'
 
 export type EvidenceItem = {
   id: string
@@ -24,6 +19,16 @@ function humanSize(bytes?: number | null) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
+
+/** Pegangan untuk tombol di luar panel, mis. "Lampirkan foto" di formulir laporan. */
+export type EvidencePanelHandle = {
+  /** Buka pemilih berkas panel; `photo` membatasi ke gambar (kamera di ponsel). */
+  openPicker: (kind?: 'photo' | 'any') => void
+  /** Bisa melampirkan sekarang (ada sasaran, tidak terkunci, tidak sibuk). */
+  canAdd: boolean
+}
+
+const ACCEPT_ANY = 'image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv'
 
 const isImage = (e: EvidenceItem) => !e.url && Boolean(e.mime?.startsWith('image/'))
 
@@ -55,29 +60,17 @@ function PhotoThumb({ item }: { item: EvidenceItem }) {
   }, [item.id])
 
   return (
-    <a
-      href={src ?? undefined}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Buka foto ${item.fileName}`}
-      className="group relative block aspect-square overflow-hidden rounded-xl bg-slate-200/60 dark:bg-slate-800/60 ring-1 ring-black/5 dark:ring-white/10"
-    >
+    <a href={src ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Buka foto ${item.fileName}`} className="mk-lap-thumb">
       {src && !failed ? (
-        <img
-          src={src}
-          alt={item.fileName}
-          loading="lazy"
-          onError={() => setFailed(true)}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        <img src={src} alt={item.fileName} loading="lazy" onError={() => setFailed(true)} />
+      ) : failed ? (
+        <span className="mk-lap-thumb__ph">
+          <Icon name="dokumen" size={24} />
+        </span>
       ) : (
-        <div className="h-full w-full flex items-center justify-center text-slate-400">
-          {failed ? <ImageIcon className="h-6 w-6" /> : <Loader2 className="h-5 w-5 animate-spin" />}
-        </div>
+        <Skeleton h="100%" r={0} />
       )}
-      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-2 pb-1.5 pt-4 text-[11px] text-white">
-        {item.fileName}
-      </span>
+      <span className="mk-lap-thumb__name">{item.fileName}</span>
     </a>
   )
 }
@@ -88,7 +81,8 @@ function PhotoThumb({ item }: { item: EvidenceItem }) {
  * Two ways in: upload a file (stored privately in Supabase Storage) or record
  * an external link for material that already lives somewhere else. Opening an
  * uploaded file asks the server for a short-lived signed URL rather than
- * holding a permanent one. Photos are shown inline as thumbnails.
+ * holding a permanent one. Photos are shown inline as thumbnails. Berkas juga
+ * bisa diseret ke area unggah; menghapus bukti selalu dikonfirmasi.
  */
 export function EvidencePanel({
   targetType,
@@ -99,6 +93,7 @@ export function EvidencePanel({
   onChanged,
   compact,
   photos = true,
+  handleRef,
 }: {
   targetType: 'DAILY_REPORT' | 'WEEKLY_ITEM' | 'PROJECT_CLOSING' | 'TASK' | 'PROGRESS_REPORT'
   targetId: string | null
@@ -109,6 +104,8 @@ export function EvidencePanel({
   compact?: boolean
   /** Tampilkan foto sebagai galeri kecil (bawaan: ya). */
   photos?: boolean
+  /** Pegangan untuk membuka pemilih berkas dari luar panel. */
+  handleRef?: Ref<EvidencePanelHandle>
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -116,14 +113,38 @@ export function EvidencePanel({
   const [showLink, setShowLink] = useState(false)
   const [linkName, setLinkName] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
+  const [over, setOver] = useState(false)
+  const [confirmEl, confirm] = useConfirm()
 
   const noTarget = !targetId
   const pictures = photos ? items.filter(isImage) : []
   const others = photos ? items.filter((e) => !isImage(e)) : items
+  const canAdd = !disabled && !noTarget && busy === null
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      canAdd,
+      openPicker: (kind = 'any') => {
+        const input = fileRef.current
+        if (!input || !canAdd) return
+        // Mode foto hanya untuk satu kali buka; kembali ke semua jenis setelah
+        // berkas dipilih atau pemilih ditutup.
+        input.accept = kind === 'photo' ? 'image/*' : ACCEPT_ANY
+        const reset = () => {
+          input.accept = ACCEPT_ANY
+        }
+        input.addEventListener('change', reset, { once: true })
+        input.addEventListener('cancel', reset, { once: true })
+        input.click()
+      },
+    }),
+    [canAdd]
+  )
 
   async function upload(file: File) {
     if (!targetId) {
-      setErr('Simpan draft dulu agar bukti bisa dilampirkan.')
+      setErr('Simpan draf dulu agar bukti bisa dilampirkan.')
       return
     }
     setBusy('upload')
@@ -136,7 +157,7 @@ export function EvidencePanel({
 
       const res = await fetch('/api/evidence/upload', { method: 'POST', body })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) setErr(json.error || 'Gagal mengunggah berkas')
+      if (!res.ok) setErr(json.error || 'Berkas belum terunggah')
       else onChanged()
     } catch {
       setErr('Tidak dapat menghubungi server.')
@@ -148,7 +169,7 @@ export function EvidencePanel({
 
   async function attachLink() {
     if (!targetId) {
-      setErr('Simpan draft dulu agar bukti bisa dilampirkan.')
+      setErr('Simpan draf dulu agar bukti bisa dilampirkan.')
       return
     }
     setBusy('link')
@@ -160,7 +181,7 @@ export function EvidencePanel({
         body: JSON.stringify({ targetType, targetId, fileName: linkName, url: linkUrl }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) setErr(json.error || 'Gagal melampirkan tautan')
+      if (!res.ok) setErr(json.error || 'Tautan belum terlampir')
       else {
         setLinkName('')
         setLinkUrl('')
@@ -181,7 +202,7 @@ export function EvidencePanel({
       const res = await fetch(`/api/evidence/${id}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) {
-        setErr(json.error || 'Gagal membuka bukti')
+        setErr(json.error || 'Bukti belum bisa dibuka')
         return
       }
       window.open(json.url, '_blank', 'noopener,noreferrer')
@@ -192,13 +213,24 @@ export function EvidencePanel({
     }
   }
 
-  async function remove(id: string) {
-    setBusy(id)
+  async function remove(item: EvidenceItem) {
+    const ok = await confirm({
+      title: 'Hapus bukti ini?',
+      description: (
+        <>
+          <strong className="text-ink">{item.fileName}</strong> dihapus dari laporan dan tidak bisa dikembalikan.
+        </>
+      ),
+      confirmLabel: 'Hapus bukti',
+      destructive: true,
+    })
+    if (!ok) return
+    setBusy(item.id)
     setErr(null)
     try {
-      const res = await fetch(`/api/evidence/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/evidence/${item.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) setErr(json.error || 'Gagal menghapus bukti')
+      if (!res.ok) setErr(json.error || 'Bukti belum terhapus')
       else onChanged()
     } catch {
       setErr('Tidak dapat menghubungi server.')
@@ -208,32 +240,34 @@ export function EvidencePanel({
   }
 
   return (
-    <div className={compact ? 'space-y-1.5 pt-1' : 'rounded-xl border border-white/50 dark:border-white/10 bg-white/40 dark:bg-slate-900/30 p-3 space-y-2'}>
+    <div className={cx('mk-lap-evi', !compact && 'mk-lap-evi--box')}>
       {!compact && (
-        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-          <Paperclip className="h-3.5 w-3.5" />
-          Bukti pendukung {required && <span className="text-rose-500">*</span>}
-          <span className="ml-auto text-xs font-normal text-slate-500 dark:text-slate-400">
-            {items.length} lampiran
+        <div className="mk-lap-head">
+          <span className="t-body-strong text-ink flex items-center gap-2">
+            <Icon name="dokumen" size={18} className="text-ink-2" />
+            Bukti pendukung
+            {required ? <span className="t-caption text-ink-2 font-medium">wajib</span> : null}
           </span>
+          <span className="mk-lap-grow" />
+          <span className="t-footnote text-ink-2 tabular-nums">{items.length} lampiran</span>
         </div>
       )}
 
       {/* Galeri foto */}
       {pictures.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+        <div className="mk-lap-thumbs">
           {pictures.map((e) => (
             <div key={e.id} className="relative">
               <PhotoThumb item={e} />
               {!disabled && (
-                <button
-                  onClick={() => remove(e.id)}
+                <IconButton
+                  icon="tutup"
+                  label={`Hapus foto ${e.fileName}`}
+                  variant="filled"
+                  className="mk-lap-thumb__del"
                   disabled={busy === e.id}
-                  aria-label={`Hapus foto ${e.fileName}`}
-                  className="absolute top-1 right-1 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center hover:bg-rose-600 disabled:opacity-50"
-                >
-                  {busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                </button>
+                  onClick={() => remove(e)}
+                />
               )}
             </div>
           ))}
@@ -242,23 +276,22 @@ export function EvidencePanel({
 
       {/* Dokumen & tautan */}
       {others.length > 0 && (
-        <ul className="space-y-1">
+        <ul className="mk-list">
           {others.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 text-[13px] bg-white/60 dark:bg-slate-900/40 rounded-lg px-2 py-1.5">
-              <span className="text-slate-400 dark:text-slate-500 shrink-0">
-                {e.url ? <Link2 className="h-3.5 w-3.5" /> : e.mime?.startsWith('image/') ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            <li key={e.id} className="mk-lap-file">
+              <Icon name={e.url ? 'alur' : 'dokumen'} size={18} className="text-ink-3 shrink-0" />
+              <span className="mk-lap-file__name" title={e.fileName}>
+                {e.fileName}
               </span>
-              <span className="flex-1 truncate text-slate-700 dark:text-slate-200">{e.fileName}</span>
-              {humanSize(e.size) && (
-                <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 tabular-nums">{humanSize(e.size)}</span>
-              )}
-              <button onClick={() => open(e.id)} disabled={busy === e.id} className={cn('h-8 w-8 flex items-center justify-center text-blue-600 hover:text-blue-700 shrink-0 disabled:opacity-50')} aria-label={`Buka ${e.fileName}`}>
-                {busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-              </button>
+              {humanSize(e.size) ? <span className="mk-lap-file__size">{humanSize(e.size)}</span> : null}
+              <IconButton
+                icon={e.url ? 'kanan' : 'unduh'}
+                label={`Buka ${e.fileName}`}
+                disabled={busy === e.id}
+                onClick={() => open(e.id)}
+              />
               {!disabled && (
-                <button onClick={() => remove(e.id)} disabled={busy === e.id} className="h-8 w-8 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 shrink-0 disabled:opacity-50" aria-label={`Hapus ${e.fileName}`}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <IconButton icon="tutup" label={`Hapus ${e.fileName}`} disabled={busy === e.id} onClick={() => remove(e)} />
               )}
             </li>
           ))}
@@ -267,51 +300,87 @@ export function EvidencePanel({
 
       {!disabled && (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cx('mk-lap-drop', over && canAdd && 'is-over')}
+            onDragOver={(ev) => {
+              if (!canAdd) return
+              ev.preventDefault()
+              setOver(true)
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(ev) => {
+              if (!canAdd) return
+              ev.preventDefault()
+              setOver(false)
+              const f = ev.dataTransfer.files?.[0]
+              if (f) upload(f)
+            }}
+          >
             <input
               ref={fileRef}
               type="file"
               className="hidden"
-              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+              accept={ACCEPT_ANY}
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (f) upload(f)
               }}
             />
-            <Button size="sm" variant="outline" className="h-9 text-sm" disabled={busy !== null || noTarget} onClick={() => fileRef.current?.click()}>
-              {busy === 'upload' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              Unggah foto / dokumen
+            <span className="mk-lap-drop__text">
+              {noTarget
+                ? 'Simpan draf dulu agar bukti dapat dilampirkan.'
+                : items.length === 0 && required
+                  ? 'Wajib minimal 1 bukti. Seret foto atau dokumen ke sini, atau tekan Unggah bukti.'
+                  : 'Seret foto atau dokumen ke sini, atau tekan Unggah bukti.'}
+            </span>
+            <Button size="sm" icon="unggah" disabled={!canAdd} onClick={() => fileRef.current?.click()}>
+              {busy === 'upload' ? 'Mengunggah…' : 'Unggah bukti'}
             </Button>
-            <Button size="sm" variant="ghost" className="h-9 text-sm" disabled={busy !== null || noTarget} onClick={() => setShowLink((v) => !v)}>
-              <Link2 className="h-3.5 w-3.5" /> Tautan
+            <Button size="sm" variant="plain" disabled={!canAdd} onClick={() => setShowLink((v) => !v)} aria-expanded={showLink}>
+              {showLink ? 'Tutup tautan' : 'Tambah tautan'}
             </Button>
-            {items.length === 0 && required && (
-              <span className="text-[13px] text-amber-700 dark:text-amber-300">Wajib minimal 1 bukti.</span>
-            )}
           </div>
 
           {showLink && (
-            <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-              <Input value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="Keterangan" className="bg-white/80 dark:bg-slate-900/60 h-9 text-sm" />
-              <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." inputMode="url" className="bg-white/80 dark:bg-slate-900/60 h-9 text-sm" />
-              <Button size="sm" className="h-9 text-sm" onClick={attachLink} disabled={busy !== null}>
-                {busy === 'link' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Simpan'}
+            <div className="mk-lap-linkform">
+              <label className="mk-sr" htmlFor={`evi-name-${targetId ?? 'baru'}`}>
+                Keterangan tautan
+              </label>
+              <input
+                id={`evi-name-${targetId ?? 'baru'}`}
+                className="mk-lap-input"
+                value={linkName}
+                onChange={(e) => setLinkName(e.target.value)}
+                placeholder="Keterangan, mis. Notulen rapat"
+              />
+              <label className="mk-sr" htmlFor={`evi-url-${targetId ?? 'baru'}`}>
+                Alamat tautan
+              </label>
+              <input
+                id={`evi-url-${targetId ?? 'baru'}`}
+                className="mk-lap-input"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://…"
+                inputMode="url"
+              />
+              <Button size="md" onClick={attachLink} disabled={busy !== null}>
+                {busy === 'link' ? 'Menyimpan…' : 'Simpan tautan'}
               </Button>
             </div>
-          )}
-
-          {noTarget && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">Simpan draft terlebih dahulu agar bukti dapat dilampirkan.</p>
           )}
         </>
       )}
 
+      {disabled && items.length === 0 && <p className="t-footnote text-ink-2">Belum ada bukti terlampir.</p>}
+
       {err && (
-        <p className="text-[13px] text-rose-700 dark:text-rose-300 flex items-start gap-1.5">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
-          {err}
+        <p className="mk-note-box mk-soft--late flex items-start gap-2" role="alert">
+          <Icon name="peringatan" size={18} className="shrink-0" />
+          <span>{err}</span>
         </p>
       )}
+      {confirmEl}
     </div>
   )
 }

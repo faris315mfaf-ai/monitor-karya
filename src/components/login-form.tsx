@@ -2,18 +2,15 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Activity, AlertTriangle, Eye, EyeOff, Loader2, LogIn } from 'lucide-react'
 import { BrandLogo } from '@/components/brand-logo'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button, Icon, LogoMark } from '@/components/mk'
+import { Input } from '@/components/mk/forms'
+import { Label } from '@/components/mk/forms'
 
 /**
  * Masuk dengan username (atau email) dan kata sandi — satu-satunya jalur sejak
  * jalan pintas demo dihapus (10 Sep 2026).
- */
-/**
+ *
  * `holding` = pemrakarsa sistem (holding / super-holding). Logonya tampil di
  * atas formulir supaya sejak layar masuk sudah jelas siapa inisiatornya.
  */
@@ -43,76 +40,54 @@ export function LoginForm({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data.error || 'Gagal masuk. Coba lagi.')
+        setError(data.error || 'Belum bisa masuk. Periksa username dan kata sandi.')
         setSubmitting(false)
         return
       }
-      // Full navigation so the server component re-reads the new session cookie.
-      router.replace('/')
+      // Navigasi penuh supaya komponen server membaca cookie sesi yang baru.
+      // Akun yang wajib ganti kata sandi langsung ke layarnya (src/app/login/ganti-sandi).
+      router.replace(data.mustChangePassword ? '/login/ganti-sandi' : '/')
       router.refresh()
     } catch {
-      setError('Tidak dapat menghubungi server. Periksa koneksi Anda.')
+      setError('Server tidak terjangkau. Periksa koneksi Anda lalu coba lagi.')
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 sm:py-12">
-      <div className="w-full max-w-sm sm:max-w-md animate-fade-in">
-        {/* Brand */}
-        <div className="flex flex-col items-center text-center mb-6">
+    <main className="mk-login">
+      <div className="mk-login__inner animate-fade-in">
+        <div className="mk-login__brand">
           {holding ? (
-            <>
-              <div className="relative">
-                <BrandLogo name={holding.name} logoData={holding.logoData} size={88} tone="slate" className="shadow-xl" />
-                <div className="absolute -inset-2 -z-10 rounded-3xl bg-blue-400/25 blur-xl" />
-              </div>
-              <div className="mt-4 text-[11px] uppercase tracking-[0.22em] text-blue-600/80 dark:text-cyan-300/80">Inisiator · Holding</div>
-              <h1 className="mt-0.5 text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
-                {holding.name}
-              </h1>
-              <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-blue-600 to-cyan-400">
-                  <Activity className="h-3 w-3 text-white" strokeWidth={2.5} />
-                </span>
-                MonitorKarya · Pemantauan Bisnis Holding
-              </p>
-            </>
+            <BrandLogo name={holding.name} logoData={holding.logoData} size={72} tone="slate" />
           ) : (
-            <>
-              <div className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center shadow-glow-blue">
-                <Activity className="h-7 w-7 text-white" strokeWidth={2.5} />
-                <div className="absolute -inset-1.5 -z-10 rounded-2xl bg-blue-400/30 blur-lg" />
-              </div>
-              <h1 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
-                MonitorKarya
-              </h1>
-              <p className="mt-1 text-base text-slate-500 dark:text-slate-400">Pemantauan Bisnis Holding</p>
-            </>
+            <LogoMark size={64} label="Monitor Karya" />
           )}
+          <h1 className="t-title-1 mt-5">{holding ? holding.name : 'Monitor Karya'}</h1>
+          <p className="t-body-lg text-ink-2 mt-1">
+            {holding ? 'Monitor Karya · pemantauan kerja berbasis output' : 'Pemantauan kerja berbasis output'}
+          </p>
         </div>
 
         {!dbReachable && (
-          <Alert variant="destructive" className="mb-4 bg-amber-500/10 border-amber-500/40">
-            <AlertDescription className="text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>
-                Database belum terhubung di server ini, jadi tombol masuk akan gagal.
-                Variabel <code>DATABASE_URL</code> perlu diisi lalu situs dideploy ulang.
-              </span>
-            </AlertDescription>
-          </Alert>
+          <div className="mk-note-box mk-soft--risk flex items-start gap-2 mb-4" role="alert">
+            <Icon name="peringatan" size={18} strokeWidth={2.2} className="mt-0.5" />
+            <span>
+              Basis data belum terhubung di server ini, jadi masuk akan gagal. Isi <code>DATABASE_URL</code> lalu
+              deploy ulang.
+            </span>
+          </div>
         )}
 
-        <div className="glass-strong rounded-2xl p-5 sm:p-7">
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Masuk ke akun Anda</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Gunakan username dan kata sandi yang diberikan Super Admin.
-          </p>
+        <section className="mk-card mk-login__card" aria-labelledby="judul-masuk">
+          <h2 id="judul-masuk" className="t-title-3">
+            Masuk ke akun Anda
+          </h2>
+          <p className="t-footnote text-ink-2 mt-1">Gunakan username dan kata sandi dari Super Admin.</p>
 
-          <form onSubmit={onSubmit} className="mt-5 space-y-4" noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="identifier" className="text-sm font-medium text-slate-600 dark:text-slate-300">
+          <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4" noValidate>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="identifier" className="t-callout text-ink">
                 Username
               </Label>
               <Input
@@ -126,17 +101,15 @@ export function LoginForm({
                 spellCheck={false}
                 autoFocus
                 required
-                placeholder="username Anda"
+                placeholder="Username atau email"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 disabled={submitting}
-                className="bg-white/70 dark:bg-slate-900/50 h-11 font-mono"
               />
-              <p className="text-xs text-slate-400 dark:text-slate-500">Email juga bisa dipakai.</p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-sm font-medium text-slate-600 dark:text-slate-300">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password" className="t-callout text-ink">
                 Kata sandi
               </Label>
               <div className="relative">
@@ -146,53 +119,37 @@ export function LoginForm({
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
-                  placeholder="••••••••"
+                  placeholder="Kata sandi"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={submitting}
-                  className="bg-white/70 dark:bg-slate-900/50 h-11 pr-11"
+                  className="pr-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-md text-slate-400 dark:text-slate-500 hover:text-slate-600 hover:bg-slate-500/10 dark:hover:bg-slate-400/15 transition-colors"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 size-11 grid place-items-center rounded-sm text-ink-2 hover:text-ink hover:bg-fill-2"
                   aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Icon name={showPassword ? 'sembunyi' : 'lihat'} size={18} />
                 </button>
               </div>
             </div>
 
             {error && (
-              <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/30">
-                <AlertDescription className="text-sm text-rose-700 dark:text-rose-300">{error}</AlertDescription>
-              </Alert>
+              <div className="mk-note-box mk-soft--late" role="alert">
+                {error}
+              </div>
             )}
 
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold shadow-glow-blue"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Memeriksa…
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Masuk
-                </>
-              )}
+            <Button type="submit" variant="primary" size="lg" full disabled={submitting} className="mt-2">
+              {submitting ? 'Memeriksa…' : 'Masuk'}
             </Button>
           </form>
-        </div>
+        </section>
 
-        <p className="mt-6 text-center text-[13px] text-slate-400 dark:text-slate-500">
-          Lupa kata sandi? Hubungi Super Admin untuk menyetel ulang.
-        </p>
+        <p className="t-footnote text-ink-2 text-center mt-6">Lupa kata sandi? Minta Super Admin menyetel ulang.</p>
       </div>
-    </div>
+    </main>
   )
 }

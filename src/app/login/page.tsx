@@ -6,8 +6,8 @@ import { loadPublicBranding } from '@/lib/branding'
 import { LoginForm } from '@/components/login-form'
 
 export const metadata: Metadata = {
-  title: 'Masuk — MonitorKarya',
-  description: 'Masuk ke sistem pemantauan bisnis holding MonitorKarya.',
+  title: 'Masuk — Monitor Karya',
+  description: 'Masuk ke Monitor Karya, pemantauan kerja berbasis output.',
 }
 
 // The session cookie has to be read per request.
@@ -19,7 +19,8 @@ export const dynamic = 'force-dynamic'
  * tidak ada lagi jalur yang melewati kata sandi.
  */
 export default async function LoginPage() {
-  if (await getSessionUser()) redirect('/')
+  const signedIn = await getSessionUser()
+  if (signedIn) redirect(signedIn.mustChangePassword ? '/login/ganti-sandi' : '/')
 
   // A blank sign-in screen gives no clue that the database is the thing that
   // is wrong, so the form says so instead of failing silently on submit.

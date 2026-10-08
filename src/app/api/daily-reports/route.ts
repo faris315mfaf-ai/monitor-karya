@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
+import { serverError } from '@/lib/api-error' // [F3-D]
 
 // GET /api/daily-reports - paginated daily reports with filters
 export async function GET(req: NextRequest) {
@@ -16,6 +17,8 @@ export async function GET(req: NextRequest) {
     const dateFrom = sp.get('dateFrom')
     const dateTo = sp.get('dateTo')
     const search = sp.get('search') || undefined
+    // [T3-A1] Drill-down laporan per proyek (dashboard manajemen per perusahaan).
+    const projectId = sp.get('projectId') || undefined
 
     const reportDate: Prisma.DateTimeFilter = {}
     for (const [raw, key] of [[dateFrom, 'gte'], [dateTo, 'lte']] as const) {
@@ -27,11 +30,19 @@ export async function GET(req: NextRequest) {
       reportDate[key] = d
     }
 
+    // [T3-A1] projectId adalah exact match; divalidasi string pendek (≤ 64
+    // karakter) agar tidak menjadi beban kueri. Cakupan entitas tetap
+    // diberlakukan lewat scopeIds di bawah — tidak bisa dipakai lintas PT.
+    if (projectId !== undefined && projectId.length > 64) {
+      return NextResponse.json({ error: 'Parameter projectId tidak valid' }, { status: 400 })
+    }
+
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)
 
     const where: Prisma.DailyProjectReportWhereInput = {
       ...(entityId ? { entityId } : {}),
+      ...(projectId ? { projectId } : {}),
       ...(status ? { status } : {}),
       ...(Object.keys(reportDate).length ? { reportDate } : {}),
       ...(search
@@ -57,7 +68,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ items, total, page, pageSize })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
+    return serverError(err, 'Laporan harian belum termuat. Coba lagi.', 'daily-reports GET')
   }
 }

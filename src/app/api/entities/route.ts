@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { serverError } from '@/lib/api-error'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, scopePathPrefix, isGlobalRole } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
@@ -85,7 +86,7 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({ tree, periodKey })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Internal server error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // [F2-GRUP] galat tak terduga tidak membawa pesan mentah ke klien.
+    return serverError(err, 'Data entitas belum termuat. Coba lagi.', 'entities GET')
   }
 }

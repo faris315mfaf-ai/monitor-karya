@@ -1,0 +1,22 @@
+CX14 after · cx14-87cbc11719e5
+3 lulus, 0 gagal, 0 verifikasi eksternal tertunda.
+
+PASS A2-00 — Sesi HTTP sungguhan dan jam server uji
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /api/daily-input: 200 (diharapkan 200)
+  Bukti: Tanggal WIB 2026-10-08; locked=true; 3 proyek PIC.
+
+PASS A2-10 — Setelah 17.00 WIB: tugas, laporan, bukti dan pengingat terkunci
+  POST /api/auth/login: 200 (diharapkan 200)
+  PUT /api/tasks: 409 (diharapkan 409)
+  PUT /api/daily-input: 409 (diharapkan 409)
+  POST /api/evidence: 409 (diharapkan 409)
+  POST /api/work-desk: 409 (diharapkan 409)
+  GET /api/work-desk: 200 (diharapkan 200)
+  GET /api/daily-input: 200 (diharapkan 200)
+  Bukti: HTTP 409 untuk 4 mutasi; report.updatedAt dan jumlah notifikasi tetap; countdown.passed=true. Label cincin diuji parent di browser.
+
+PASS A2-04b — Setelah serah 17.00, Ringkasan Direktur memuat minggu berjalan dan poin kepala divisi
+  POST /api/auth/login: 200 (diharapkan 200)
+  GET /api/ringkasan: 200 (diharapkan 200)
+  Bukti: M41 tampil setelah Kamis 17.00; poin identik, lencana sent dan 2 tanggapan Direktur/kepala divisi.

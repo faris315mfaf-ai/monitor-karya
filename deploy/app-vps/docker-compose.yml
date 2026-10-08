@@ -1,0 +1,63 @@
+# Monitor Karya di VPS aplikasi. Letakkan repo di /srv/apps/monitor-karya, lalu
+# jalankan dari folder itu:
+#   docker compose -f deploy/app-vps/docker-compose.yml --env-file .env.production up -d --build
+# (deploy.sh melakukan semuanya, termasuk migrasi.)
+name: monitor-karya
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  monitor-karya:
+    <<: *hardening
+    image: monitor-karya:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+    env_file: ${APP_ENV_FILE:-../../.env.production}
+    environment:
+      NODE_ENV: production
+    # Tidak ada "ports:" — hanya Caddy yang menjangkau aplikasi lewat jaringan web.
+    expose: ["3000"]
+    networks:
+      web:
+        aliases: [monitor-karya]
+    # Readiness requires DB connectivity; storage degradation is checked separately by monitor.sh.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready',{redirect:'error',signal:AbortSignal.timeout(7000)}).then(async r=>process.exit(r.status===200&&(await r.json()).ok===true?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=1000,gid=1000
+
+  migrate:
+    <<: *hardening
+    restart: "no"
+    image: monitor-karya-migrate:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: migrate
+    env_file: ${APP_ENV_FILE:-../../.env.production}
+    profiles: [migrate]
+    tmpfs:
+      - /tmp
+      - /home/node:uid=1000,gid=1000
+    networks: [web]
+
+networks:
+  web:
+    external: true

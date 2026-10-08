@@ -1,0 +1,16 @@
+# Salin ke /srv/proxy/sites/monitor-karya.caddy, ganti domainnya, lalu:
+#   docker exec proxy-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+monitor.contoh.id {
+	import aman
+
+	# Endpoint cron hanya dipanggil dari host ini lewat http://127.0.0.1 — tolak dari internet.
+	@cron path /api/cron/* /api/health/internal /api/health/backup
+	respond @cron 404
+
+	reverse_proxy monitor-karya:3000 {
+		# Aplikasi mempercayai X-Real-IP untuk jejak audit & batas laju (src/lib/security.ts),
+		# jadi nilainya WAJIB ditimpa Caddy, bukan diteruskan dari klien.
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

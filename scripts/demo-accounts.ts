@@ -10,14 +10,18 @@
  *   manager                -> PIC_PROYEK proyek pertama PT Sigma
  *   direkturentitas        -> DIREKTUR_ENTITAS PT Sigma
  *
- * Kata sandi dari SEED_PASSWORD di .env (1234 untuk demo). Sejak seed 10 Sep
+ * Kata sandi dari SEED_PASSWORD di lingkungan proses (minimal 8 karakter; kosong = acak
+ * dan dicetak — F1-C, 6 Okt 2026). Sejak seed 10 Sep
  * 2026 akun-akun ini sudah ditanam oleh seed itu sendiri; skrip ini tinggal
  * alat perbaikan. Jalankan: npm run db:demo
  */
-import { db } from '../src/lib/db'
-import { hashPassword } from '../src/lib/password'
+import type { PrismaClient } from '@prisma/client'
+import { requireLocalDatabase } from './guard-db-lokal'
 
-const PASSWORD = process.env.SEED_PASSWORD
+import { hashPassword } from '../src/lib/password'
+import { resolveSeedPassword } from '../src/lib/password-policy'
+
+let db: PrismaClient | undefined
 
 type Spec = { username: string; email: string; name: string; role: string; title: string; avatarColor: string; scope: 'GROUP' | 'HOLDING' | 'PT' }
 
@@ -33,13 +37,15 @@ const SPECS: Spec[] = [
 ]
 
 async function main() {
-  if (!PASSWORD || PASSWORD.length < 4) {
-    throw new Error('SEED_PASSWORD is missing or shorter than 4 characters — set it in .env')
-  }
+  const databaseUrl = requireLocalDatabase(process.env, 'Akun contoh')
+  const { password: PASSWORD, generated } = resolveSeedPassword(process.env.SEED_PASSWORD)
+  const { PrismaClient } = await import('@prisma/client')
+  const client = new PrismaClient({ datasources: { db: { url: databaseUrl } } })
+  db = client
 
-  const pt = await db.entity.findUnique({ where: { code: 'PT-SIGMA' } })
+  const pt = await client.entity.findUnique({ where: { code: 'PT-SIGMA' } })
   if (!pt) throw new Error('Entitas PT-SIGMA tidak ditemukan — jalankan seed terlebih dahulu.')
-  const holding = await db.entity.findFirst({ where: { type: 'HOLDING', isActive: true }, orderBy: { createdAt: 'asc' } })
+  const holding = await client.entity.findFirst({ where: { type: 'HOLDING', isActive: true }, orderBy: { createdAt: 'asc' } })
 
   const passwordHash = await hashPassword(PASSWORD)
   const ids: Record<string, string> = {}
@@ -53,8 +59,9 @@ async function main() {
       scopeEntityId: spec.scope === 'PT' ? pt.id : spec.scope === 'HOLDING' ? (holding?.id ?? null) : null,
       isActive: true,
       passwordHash,
+      mustChangePassword: true,
     }
-    const user = await db.user.upsert({
+    const user = await client.user.upsert({
       where: { username: spec.username },
       update: { ...data, email: spec.email },
       create: { username: spec.username, email: spec.email, ...data },
@@ -62,19 +69,19 @@ async function main() {
     ids[spec.username] = user.id
   }
 
-  const division = await db.division.findFirst({ where: { entityId: pt.id, isActive: true }, orderBy: { name: 'asc' } })
-  if (division) await db.division.update({ where: { id: division.id }, data: { headUserId: ids.kepaladivisi } })
-  const project = await db.project.findFirst({ where: { entityId: pt.id, lifecycle: 'AKTIF' }, orderBy: { code: 'asc' } })
-  if (project) await db.project.update({ where: { id: project.id }, data: { picUserId: ids.manager, picName: SPECS[6].name } })
+  const division = await client.division.findFirst({ where: { entityId: pt.id, isActive: true }, orderBy: { name: 'asc' } })
+  if (division) await client.division.update({ where: { id: division.id }, data: { headUserId: ids.kepaladivisi } })
+  const project = await client.project.findFirst({ where: { entityId: pt.id, lifecycle: 'AKTIF' }, orderBy: { code: 'asc' } })
+  if (project) await client.project.update({ where: { id: project.id }, data: { picUserId: ids.manager, picName: SPECS[6].name } })
 
-  console.log('✅ Akun contoh siap (kata sandi = SEED_PASSWORD):')
+  console.log(generated ? `✅ Akun contoh siap (kata sandi acak: ${PASSWORD}):` : '✅ Akun contoh siap (kata sandi = SEED_PASSWORD):')
   for (const s of SPECS) console.log(`   ${s.username.padEnd(16)} ${s.role}`)
 }
 
 main()
-  .then(() => db.$disconnect())
+  .then(() => db?.$disconnect())
   .catch(async (e) => {
     console.error('❌ Gagal:', e instanceof Error ? e.message : e)
-    await db.$disconnect()
+    await db?.$disconnect()
     process.exit(1)
   })

@@ -1,14 +1,15 @@
 import 'server-only'
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { s3Configured, uploadS3Evidence, signedS3EvidenceUrl, removeS3Evidence } from './storage-s3'
 
 /**
- * Evidence file storage, on Supabase Storage.
+ * Evidence file storage, on Supabase Storage by default or optional S3/MinIO.
  *
  * The bucket is private. Nothing is ever served from a permanent public URL —
  * reads go through a short-lived signed URL minted per request, after the API
  * has checked that the caller may see that report. Storage is reached only from
- * the server with the service role, mirroring how Postgres is reached only
+ * the server with private credentials, mirroring how Postgres is reached only
  * through Prisma; no browser ever holds a Storage credential.
  */
 
@@ -33,9 +34,22 @@ export const ALLOWED_EVIDENCE_MIME = new Set([
 
 let client: SupabaseClient | null = null
 
-/** True when the server has what it needs to talk to Storage. */
+function storageDriver(): 'supabase' | 's3' {
+  const driver = process.env.STORAGE_DRIVER ?? 'supabase'
+  if (driver !== 'supabase' && driver !== 's3') {
+    throw new Error('STORAGE_DRIVER tidak valid. Gunakan supabase atau s3.')
+  }
+  return driver
+}
+
+/** True when the selected driver has a valid server configuration. */
 export function storageConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  try {
+    if (storageDriver() === 's3') return s3Configured()
+    return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  } catch {
+    return false
+  }
 }
 
 function storageClient(): SupabaseClient {
@@ -77,6 +91,7 @@ export async function uploadEvidence(
   body: ArrayBuffer | Buffer,
   contentType: string
 ): Promise<void> {
+  if (storageDriver() === 's3') return uploadS3Evidence(key, body, contentType)
   const { error } = await storageClient()
     .storage.from(EVIDENCE_BUCKET)
     .upload(key, body, { contentType, upsert: false })
@@ -86,6 +101,7 @@ export async function uploadEvidence(
 
 /** A time-limited URL for reading one object. Never store or cache this. */
 export async function signedEvidenceUrl(key: string, download?: string): Promise<string> {
+  if (storageDriver() === 's3') return signedS3EvidenceUrl(key, SIGNED_URL_TTL_SECONDS, download)
   const { data, error } = await storageClient()
     .storage.from(EVIDENCE_BUCKET)
     .createSignedUrl(key, SIGNED_URL_TTL_SECONDS, download ? { download } : undefined)
@@ -95,6 +111,7 @@ export async function signedEvidenceUrl(key: string, download?: string): Promise
 }
 
 export async function removeEvidence(key: string): Promise<void> {
+  if (storageDriver() === 's3') return removeS3Evidence(key)
   const { error } = await storageClient().storage.from(EVIDENCE_BUCKET).remove([key])
   // A missing object should not block deleting the database row.
   if (error && !/not found/i.test(error.message)) {

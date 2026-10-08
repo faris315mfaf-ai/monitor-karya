@@ -1,30 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { SESSION_COOKIE, getSessionUser } from '@/lib/auth'
+import { clearSessionCookie, readSessionToken, SESSION_COOKIE } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser()
-
-  if (user) {
-    await db.auditLog.create({
+  const payload = readSessionToken(req.cookies.get(SESSION_COOKIE)?.value)
+  let revoked = true
+  if (payload) {
+    try {
+      await db.authSession.updateMany({
+        where: { id: payload.sid, userId: payload.sub, revokedAt: null },
+        data: { revokedAt: new Date() },
+      })
+    } catch {
+      revoked = false
+      console.error('[auth] pencabutan sesi gagal')
+    }
+    if (revoked) await db.auditLog.create({
       data: {
-        actorId: user.id,
+        actorId: payload.sub,
         action: 'LOGOUT',
         targetType: 'USER',
-        targetId: user.id,
+        targetId: payload.sub,
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-        userAgent: req.headers.get('user-agent') || null,
+        userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
       },
-    })
+    }).catch(() => { console.error('[auth] audit keluar gagal') })
   }
 
-  const res = NextResponse.json({ ok: true })
-  res.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
-  })
+  const res = NextResponse.json(revoked ? { ok: true } : {
+    error: 'Cookie telah dihapus, tetapi sesi server belum berhasil dicabut. Hubungi admin untuk menyetel ulang kata sandi.',
+  }, { status: revoked ? 200 : 503 })
+  clearSessionCookie(res)
+  res.headers.set('Cache-Control', 'no-store')
   return res
 }

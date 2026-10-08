@@ -1,7 +1,16 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
-import { WEEKLY_HANDOVER_LABEL, isoWeekOf, startOfWibDay, weekPeriodOf } from '@/lib/lock'
+import {
+  WEEKLY_HANDOVER_LABEL,
+  WEEKLY_LOCK_LABEL,
+  isoWeekOf,
+  isWeeklyLocked,
+  startOfWibDay,
+  weekPeriodOf,
+  weeklyDeadlines,
+  type Period,
+} from '@/lib/lock'
 
 /**
  * Pengingat ke divisi yang belum melapor (8 Sep 2026).
@@ -9,9 +18,21 @@ import { WEEKLY_HANDOVER_LABEL, isoWeekOf, startOfWibDay, weekPeriodOf } from '@
  * "Belum melapor" berarti laporan minggu berjalan belum diserahkan: belum ada
  * barisnya, atau masih DRAFT. Pesannya masuk ke lonceng aplikasi kepala
  * divisi yang bersangkutan (NotificationLog kanal APLIKASI). Satu divisi
- * paling banyak diingatkan sekali per hari, jadi cron pagi dan tombol manual
- * tidak saling menumpuk.
+ * paling banyak diingatkan sekali per hari untuk minggu yang sama, jadi cron
+ * pagi dan tombol manual tidak saling menumpuk.
+ *
+ * Sejak 6 Okt 2026 pemanggil boleh mempersempit ke satu divisi (`divisionId`)
+ * dan memilih minggunya (`period`), misalnya Direktur yang mengingatkan satu
+ * divisi untuk minggu laporan yang sedang tampil. Tanpa keduanya perilakunya
+ * sama seperti dulu: semua divisi dalam cakupan, minggu berjalan.
  */
+
+export type ReminderTarget = {
+  /** Hanya divisi ini (harus berada di dalam `entityIds`). */
+  divisionId?: string | null
+  /** Minggu yang ditagih; bawaan minggu berjalan. */
+  period?: Period | null
+}
 
 export const REMINDER_TEMPLATE = 'PENGINGAT_MINGGUAN_DIVISI'
 
@@ -25,17 +46,23 @@ export type UnreportedDivision = {
   head: { id: string; name: string; email: string } | null
 }
 
-/** Divisions in scope whose report for this week has not been handed over yet. */
-export async function listUnreportedDivisions(entityIds: string[] | null): Promise<{
+/** Divisions in scope whose report for the given week (default: this week) has not been handed over yet. */
+export async function listUnreportedDivisions(
+  entityIds: string[] | null,
+  target: ReminderTarget = {}
+): Promise<{
   week: { key: string; isoYear: number; isoWeek: number }
   divisions: UnreportedDivision[]
 }> {
-  const now = new Date()
-  const period = weekPeriodOf(now)
-  const { isoYear, isoWeek } = isoWeekOf(now)
+  const period = target.period ?? weekPeriodOf(new Date())
+  const { isoYear, isoWeek } = isoWeekOf(period.start)
 
   const divisions = await db.division.findMany({
-    where: { isActive: true, ...(entityIds ? { entityId: { in: entityIds } } : {}) },
+    where: {
+      isActive: true,
+      ...(entityIds ? { entityId: { in: entityIds } } : {}),
+      ...(target.divisionId ? { id: target.divisionId } : {}),
+    },
     select: {
       id: true,
       name: true,
@@ -75,15 +102,33 @@ export type ReminderResult = {
   results: (UnreportedDivision & { outcome: 'TERKIRIM' | 'SUDAH_HARI_INI' | 'TANPA_KEPALA' })[]
 }
 
-export async function remindUnreportedDivisions(opts: {
-  entityIds: string[] | null
-  source: 'MANUAL' | 'CRON'
-  actorName?: string | null
-}): Promise<ReminderResult> {
-  const { week, divisions } = await listUnreportedDivisions(opts.entityIds)
-  const today = startOfWibDay(new Date())
+/** Kalimat tenggat untuk minggu yang ditagih, mengikuti jam sekarang. */
+function deadlineSentence(period: Period, now: Date): string {
+  if (isWeeklyLocked(period.start, now)) {
+    return `Minggu itu sudah dikunci sejak ${WEEKLY_LOCK_LABEL}; hubungi Admin PT untuk permohonan buka kunci.`
+  }
+  if (now >= weeklyDeadlines(period.start).handoverBy) {
+    return `Tenggat serah ${WEEKLY_HANDOVER_LABEL} sudah lewat; serahkan sebelum dikunci ${WEEKLY_LOCK_LABEL}.`
+  }
+  return `Serahkan paling lambat ${WEEKLY_HANDOVER_LABEL}.`
+}
 
-  // Yang sudah diingatkan hari ini dilewati — payload menyimpan divisionId.
+export async function remindUnreportedDivisions(
+  opts: {
+    entityIds: string[] | null
+    source: 'MANUAL' | 'CRON'
+    actorName?: string | null
+  } & ReminderTarget
+): Promise<ReminderResult> {
+  const now = new Date()
+  const period = opts.period ?? weekPeriodOf(now)
+  const { week, divisions } = await listUnreportedDivisions(opts.entityIds, { divisionId: opts.divisionId, period })
+  const today = startOfWibDay(now)
+
+  // Yang sudah diingatkan hari ini untuk minggu yang sama dilewati — payload
+  // menyimpan divisionId dan weekKey. Catatan lama tanpa weekKey dianggap
+  // minggu berjalan, minggu yang dulu selalu mereka tagih.
+  const currentKey = weekPeriodOf(now).key
   const sentToday = await db.notificationLog.findMany({
     where: { template: REMINDER_TEMPLATE, createdAt: { gte: today } },
     select: { userId: true, payload: true },
@@ -91,8 +136,8 @@ export async function remindUnreportedDivisions(opts: {
   const alreadyKey = new Set(
     sentToday.map((n) => {
       try {
-        const p = JSON.parse(n.payload) as { divisionId?: string }
-        return `${n.userId}:${p.divisionId ?? ''}`
+        const p = JSON.parse(n.payload) as { divisionId?: string; weekKey?: string }
+        return `${n.userId}:${p.divisionId ?? ''}:${p.weekKey ?? currentKey}`
       } catch {
         return ''
       }
@@ -106,15 +151,15 @@ export async function remindUnreportedDivisions(opts: {
       results.push({ ...d, outcome: 'TANPA_KEPALA' })
       continue
     }
-    if (alreadyKey.has(`${d.head.id}:${d.divisionId}`)) {
+    if (alreadyKey.has(`${d.head.id}:${d.divisionId}:${week.key}`)) {
       results.push({ ...d, outcome: 'SUDAH_HARI_INI' })
       continue
     }
     const title = `Laporan mingguan ${d.divisionName} belum diserahkan`
     const body =
       `Minggu ${week.isoWeek}/${week.isoYear} untuk ${d.entityName} ` +
-      `${d.statusHeader ? 'masih berstatus draft' : 'belum diisi'}. ` +
-      `Serahkan paling lambat ${WEEKLY_HANDOVER_LABEL}.` +
+      `${d.statusHeader ? 'masih berupa draf' : 'belum diisi'}. ` +
+      deadlineSentence(period, now) +
       (opts.source === 'MANUAL' && opts.actorName ? ` Diingatkan oleh ${opts.actorName}.` : '')
     await db.notificationLog.create({
       data: {

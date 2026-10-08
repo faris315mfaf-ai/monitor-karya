@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
@@ -11,15 +12,18 @@ import {
   daysOfWeek,
   isDailyLocked,
   isWeeklyLocked,
+  isWorkingDay,
   parseWeekKey,
   parseWibDateKey,
   startOfWibDay,
   weekPeriodOf,
   weeklyDeadlines,
+  wibDateKey,
   type Period,
   type TaskScope,
 } from '@/lib/lock'
-import { rollupDailyReport } from '@/lib/daily-rollup'
+import { dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
+import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
  * Daily tasks — the granular work a PIC plans and reports under one project.
@@ -32,10 +36,16 @@ import { rollupDailyReport } from '@/lib/daily-rollup'
  *   DELETE ?id=                        — remove a task
  *
  * Two contexts share these handlers (8 Sep 2026). The daily desk follows the
- * daily 17:00 lock of the task's own day. The weekly board — where the weekly
- * report is composed from the week's daily tasks — follows the Friday lock of
- * that week instead, so a PIC can still tidy Monday's achievements on Wednesday.
+ * daily 17:00 lock of the task's own day, including daily cards on the weekly
+ * board. Weekly-scope cards follow the Friday lock; daily cards from an earlier
+ * day need an active unlock for that day's report.
  * Everything is gated on owning the project, the same rule the report follows.
+ *
+ * Pembekuan (6 Okt 2026): task bercakupan HARIAN adalah isi laporan harian
+ * harinya. Begitu laporan itu diteruskan ke holding (atau dikunci), task hari
+ * itu ikut dibekukan — tulis ditolak 409 kecuali buka kunci sedang berlaku.
+ * Dengan buka kunci aktif, meja harian juga boleh menulis task tanggal lampau
+ * yang dibuka (`workDate` "YYYY-MM-DD" di POST, `date` di GET).
  */
 
 type Context = 'HARIAN' | 'MINGGUAN'
@@ -44,8 +54,8 @@ type Guard = { ok: true; project: { id: string; entityId: string } } | { ok: fal
 const contextOf = (raw: unknown): Context => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
 const scopeOf = (raw: unknown): TaskScope => (raw === 'MINGGUAN' ? 'MINGGUAN' : 'HARIAN')
 
-async function guardProject(user: SessionUser, projectId: string, opts?: { write?: boolean }): Promise<Guard> {
-  const project = await db.project.findUnique({
+async function guardProject(user: SessionUser, projectId: string, opts?: { write?: boolean }, client: Prisma.TransactionClient = db): Promise<Guard> {
+  const project = await client.project.findUnique({
     where: { id: projectId },
     select: { id: true, entityId: true, picUserId: true },
   })
@@ -77,17 +87,55 @@ async function guardProject(user: SessionUser, projectId: string, opts?: { write
   return { ok: true, project }
 }
 
-/** The lock that applies: the day's own 17:00 on the daily desk, the week's
- *  Friday 17:00 on the weekly board. Returns the 409 to send, or null. */
-function lockCheck(context: Context, workDate: Date): NextResponse | null {
-  if (context === 'HARIAN') {
-    return isDailyLocked(workDate)
-      ? NextResponse.json({ error: `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
-      : null
+/**
+ * Kunci yang berlaku untuk menulis task pada satu hari: laporan harinya yang
+ * sudah diteruskan/dikunci membekukan task HARIAN; lalu tenggat 17.00 hari itu
+ * untuk semua kartu harian, juga di papan mingguan. Kartu mingguan mengikuti
+ * kunci Jumat 17.00. Buka kunci berlaku untuk laporan harian yang ditunjuk.
+ * Mengembalikan 409 yang harus dikirim, atau null.
+ */
+async function lockCheck(context: Context, projectId: string, workDate: Date, scope: TaskScope, client: Prisma.TransactionClient = db): Promise<NextResponse | null> {
+  const day = startOfWibDay(workDate)
+  await lockDailyReport(client, projectId, day)
+  const gate = await dailyGate(projectId, day, new Date(), client)
+  if (scope === 'HARIAN') {
+    if (!isWorkingDay(day) || day > startOfWibDay(new Date())) return NextResponse.json({ error: 'Tanggal task harian harus hari kerja yang sudah tiba.' }, { status: 422 })
+    const frozen = frozenMessage(gate)
+    if (frozen) {
+      return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
+    }
+  }
+  if (context === 'MINGGUAN' && isWeeklyLocked(weekPeriodOf(workDate).start)) return NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  if (context === 'HARIAN' || scope === 'HARIAN') {
+    if (!gate.timeLocked) return null
+    const isToday = day.getTime() === startOfWibDay(new Date()).getTime()
+    return NextResponse.json(
+      {
+        error: isToday
+          ? `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`
+          : 'Hari itu tidak sedang dibuka. Ajukan buka kunci untuk mengubahnya.',
+        locked: true,
+        reportId: gate.report?.id ?? null,
+      },
+      { status: 409 }
+    )
   }
   return isWeeklyLocked(weekPeriodOf(workDate).start)
     ? NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
     : null
+}
+
+/** Hari-hari di minggu itu yang laporan hariannya dibekukan (tanpa buka kunci aktif). */
+async function frozenDaysOf(projectId: string, period: Period): Promise<string[]> {
+  const reports = await db.dailyProjectReport.findMany({
+    where: { projectId, reportDate: { gte: period.start, lte: period.end }, OR: [{ forwardedAt: { not: null } }, { isLocked: true }] },
+    select: { id: true, reportDate: true },
+  })
+  const out: string[] = []
+  for (const r of reports) {
+    if (!(await activeUnlockFor('DAILY_REPORT', r.id))) out.push(r.reportDate.toISOString())
+  }
+  return out
 }
 
 /** Parses "HH:MM" against a WIB day into a UTC instant. */
@@ -99,19 +147,20 @@ function timeOn(day: Date, hhmm: unknown): Date | null {
 }
 
 function readBody(body: Record<string, unknown>, day: Date) {
-  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+  // Batas panjang per kolom (6 Okt 2026): teks bebas tidak boleh tak terbatas.
+  const str = (k: string, max = 2000) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, max) : '')
   const startAt = timeOn(day, body.startTime)
   const endAt = timeOn(day, body.endTime)
 
   return {
-    title: str('title'),
-    description: str('description') || null,
-    picName: str('picName') || null,
+    title: str('title', 200),
+    description: str('description', 4000) || null,
+    picName: str('picName', 120) || null,
     picUserId: typeof body.picUserId === 'string' && body.picUserId ? body.picUserId : null,
     tags: Array.isArray(body.tags)
       ? (body.tags as unknown[])
           .filter((t): t is string => typeof t === 'string')
-          .map((t) => t.trim())
+          .map((t) => t.trim().slice(0, 40))
           .filter(Boolean)
           .slice(0, 8)
       : [],
@@ -133,7 +182,7 @@ function readBody(body: Record<string, unknown>, day: Date) {
           .map((s) => (s && typeof s === 'object' ? (s as Record<string, unknown>) : null))
           .filter((s): s is Record<string, unknown> => s !== null)
           .map((s, i) => ({
-            title: typeof s.title === 'string' ? s.title.trim() : '',
+            title: typeof s.title === 'string' ? s.title.trim().slice(0, 200) : '',
             isDone: Boolean(s.isDone),
             position: i,
           }))
@@ -148,11 +197,11 @@ function readBody(body: Record<string, unknown>, day: Date) {
  * is checked against the user table here rather than left for the foreign key
  * to reject, which would surface as an opaque 500.
  */
-async function validate(t: ReturnType<typeof readBody>, entityId: string): Promise<string[]> {
+async function validate(t: ReturnType<typeof readBody>, entityId: string, client: Prisma.TransactionClient = db): Promise<string[]> {
   const errors: string[] = []
   if (!t.title) errors.push('Judul task wajib diisi.')
   if (t.picUserId) {
-    const pic = await db.user.findFirst({
+    const pic = await client.user.findFirst({
       where: { id: t.picUserId, isActive: true, OR: [{ scopeEntityId: entityId }, { scopeEntityId: null }] },
       select: { id: true },
     })
@@ -183,8 +232,8 @@ function laneWhere(projectId: string, scope: TaskScope, workDate: Date, period: 
     : { projectId, scope, workDate }
 }
 
-async function nextSortOrder(where: ReturnType<typeof laneWhere>) {
-  const last = await db.task.aggregate({ where, _max: { sortOrder: true } })
+async function nextSortOrder(where: ReturnType<typeof laneWhere>, client: Prisma.TransactionClient = db) {
+  const last = await client.task.aggregate({ where, _max: { sortOrder: true } })
   return (last._max.sortOrder ?? -1) + 1
 }
 
@@ -227,6 +276,7 @@ export async function GET(req: NextRequest) {
         current: period.key === weekPeriodOf(new Date()).key,
       },
       locked: isWeeklyLocked(period.start),
+      frozenDays: await frozenDaysOf(projectId, period),
       today: startOfWibDay(new Date()).toISOString(),
       days: daysOfWeek(period).map((d) => d.toISOString()),
       tasks: await attachEvidence(tasks),
@@ -234,11 +284,12 @@ export async function GET(req: NextRequest) {
   }
 
   const dateParam = req.nextUrl.searchParams.get('date')
-  const parsed = dateParam ? new Date(dateParam) : new Date()
+  const parsed = dateParam ? (parseWibDateKey(dateParam) ?? new Date(dateParam)) : new Date()
   if (Number.isNaN(parsed.getTime())) {
     return NextResponse.json({ error: 'Parameter tanggal tidak valid' }, { status: 400 })
   }
   const day = startOfWibDay(parsed)
+  const gate = await dailyGate(projectId, day)
 
   // Meja harian hanya memuat capaian hari itu; capaian bercakupan MINGGUAN
   // hidup di papan mingguan.
@@ -250,7 +301,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     workDate: day.toISOString(),
-    locked: isDailyLocked(day),
+    // Terkunci bila lewat 17.00 atau laporan harinya dibekukan, kecuali sedang dibuka.
+    locked: gate.timeLocked || gate.frozen !== null,
+    frozen: gate.frozen,
+    reportId: gate.report?.id ?? null,
+    unlockUntil: gate.unlock?.unlockUntil ?? null,
     tasks: await attachEvidence(tasks),
   })
 }
@@ -258,6 +313,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => post(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -267,7 +326,8 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-  const guard = await guardProject(user, projectId, { write: true })
+  await lockDailyProject(db, projectId)
+  const guard = await guardProject(user, projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const context = contextOf(body.context)
@@ -285,13 +345,25 @@ export async function POST(req: NextRequest) {
     if (!dayInPeriod(period, workDate)) {
       return NextResponse.json({ error: 'Tanggal berada di luar minggu ini.' }, { status: 422 })
     }
+  } else if (body.workDate !== undefined && body.workDate !== null && body.workDate !== '') {
+    // Meja harian: tanggal lampau hanya untuk hari kerja yang laporannya sedang dibuka
+    // (diperiksa lockCheck); tanggal masa depan tidak pernah.
+    const requested = parseWibDateKey(body.workDate)
+    if (!requested) return NextResponse.json({ error: 'Tanggal tidak valid.' }, { status: 400 })
+    if (requested.getTime() > today.getTime()) {
+      return NextResponse.json({ error: 'Task tidak bisa dicatat untuk tanggal yang belum tiba.' }, { status: 422 })
+    }
+    if (!isWorkingDay(requested)) {
+      return NextResponse.json({ error: 'Task harian hanya untuk hari kerja (Senin–Jumat).' }, { status: 422 })
+    }
+    workDate = requested
   }
 
-  const lockRes = lockCheck(context, workDate)
+  const lockRes = await lockCheck(context, projectId, workDate, scope, db)
   if (lockRes) return lockRes
 
   const t = readBody(body, workDate)
-  const errors = await validate(t, guard.project.entityId)
+  const errors = await validate(t, guard.project.entityId, db)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
@@ -302,7 +374,7 @@ export async function POST(req: NextRequest) {
       entityId: guard.project.entityId,
       workDate,
       scope,
-      sortOrder: await nextSortOrder(laneWhere(projectId, scope, workDate, period)),
+      sortOrder: await nextSortOrder(laneWhere(projectId, scope, workDate, period), db),
       createdById: user.id,
       subtasks: { create: subtasks },
     },
@@ -315,12 +387,12 @@ export async function POST(req: NextRequest) {
       action: 'CREATE_TASK',
       targetType: 'TASK',
       targetId: task.id,
-      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length }),
+      afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length, workDate: wibDateKey(workDate) }),
       ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 
-  await rollupDailyReport(projectId, workDate)
+  await rollupDailyReport(projectId, workDate, db)
 
   return NextResponse.json({ ok: true, task })
 }
@@ -328,6 +400,10 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -337,14 +413,18 @@ export async function PUT(req: NextRequest) {
   }
 
   const id = typeof body.id === 'string' ? body.id : ''
+  // Resolve the parent before taking locks; re-read the task under the lock.
+  const parent = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+  if (!parent) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
+  await lockDailyProject(db, parent.projectId)
   const existing = await db.task.findUnique({ where: { id }, include: { subtasks: true } })
   if (!existing) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
 
-  const guard = await guardProject(user, existing.projectId, { write: true })
+  const guard = await guardProject(user, existing.projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const context = contextOf(body.context)
-  const lockRes = lockCheck(context, existing.workDate)
+  const lockRes = await lockCheck(context, existing.projectId, existing.workDate, existing.scope as TaskScope, db)
   if (lockRes) return lockRes
 
   // Di papan mingguan kartu boleh pindah hari atau berubah cakupan, selama
@@ -363,25 +443,32 @@ export async function PUT(req: NextRequest) {
     if (body.scope === 'HARIAN' || body.scope === 'MINGGUAN') scope = body.scope
   }
 
+  // Pindah ke hari lain: hari tujuan juga tidak boleh beku.
+  if (workDate.getTime() !== startOfWibDay(existing.workDate).getTime() || scope !== existing.scope) {
+    const targetRes = await lockCheck(context, existing.projectId, workDate, scope, db)
+    if (targetRes) return targetRes
+  }
+
   const t = readBody(body, workDate)
-  const errors = await validate(t, guard.project.entityId)
+  const errors = await validate(t, guard.project.entityId, db)
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 422 })
 
   const { subtasks, ...fields } = t
+  // Form tugas (TaskDialog) tidak mengirim picUserId; tanpa kunci itu akun PIC
+  // tugas dipertahankan, bukan dikosongkan. Mengirim null tetap melepasnya.
+  if (!('picUserId' in body)) fields.picUserId = existing.picUserId
   const movedLane = workDate.getTime() !== existing.workDate.getTime() || scope !== existing.scope
   const sortOrder = movedLane
-    ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period))
+    ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period), db)
     : existing.sortOrder
 
   // Subtasks are sent whole, so replace the list rather than diffing it.
-  const task = await db.$transaction(async (tx) => {
-    await tx.subtask.deleteMany({ where: { taskId: id } })
-    return tx.task.update({
+  await db.subtask.deleteMany({ where: { taskId: id } })
+  const task = await db.task.update({
       where: { id },
       data: { ...fields, workDate, scope, sortOrder, subtasks: { create: subtasks } },
       include: TASK_INCLUDE,
     })
-  })
 
   await db.auditLog.create({
     data: {
@@ -395,8 +482,8 @@ export async function PUT(req: NextRequest) {
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate))
-  if (movedLane) await rollupDailyReport(existing.projectId, workDate)
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
+  if (movedLane) await rollupDailyReport(existing.projectId, workDate, db)
 
   return NextResponse.json({ ok: true, task })
 }
@@ -410,6 +497,10 @@ export async function PUT(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => patch(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function patch(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   let body: Record<string, unknown>
   try {
@@ -419,7 +510,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   const projectId = typeof body.projectId === 'string' ? body.projectId : ''
-  const guard = await guardProject(user, projectId, { write: true })
+  await lockDailyProject(db, projectId)
+  const guard = await guardProject(user, projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
   const period = typeof body.week === 'string' && body.week ? parseWeekKey(body.week) : weekPeriodOf(new Date())
@@ -464,11 +556,21 @@ export async function PATCH(req: NextRequest) {
     updates.push({ id: current.id, workDate, scope, sortOrder: Math.max(0, Math.floor(Number(m.sortOrder) || 0)) })
   }
 
-  await db.$transaction(
-    updates.map((u) =>
-      db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
-    )
-  )
+  // Hari asal dan tujuan yang laporannya sudah diteruskan/dikunci tidak boleh berubah isinya.
+  const harianDays = new Set<number>()
+  for (const u of updates) {
+    const cur = byId.get(u.id)!
+    if (cur.scope === 'HARIAN') harianDays.add(startOfWibDay(cur.workDate).getTime())
+    if (u.scope === 'HARIAN') harianDays.add(u.workDate.getTime())
+  }
+  for (const ms of [...harianDays].sort((a, b) => a - b)) {
+    const blocked = await lockCheck('MINGGUAN', projectId, new Date(ms), 'HARIAN', db)
+    if (blocked) return blocked
+  }
+
+  for (const u of updates) {
+    await db.task.update({ where: { id: u.id }, data: { workDate: u.workDate, scope: u.scope, sortOrder: u.sortOrder } })
+  }
 
   // Hari asal dan hari tujuan sama-sama berubah isinya, jadi keduanya dihitung ulang.
   const touched = new Set<number>()
@@ -476,7 +578,7 @@ export async function PATCH(req: NextRequest) {
     touched.add(startOfWibDay(byId.get(u.id)!.workDate).getTime())
     touched.add(u.workDate.getTime())
   }
-  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms))
+  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms), db)
 
   await db.auditLog.create({
     data: {
@@ -495,15 +597,23 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  return db.$transaction((tx) => deleteReport(req, user, tx), { isolationLevel: 'ReadCommitted' })
+}
+
+async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
 
   const id = req.nextUrl.searchParams.get('id') || ''
+  // Resolve the parent before taking locks; re-read the task under the lock.
+  const parent = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+  if (!parent) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
+  await lockDailyProject(db, parent.projectId)
   const existing = await db.task.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Task tidak ditemukan' }, { status: 404 })
 
-  const guard = await guardProject(user, existing.projectId, { write: true })
+  const guard = await guardProject(user, existing.projectId, { write: true }, db)
   if (!guard.ok) return guard.res
 
-  const lockRes = lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.workDate)
+  const lockRes = await lockCheck(contextOf(req.nextUrl.searchParams.get('context')), existing.projectId, existing.workDate, existing.scope as TaskScope, db)
   if (lockRes) return lockRes
   if (existing.escalationId) {
     return NextResponse.json(
@@ -522,10 +632,11 @@ export async function DELETE(req: NextRequest) {
       targetType: 'TASK',
       targetId: id,
       beforeData: JSON.stringify({ title: existing.title, status: existing.status, workDate: existing.workDate, scope: existing.scope }),
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate))
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
 
   return NextResponse.json({ ok: true })
 }

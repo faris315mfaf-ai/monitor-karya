@@ -1,17 +1,11 @@
+# Caddy untuk pratinjau/sandbox satu-port (:81 -> aplikasi di :3000).
+# Produksi memakai deploy/app-vps/monitor-karya.caddy.
+#
+# F1-C (6 Okt 2026): blok @transform_port_query (meneruskan ke
+# localhost:{query.XTransformPort}) dihapus. Blok itu membuat siapa pun bisa
+# menjangkau port mana saja di mesin ini lewat ?XTransformPort= — proxy terbuka
+# / SSRF ke layanan internal. Jangan dikembalikan.
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
-
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
-
 	handle {
 		reverse_proxy localhost:3000 {
 			header_up Host {host}

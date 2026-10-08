@@ -1,0 +1,43 @@
+name: Pemeriksaan proyek
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  periksa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://x:y@127.0.0.1:1/db
+      DIRECT_URL: postgresql://x:y@127.0.0.1:1/db
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Buat rahasia sementara untuk pengujian
+        run: echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      # allowScripts adalah peta boolean resmi npm 11.19; npm lama mengabaikannya.
+      - name: Gunakan npm dengan kebijakan skrip instal
+        run: npm install --global npm@11.19.1 --ignore-scripts --no-audit --no-fund
+      - name: Verifikasi sumber dan tarball patch dependensi
+        run: python3 vendor/braces/verify.py
+      - run: npm ci --no-audit --no-fund
+      - name: Uji regresi dependensi dan perilaku upstream
+        run: npm run test:dependencies
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npx eslint src
+      - run: npx vitest run
+      - run: npx next build
+      - name: Bangun image produksi
+        run: docker build --target runner --tag monitor-karya:ci .

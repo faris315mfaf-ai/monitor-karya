@@ -47,6 +47,12 @@ local-*
 dev.log
 dev.out.log
 test
+# Suite sumber pihak ketiga yang wajib ikut verifikasi CI.
+!vendor/braces/test/
+!vendor/braces/test/**
+# Tes sumber Android bukan artefak build — jangan ikut pola "test" di atas.
+!android/**/src/test/
+!android/**/src/test/**
 prompt
 
 server.log

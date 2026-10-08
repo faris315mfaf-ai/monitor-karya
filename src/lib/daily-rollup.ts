@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
+import { isDailyLocked, isWorkingDay, startOfWibDay } from '@/lib/lock'
 
 /**
  * Rolls a project's tasks up into its daily report.
@@ -51,16 +53,16 @@ export type Rollup = {
 }
 
 /** Computes the derived values without writing anything. */
-export async function computeRollup(projectId: string, workDate: Date): Promise<Rollup | null> {
+export async function computeRollup(projectId: string, workDate: Date, client: Prisma.TransactionClient = db): Promise<Rollup | null> {
   // Hanya capaian harian yang membentuk laporan hari itu; kartu bercakupan
   // MINGGUAN adalah capaian minggu dan hidup di papan mingguan.
-  const tasks = await db.task.findMany({
+  const tasks = await client.task.findMany({
     where: { projectId, workDate, scope: 'HARIAN' },
     select: { id: true, title: true, status: true, progressPct: true, obstacle: true, decisionNeeded: true },
   })
   if (tasks.length === 0) return null
 
-  const taskEvidence = await db.evidence.count({
+  const taskEvidence = await client.evidence.count({
     where: { targetType: 'TASK', targetId: { in: tasks.map((t) => t.id) } },
   })
 
@@ -84,6 +86,16 @@ export async function computeRollup(projectId: string, workDate: Date): Promise<
   }
 }
 
+/** Lock the parent even when the report does not exist yet. All daily writers
+ * acquire Project before DailyProjectReport; forward uses the same order. */
+export async function lockDailyProject(client: Prisma.TransactionClient, projectId: string) {
+  await client.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+}
+
+export async function lockDailyReport(client: Prisma.TransactionClient, projectId: string, day: Date) {
+  await client.$queryRaw`SELECT "id" FROM "DailyProjectReport" WHERE "projectId" = ${projectId} AND "reportDate" = ${day} FOR UPDATE`
+}
+
 /**
  * Writes the derived values onto the day's report, creating it if the PIC has
  * not opened the form yet. Never marks the report as submitted — handing it to
@@ -92,20 +104,27 @@ export async function computeRollup(projectId: string, workDate: Date): Promise<
  * `evidenceCount` on the report is the day's total: files attached to the
  * report itself plus everything attached to its tasks.
  */
-export async function rollupDailyReport(projectId: string, workDate: Date): Promise<Rollup | null> {
-  const rollup = await computeRollup(projectId, workDate)
+export async function rollupDailyReport(projectId: string, workDate: Date, client?: Prisma.TransactionClient): Promise<Rollup | null> {
+  if (!client) return db.$transaction(async (tx) => {
+    await lockDailyProject(tx, projectId)
+    return rollupDailyReport(projectId, workDate, tx)
+  }, { isolationLevel: 'ReadCommitted' })
+  await lockDailyReport(client, projectId, workDate)
+  const rollup = await computeRollup(projectId, workDate, client)
+  const gate = await dailyGate(projectId, workDate, new Date(), client)
+  if (gate.frozen || gate.timeLocked || !isWorkingDay(workDate) || workDate > startOfWibDay(new Date())) return rollup
 
-  const existing = await db.dailyProjectReport.findUnique({
+  const existing = await client.dailyProjectReport.findUnique({
     where: { projectId_reportDate: { projectId, reportDate: workDate } },
   })
 
   if (!rollup) {
     // The last task was removed: fall back to counting only the report's own files.
     if (existing) {
-      const own = await db.evidence.count({
+      const own = await client.evidence.count({
         where: { targetType: 'DAILY_REPORT', targetId: existing.id },
       })
-      await db.dailyProjectReport.update({
+      await client.dailyProjectReport.update({
         where: { id: existing.id },
         data: { evidenceCount: own },
       })
@@ -113,10 +132,8 @@ export async function rollupDailyReport(projectId: string, workDate: Date): Prom
     return null
   }
 
-  if (existing?.isLocked) return rollup
-
   const ownEvidence = existing
-    ? await db.evidence.count({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
+    ? await client.evidence.count({ where: { targetType: 'DAILY_REPORT', targetId: existing.id } })
     : 0
 
   const data = {
@@ -130,15 +147,15 @@ export async function rollupDailyReport(projectId: string, workDate: Date): Prom
   }
 
   if (existing) {
-    await db.dailyProjectReport.update({ where: { id: existing.id }, data })
+    await client.dailyProjectReport.update({ where: { id: existing.id }, data })
   } else {
-    const project = await db.project.findUnique({
+    const project = await client.project.findUnique({
       where: { id: projectId },
       select: { entityId: true, phase: true },
     })
     if (!project) return rollup
 
-    await db.dailyProjectReport.create({
+    await client.dailyProjectReport.create({
       data: {
         ...data,
         projectId,
@@ -179,4 +196,56 @@ export async function syncEvidenceCount(targetType: string, targetId: string): P
   }
 
   return count
+}
+
+// ------------------------------------------------------------------
+// Pembekuan laporan harian (6 Okt 2026)
+// ------------------------------------------------------------------
+
+/** Pesan 409 untuk laporan yang sudah diteruskan Admin PT ke holding. */
+export const FORWARDED_FROZEN_MESSAGE = 'Laporan sudah diteruskan ke holding. Ajukan buka kunci untuk mengubahnya.'
+export const REPORT_LOCKED_MESSAGE = 'Laporan ini sudah dikunci. Ajukan buka kunci untuk mengubahnya.'
+
+export type DailyGate = {
+  report: { id: string; forwardedAt: Date | null; isLocked: boolean } | null
+  /** Buka kunci yang sedang berlaku untuk laporan hari itu, bila ada. */
+  unlock: { id: string; unlockUntil: Date | null } | null
+  /** Alasan laporan dibekukan (diteruskan/terkunci) tanpa buka kunci aktif; null bila tidak. */
+  frozen: 'FORWARDED' | 'LOCKED' | null
+  /** Lewat tenggat 17.00 hari itu dan tidak sedang dibuka. */
+  timeLocked: boolean
+}
+
+/**
+ * Boleh tidaknya laporan harian satu proyek pada satu hari ditulis — dipakai
+ * /api/daily-input dan /api/tasks agar aturannya satu:
+ *
+ *   - laporan yang sudah diteruskan ke holding (`forwardedAt`) atau dikunci
+ *     (`isLocked`) dibekukan;
+ *   - hari yang lewat tenggat 17.00 WIB terkunci;
+ *   - keduanya hanya bisa ditembus oleh buka kunci yang sedang berlaku
+ *     (`activeUnlockFor`), yang selalu menunjuk satu laporan.
+ */
+export async function dailyGate(projectId: string, day: Date, now: Date = new Date(), client: Prisma.TransactionClient = db): Promise<DailyGate> {
+  const report = await client.dailyProjectReport.findUnique({
+    where: { projectId_reportDate: { projectId, reportDate: day } },
+    select: { id: true, forwardedAt: true, isLocked: true },
+  })
+  const pastCutoff = isDailyLocked(day, now)
+  const blocked = Boolean(report?.forwardedAt) || Boolean(report?.isLocked) || pastCutoff
+  const unlock = report && blocked ? await client.unlockRequest.findFirst({
+    where: { targetType: 'DAILY_REPORT', targetId: report.id, status: 'DIEKSEKUSI', reLockedAt: null, unlockUntil: { gt: now } },
+    select: { id: true, unlockUntil: true },
+  }) : null
+  return {
+    report: report ?? null,
+    unlock,
+    frozen: unlock ? null : report?.forwardedAt ? 'FORWARDED' : report?.isLocked ? 'LOCKED' : null,
+    timeLocked: pastCutoff && !unlock,
+  }
+}
+
+/** Pesan untuk laporan yang dibekukan, atau null. */
+export function frozenMessage(gate: Pick<DailyGate, 'frozen'>): string | null {
+  return gate.frozen === 'FORWARDED' ? FORWARDED_FROZEN_MESSAGE : gate.frozen === 'LOCKED' ? REPORT_LOCKED_MESSAGE : null
 }
