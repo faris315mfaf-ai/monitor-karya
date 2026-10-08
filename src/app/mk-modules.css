@@ -101,6 +101,12 @@
   .mk-userrow > .mk-userrow__status { grid-area: st; justify-self: start; }
   .mk-userrow > :last-child { grid-area: chev; align-self: center; }
 }
+
+/* Baris ActivityItem yang bisa diketuk untuk membuka rincian (log aktivitas ponsel). */
+.mk-audit-act { display: block; width: 100%; min-height: var(--touch-min); margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-md); transition: background-color var(--dur-fast); }
+.mk-audit-act:hover { background: var(--fill-1); }
+.mk-audit-act:active { background: var(--fill-2); }
+.mk-audit-act:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .mk-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--fill-1); color: var(--ink-2); font: var(--text-caption); }
 .mk-tag.is-strong { background: var(--grafit-fill); color: var(--on-grafit); }
 .mk-pickrow { display: flex; align-items: center; gap: 4px; }

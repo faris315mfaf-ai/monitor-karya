@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react'
 import { useFetch } from '@/hooks/use-fetch'
 import {
-  Card, Chip, EmptyNote, ErrorNote, Icon, IconButton, PageHeader, Sheet, Skeleton, Button, cx, useIsPhone, type Status,
+  ActivityItem, Card, Chip, EmptyNote, ErrorNote, Icon, IconButton, PageHeader, Sheet, Skeleton, Button, cx, useIsPhone, type Status,
 } from '@/components/mk'
 import { Input } from '@/components/mk/forms'
 import { ROLE_LABELS } from '@/lib/constants'
 import { ALL_ROLES } from '@/lib/rbac'
+import { initialsOf } from '@/lib/accounts'
 import { formatDateTime, formatNumber, formatRelative } from '@/lib/format'
 
 type AuditLog = {
@@ -446,12 +447,40 @@ export function AuditView() {
                 </table>
               </div>
 
-              {/* Kartu di ponsel, tablet, dan desktop sempit */}
-              <div className="xl:hidden mk-list">
-                {data.items.map((log) => (
-                  <AuditCardRow key={log.id} log={log} onOpen={() => setOpened(log)} />
-                ))}
-              </div>
+              {/* Ponsel: daftar ActivityItem (08-auditor.md §Ponsel); ketuk baris membuka rincian log */}
+              {phone ? (
+                <div className="mk-list">
+                  {data.items.map((log, i) => (
+                    <button
+                      key={log.id}
+                      type="button"
+                      className="mk-audit-act"
+                      onClick={() => setOpened(log)}
+                      aria-label={`${AUDIT_ACTION_LABELS[log.action] || log.action} oleh ${log.actor?.name ?? 'sistem'}, ${formatDateTime(log.at)}. Buka rincian`}
+                    >
+                      <ActivityItem
+                        who={log.actor?.name ?? 'Sistem'}
+                        initials={log.actor ? initialsOf(log.actor.name) : 'S'}
+                        action={
+                          <>
+                            <ActionTag action={log.action} />
+                            <span className="t-footnote text-ink-2">{TARGET_LABELS[log.targetType] || log.targetType}</span>
+                          </>
+                        }
+                        time={formatDateTime(log.at)}
+                        last={i === data.items.length - 1}
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                // Kartu di tablet dan desktop sempit (<1280)
+                <div className="xl:hidden mk-list">
+                  {data.items.map((log) => (
+                    <AuditCardRow key={log.id} log={log} onOpen={() => setOpened(log)} />
+                  ))}
+                </div>
+              )}
 
               <div className="mk-adm-pager">
                 <span className="t-footnote text-ink-2 mk-adm-num">
