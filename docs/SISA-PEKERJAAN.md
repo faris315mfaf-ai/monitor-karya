@@ -1,6 +1,8 @@
 # Sisa pekerjaan — backlog global dan hasil CX
 
-Diperbarui 7 Oktober 2026: lima prioritas akses, sesi, aktivasi, dependensi,
+Diperbarui 8 Oktober 2026 (Zcode): tiga butir desain Admin/Auditor dan kajian
+drift migrasi tuntas (bagian C), bukti pada [HASIL-TAHAP1](zcode/HASIL-TAHAP1.md).
+7 Oktober 2026: lima prioritas akses, sesi, aktivasi, dependensi,
 dan kesiapan layanan telah diimplementasikan. [Hasil CX16–20](codex/CX16-20-HASIL.md).
 
 Gerbang sebelumnya, 6 Oktober 2026 setelah CX 8–15: **63 berkas /
@@ -102,21 +104,21 @@ Keputusan yang sudah diambil pemilik (laporan harian langsung ke Admin PT, beku 
 
 ### Desain dan fitur di luar perbaikan CX
 
-- [ ] Peta panas Admin di ponsel: label 3 huruf belum ada (nama lengkap digeser ke samping). Tablet Admin: kartu divisi 2 kolom belum.
-- [ ] Log aktivitas Auditor di ponsel memakai baris kartu log, belum `ActivityItem` (spesifikasi 08).
-- [ ] Putuskan `views/management-charts.tsx` (`/api/management-charts`), `dashboard/compliance-treemap.tsx` (`/api/compliance-map`), dan `dashboard/kpi-trend-chart.tsx` (`/api/kpi-trends`): pasang di layar, atau hapus beserta API-nya.
+- [x] Peta panas Admin di ponsel memakai label 3 huruf; tablet Admin kartu divisi 2 kolom. [CX-POLISH, 8 Okt](zcode/HASIL-TAHAP1.md).
+- [x] Log aktivitas Auditor di ponsel memakai `ActivityItem` sesuai spesifikasi 08; baris ketuk membuka rincian log. [CX-POLISH, 8 Okt](zcode/HASIL-TAHAP1.md).
+- [ ] Putuskan `views/management-charts.tsx` (`/api/management-charts`), `dashboard/compliance-treemap.tsx` (`/api/compliance-map`), dan `dashboard/kpi-trend-chart.tsx` (`/api/kpi-trends`): pasang di layar, atau hapus beserta API-nya. Opsi dan rekomendasi: [memo](zcode/USULAN-GRAFIK-TERTUNDA.md).
 - [ ] Tab Log aktivitas untuk Direktur entitas (kapabilitas `audit:read` sudah ada, tab belum di `ROLE_TABS`); menunggu keputusan pemilik.
 
 Perbaikan Heatmap/footer responsif CX 10 tidak menutup permintaan label 3 huruf
-atau kartu Admin dua kolom. Ketiga grafik/API sengaja dipertahankan; cleanup
-komponen/dependensi tidak memutuskan nasibnya.
+atau kartu Admin dua kolom — keduanya kini selesai lewat CX-POLISH 8 Oktober.
+Ketiga grafik/API tetap menunggu keputusan; memo di atas bukan keputusan.
 
 ### Infrastruktur dan keamanan
 
 - [ ] Pembatas laju global: kini di memori per instans. Butuh penyimpanan bersama (mis. Redis) bila aplikasi berjalan lebih dari satu instans.
 - [x] Pencabutan token saat keluar memakai AuthSession; sandi dan sesi pengganti atomik. [CX16–17](codex/CX16-17-AKSES-SESI.md).
-- [x] Dependensi terdampak ditangani: sharp 0.35.5, override deepmerge-ts 8.0.2 khusus Prisma, dan patch lokal braces dengan sumber/lisensi/regresi. Audit npm 0, tetapi patch lokal bukan rilis upstream resmi; pemelihara tetap perlu memantau advisory. [CX19 dan batas pembuktiannya](codex/CX19-DEPENDENSI.md).
-- [ ] Migrasi lama 0001–0012 berbeda tipis dengan `schema.prisma` (indeks tangan yang tidak dideklarasikan skema; `Project.approvalChain` NOT NULL). `prisma migrate dev` berikutnya bisa mengusulkan menghapus indeks itu. Uji 23 migrasi lokal tidak membuktikan drift lama sudah diselesaikan.
+- [x] Dependensi terdampak ditangani: sharp 0.35.5, override deepmerge-ts 8.0.2 khusus Prisma, dan patch lokal braces dengan sumber/lisensi/regresi. Audit npm 0, tetapi patch lokal bukan rilis upstream resmi; pemelihara tetap perlu memantau advisory. [CX19 dan batas pembuktiannya](codex/CX19-DEPENDENSI.md). Pemindaian 8 Okt 2026: registry masih berhenti di 3.0.3 dan rentang advisori `<=3.0.3` — belum ada rilis resmi yang bisa menggantikan patch.
+- [x] Drift skema/migrasi lama tuntas: 40 indeks hasil 0003–0012 kini dideklarasikan `schema.prisma` (14 dengan `map:` nama non-baku); `migrate diff` dari seluruh riwayat ke skema bersih; klaim `approvalChain` NOT NULL terbukti sudah selaras sejak 0012. Tanpa migrasi baru. [HASIL-DRIFT](zcode/HASIL-DRIFT-MIGRASI.md).
 
 ### Infrastruktur yang selesai dalam CX, bukan backlog aktif
 

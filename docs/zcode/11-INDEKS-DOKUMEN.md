@@ -120,12 +120,15 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/09-PROMPT-ZCODE.md](../../docs/zcode/09-PROMPT-ZCODE.md)
 - [docs/zcode/10-INVENTARIS-KODE.md](../../docs/zcode/10-INVENTARIS-KODE.md)
 - [docs/zcode/11-INDEKS-DOKUMEN.md](../../docs/zcode/11-INDEKS-DOKUMEN.md)
+- [docs/zcode/HASIL-DRIFT-MIGRASI.md](../../docs/zcode/HASIL-DRIFT-MIGRASI.md)
+- [docs/zcode/HASIL-TAHAP1.md](../../docs/zcode/HASIL-TAHAP1.md)
 - [docs/zcode/PENERIMAAN-ZCODE.md](../../docs/zcode/PENERIMAAN-ZCODE.md)
 - [docs/zcode/README.md](../../docs/zcode/README.md)
+- [docs/zcode/USULAN-GRAFIK-TERTUNDA.md](../../docs/zcode/USULAN-GRAFIK-TERTUNDA.md)
 - [download/README.md](../../download/README.md)
 - [upload/prompt_fullstack_monitoring_bisnis_1.md](../../upload/prompt_fullstack_monitoring_bisnis_1.md)
 - [vendor/braces/README.md](../../vendor/braces/README.md)
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 113 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri `CX8–15-HASIL` dan `PENERIMAAN-ZCODE` ditambahkan pada penerimaan Zcode, lihat [PENERIMAAN](PENERIMAAN-ZCODE.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 116 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri tambahan menyusul penerimaan dan hasil Tahap 1 Zcode, lihat [PENERIMAAN](PENERIMAAN-ZCODE.md) dan [HASIL-TAHAP1](HASIL-TAHAP1.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
