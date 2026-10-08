@@ -133,7 +133,10 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   KEPALA_DIVISI: ['dashboard', 'work-desk', 'weekly-input', 'divisions', 'projects'],
   // Sejak 8 Sep 2026 isian mingguan divisi untuk Admin PT ada di Modul Divisi
   // (pilih entitas & divisi), jadi tab Capaian Mingguan tidak lagi dobel.
-  ADMIN_PT: ['dashboard', 'work-desk', 'inbox', 'daily-input', 'projects', 'divisions', 'escalations'],
+  // Keputusan pemilik 9 Okt 2026: tab Penerimaan dihapus — penerusan laporan
+  // diserap Meja Kerja + tombol di Ringkasan; tab Statistik (kepatuhan per
+  // divisi + peta panas 10 hari) dipisah dari Ringkasan agar ringkas.
+  ADMIN_PT: ['dashboard', 'work-desk', 'statistik', 'daily-input', 'projects', 'divisions', 'escalations'],
   // [F2-DIREKTUR] + Persetujuan (materi/anggaran/cuti, usulan tenggat, pengajuan proyek).
   DIREKTUR_ENTITAS: ['dashboard', 'projects', 'divisions', 'escalations', 'approvals', 'entities'],
   DIREKTUR_SDM_GA: ['dashboard', 'projects', 'divisions', 'escalations', 'entities', 'audit'],

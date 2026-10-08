@@ -32,6 +32,7 @@ const TAB_ICONS: Record<NavTabId, IconName> = {
   dashboard: 'ringkasan',
   companies: 'gedung',
   'work-desk': 'catatan',
+  statistik: 'naik', // tren naik: statistik kepatuhan Admin PT (9 Okt 2026)
   'daily-input': 'laporan',
   'weekly-input': 'kalender',
   inbox: 'persetujuan',

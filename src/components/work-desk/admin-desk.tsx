@@ -1,26 +1,30 @@
 'use client'
 
 /**
- * Meja kerja Admin PT (04-admin-pt.md): siapa yang belum lapor hari ini, siapa
- * yang sudah diingatkan, apa yang siap diteruskan ke holding, dan apa yang
- * menunggu tanda tangan Anda. Admin menilai kepatuhan, bukan isi laporan.
+ * Meja kerja Admin PT — keputusan pemilik 9 Okt 2026: pemroses seluruh laporan
+ * masuk. Dua seksi akordeon yang terbuka otomatis: "Laporan proyek" (harian PIC)
+ * dan "Laporan divisi" (capaian mingguan kepala divisi). Baris pelapor dibuka di
+ * Sheet rincian: laporan proyek memuat identitas, status/progres, capaian hari
+ * itu, kendala & tindak lanjut, dan galeri bukti (grid foto + baris berkas);
+ * laporan divisi memuat identitas, status, dan ringkasan butir. Murni memeriksa —
+ * tanpa aksi tulis; penerusan tetap lewat tombol di Ringkasan. UI sama di ponsel
+ * maupun PC: satu kolom daftar, detail selalu di Sheet.
+ *
+ * Daftar pelapor dari /api/work-desk (kind ADMIN). Kendala/tindak lanjut baru
+ * diambil saat sheet dibuka dari /api/daily-reports?projectId=…&dateFrom=&dateTo=,
+ * dan bukti dari /api/evidence?targetType=DAILY_REPORT&targetId=… — foto unggahan
+ * meminta URL bertanda tangan per berkas dari /api/evidence/<id> (berlaku singkat).
  */
 
-import { useState } from 'react'
-import { toast } from 'sonner'
-import { useApp } from '@/components/app-provider'
+import { useEffect, useState } from 'react'
 import {
-  AttentionItem, Button, Card, DivisionBar, EmptyNote, FlowDiagram, Heatmap, Hero, ProgressBar, SegmentedControl, Sheet,
-  StatTile, StatusBadge, cx, type FlowStep, type Status,
+  EmptyNote, ErrorNote, Hero, Icon, IconButton, ProgressBar, Sheet, Skeleton, StatusBadge, cx,
 } from '@/components/mk'
-import { DailyStatusBadge, weeklyHeaderStatus } from '@/components/status-badges'
+import { DailyStatusBadge, WeeklyHeaderBadge, dailyStatus } from '@/components/status-badges'
 import { DashHeader } from '@/components/views/dash-common'
-import { ESCALATION_NEEDED_LABELS, PROJECT_PHASE_LABELS } from '@/lib/constants'
-import { formatDateShort, formatTime } from '@/lib/format'
-import { CountUp, DeadlineRing, TallyPill, remainLong } from './parts'
-import { AccessRequestsCard } from '@/components/admin/access-requests-card'
-import { UnlockCard } from '@/components/admin/unlock-card'
-import { divisionTone } from '@/lib/division-tone'
+import type { EvidenceItem } from '@/components/evidence-panel'
+import { useResource } from '@/hooks/use-resource'
+import { formatDateLong, formatDateShort, formatDateTime, formatTime } from '@/lib/format'
 
 type AdminProject = {
   id: string
@@ -82,420 +86,559 @@ export type AdminDesk = {
   history: { date: string; submitted: number; onTime: number; forwarded: number }[]
 }
 
-type Filter = 'all' | 'missing' | 'in' | 'forwarded'
-const WIB = 'Asia/Jakarta'
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
+/** Pelapor terbaru di atas: meja penerimaan membaca dari yang baru masuk. */
+const newestFirst = (a: string | null | undefined, b: string | null | undefined) =>
+  (Date.parse(b ?? '') || 0) - (Date.parse(a ?? '') || 0)
 
-function rowStatus(p: AdminProject, locked: boolean, reminded: string | null): { status: Status; text: string } {
-  const r = p.report
-  if (r?.forwardedAt) return { status: 'done', text: 'Diteruskan' }
-  if (r?.submittedAt) return { status: r.isLate ? 'risk' : 'info', text: `${r.isLate ? 'Terlambat masuk' : 'Masuk'} ${formatTime(r.submittedAt)}` }
-  if (reminded) return { status: locked ? 'late' : 'risk', text: `Diingatkan ${formatTime(reminded)}` }
-  if (r) return { status: locked ? 'late' : 'risk', text: 'Draf belum dikirim' }
-  return { status: locked ? 'late' : 'neutral', text: 'Belum masuk' }
-}
+type OpenRow =
+  | { kind: 'daily'; project: AdminProject }
+  | { kind: 'weekly'; division: AdminDesk['divisions'][number] }
 
-function weeklyText(r: AdminDesk['divisions'][number]['report']) {
-  if (!r) return 'Belum masuk'
-  if (r.forwardedAt) return 'Diteruskan'
-  if (r.statusHeader === 'DISETUJUI') return 'Disetujui'
-  if (r.statusHeader === 'MENUNGGU_PERSETUJUAN') return 'Menunggu persetujuan'
-  if (r.statusHeader === 'TERKUNCI') return 'Terkunci'
-  return 'Draf'
-}
-
-export function AdminDeskView({ data, reload }: { data: AdminDesk; reload: () => void }) {
-  const { setActiveTab } = useApp()
-  const [filter, setFilter] = useState<Filter>('all')
-  const [reminded, setReminded] = useState<Record<string, string>>({})
-  const [sending, setSending] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [lastOpen, setLastOpen] = useState<AdminProject | null>(null)
-
-  const remindedAt = (p: AdminProject) => reminded[p.id] ?? p.remindedAt
-  const projects = data.projects
-  const n = projects.length
-  const received = projects.filter((p) => p.report?.submittedAt)
-  const missing = projects.filter((p) => !p.report?.submittedAt)
-  const forwarded = projects.filter((p) => p.report?.forwardedAt)
-  const toForward = received.filter((p) => !p.report?.forwardedAt)
-  const remindable = missing.filter((p) => p.pic && !remindedAt(p))
-  const remindedCount = missing.filter((p) => remindedAt(p)).length
-  const noPic = missing.filter((p) => !p.pic).length
-  const waiting = data.approvals.length + data.escalations.length
-  const weeklyIn = data.divisions.filter((d) => d.report?.submittedAt).length
-
-  const shown = projects.filter((p) =>
-    filter === 'missing' ? !p.report?.submittedAt : filter === 'in' ? p.report?.submittedAt && !p.report.forwardedAt : filter === 'forwarded' ? p.report?.forwardedAt : true
+/** Lencana ringkas baris pelapor: baru masuk, atau sudah diteruskan ke Direksi. */
+function ForwardBadge({ forwardedAt }: { forwardedAt: string | null }) {
+  return (
+    <StatusBadge status={forwardedAt ? 'done' : 'info'} size="sm">
+      {forwardedAt ? 'Sudah diteruskan' : 'Baru'}
+    </StatusBadge>
   )
-  const open = projects.find((p) => p.id === openId) ?? null
-  if (open && open !== lastOpen) setLastOpen(open)
-  const sheetP = open ?? lastOpen
+}
 
-  async function remind(p: AdminProject | 'all') {
-    setSending(p === 'all' ? 'all' : p.id)
-    try {
-      const res = await fetch('/api/work-desk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(p === 'all' ? { action: 'remind-all-pics' } : { action: 'remind-pic', projectId: p.id }),
+/** Seksi akordeon pada Card: kepala kartu adalah tombolnya, terbuka otomatis. */
+function Disclosure({
+  id,
+  title,
+  sub,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string
+  title: string
+  sub: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mk-card" aria-label={title}>
+      <button
+        type="button"
+        className="mk-card__head mk-wk-tap w-full cursor-pointer border-0 bg-transparent p-0 text-left text-ink"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+      >
+        <span className="mk-card__titles">
+          <span className="mk-card__title">{title}</span>
+          <span className="mk-card__sub">{sub}</span>
+        </span>
+        <Icon
+          name="bawah"
+          size={20}
+          className={cx('mt-1 shrink-0 text-ink-2 transition-transform motion-reduce:transition-none', open && 'rotate-180')}
+        />
+      </button>
+      <div id={id} className={open ? undefined : 'hidden'}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Galeri bukti (baca saja)                                            */
+/* ------------------------------------------------------------------ */
+
+/** Foto unggahan: URL bertanda tangan diminta saat tampil, klik membuka tab baru. */
+function EvidencePhoto({ item }: { item: EvidenceItem }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/evidence/${item.id}`)
+      .then((r) => r.json())
+      .then((j: { url?: string }) => {
+        if (cancelled) return
+        if (j?.url) setSrc(j.url)
+        else setFailed(true)
       })
-      const json = await res.json().catch(() => ({}))
-      if (p === 'all') {
-        if (!res.ok) return void toast.error(json.error || 'Pengingat belum terkirim')
-        const sent = (json.sent ?? []) as { projectId: string; picName: string; remindedAt: string }[]
-        setReminded((m) => ({ ...m, ...Object.fromEntries(sent.map((s) => [s.projectId, s.remindedAt])) }))
-        toast.success(sent.length ? `${sent.length} PIC diingatkan. Tercatat di log aktivitas.` : 'Tidak ada PIC yang perlu diingatkan.')
-      } else if (res.ok) {
-        setReminded((m) => ({ ...m, [p.id]: json.remindedAt }))
-        toast.success(`${json.picName} diingatkan. Tercatat di log aktivitas.`)
-      } else {
-        if (json.remindedAt) setReminded((m) => ({ ...m, [p.id]: json.remindedAt }))
-        toast.error(json.error || 'Pengingat belum terkirim')
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [item.id])
+
+  return (
+    <a href={src ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Buka foto ${item.fileName}`} className="mk-lap-thumb">
+      {src && !failed ? (
+        <img src={src} alt={item.fileName} loading="lazy" onError={() => setFailed(true)} />
+      ) : failed ? (
+        <span className="mk-lap-thumb__ph">
+          <Icon name="dokumen" size={24} />
+        </span>
+      ) : (
+        <Skeleton h="100%" r={0} />
+      )}
+      <span className="mk-lap-thumb__name">{item.fileName}</span>
+    </a>
+  )
+}
+
+/** Berkas/tautan non-gambar: satu baris, tombol membuka URL penuh di tab baru. */
+function EvidenceFile({ item }: { item: EvidenceItem }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  async function open() {
+    // Tautan luar disimpan lengkap di barisnya; berkas unggahan minta URL bertanda.
+    if (item.url) {
+      window.open(item.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    setBusy(true)
+    setFailed(false)
+    try {
+      const res = await fetch(`/api/evidence/${item.id}`)
+      const json = (await res.json().catch(() => ({}))) as { url?: string }
+      if (!res.ok || !json.url) {
+        setFailed(true)
+        return
       }
-      reload()
+      window.open(json.url, '_blank', 'noopener,noreferrer')
     } catch {
-      toast.error('Tidak dapat menghubungi server')
+      setFailed(true)
     } finally {
-      setSending(null)
+      setBusy(false)
     }
   }
 
-  const workStart = new Date(Date.parse(data.today) + 8 * 3600000).toISOString()
-  const allIn = n > 0 && missing.length === 0
+  return (
+    <li className="mk-lap-file">
+      <Icon name={item.url ? 'alur' : 'dokumen'} size={18} className="text-ink-3 shrink-0" />
+      <span className="mk-lap-file__name" title={item.fileName}>
+        {item.fileName}
+      </span>
+      {failed ? <span className="t-caption mk-text--late">Belum bisa dibuka</span> : null}
+      <IconButton icon={item.url ? 'kanan' : 'unduh'} label={`Buka ${item.fileName}`} disabled={busy} onClick={() => void open()} />
+    </li>
+  )
+}
 
-  const primary =
-    missing.length > 0 && !data.locked && data.canRemind ? (
-      <Button variant="primary" icon="notifikasi" disabled={remindable.length === 0 || sending !== null} onClick={() => remind('all')}>
-        {sending === 'all' ? 'Mengirim…' : remindable.length ? `Ingatkan ${remindable.length} PIC` : 'Semua sudah diingatkan'}
-      </Button>
-    ) : toForward.length > 0 ? (
-      <Button variant="primary" icon="kirim" onClick={() => setActiveTab('inbox')}>
-        Teruskan {toForward.length} laporan
-      </Button>
-    ) : (
-      <Button variant="primary" icon="ringkasan" onClick={() => setActiveTab('dashboard')}>
-        Lihat ringkasan
-      </Button>
+/** Galeri bukti satu laporan harian — dimuat hanya saat sheet terbuka. */
+function EvidenceGallery({ targetId }: { targetId: string }) {
+  const { data, loading, error, reload } = useResource<{ items: EvidenceItem[] }>(
+    `/api/evidence?targetType=DAILY_REPORT&targetId=${encodeURIComponent(targetId)}`
+  )
+
+  if (loading) {
+    return (
+      <div className="mk-lap-thumbs" aria-busy="true" aria-label="Memuat bukti">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="mk-lap-thumb">
+            <Skeleton h="100%" r={0} />
+          </div>
+        ))}
+      </div>
     )
+  }
+  if (error) return <ErrorNote message={error} onRetry={reload} />
 
-  const flow: FlowStep[] = [
-    { title: 'PIC mengisi', sub: `${received.length} dari ${n} masuk`, status: allIn ? 'done' : data.locked ? 'blocked' : 'current', icon: 'catatan', meta: !allIn && remindedCount ? `${remindedCount} diingatkan` : undefined },
-    { title: 'Masuk ke Anda', sub: `${toForward.length} menunggu diteruskan`, status: received.length === 0 ? 'todo' : toForward.length ? 'current' : 'done', icon: 'dokumen' },
-    { title: 'Diteruskan ke holding', sub: `${forwarded.length} dari ${n}`, status: n && forwarded.length === n ? 'done' : forwarded.length ? 'current' : 'todo', icon: 'kirim' },
-    { title: `Terkunci ${data.cutoffLabel}`, sub: data.locked ? 'Sudah terkunci' : 'Perubahan ditutup', status: data.locked ? 'done' : 'todo', icon: 'kunci' },
+  const items = data?.items ?? []
+  if (items.length === 0) return <EmptyNote icon="dokumen">Tidak ada bukti terlampir pada laporan ini.</EmptyNote>
+
+  const photos = items.filter((e) => !e.url && (e.mime ?? '').startsWith('image/'))
+  const files = items.filter((e) => e.url || !(e.mime ?? '').startsWith('image/'))
+  return (
+    <>
+      {photos.length > 0 ? (
+        <div className="mk-lap-thumbs">
+          {photos.map((e) => (
+            <EvidencePhoto key={e.id} item={e} />
+          ))}
+        </div>
+      ) : null}
+      {files.length > 0 ? (
+        <ul className="mk-list" aria-label="Berkas dan tautan bukti">
+          {files.map((e) => (
+            <EvidenceFile key={e.id} item={e} />
+          ))}
+        </ul>
+      ) : null}
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Sheet rincian laporan proyek                                        */
+/* ------------------------------------------------------------------ */
+
+type DailyDetailItem = {
+  id: string
+  obstacle: string | null
+  followUp: string | null
+  followUpTargetDate: string | null
+}
+
+function DailyReportBody({ project, today }: { project: AdminProject; today: string }) {
+  const r = project.report
+  // Kendala & tindak lanjut tidak dibawa /api/work-desk — diambil untuk hari ini saja.
+  const detail = useResource<{ items: DailyDetailItem[] }>(
+    `/api/daily-reports?projectId=${encodeURIComponent(project.id)}&dateFrom=${encodeURIComponent(today)}&dateTo=${encodeURIComponent(today)}`
+  )
+  if (!r) return null
+
+  const item = detail.data?.items.find((x) => x.id === r.id) ?? null
+  return (
+    <>
+      <div className="mk-kv" aria-label="Identitas laporan">
+        <div className="min-w-0">
+          <div className="t-footnote text-ink-2">Proyek</div>
+          <div className="t-body-strong truncate">{project.name}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">PIC</div>
+          <div className="t-body-strong truncate">{project.picName ?? 'Belum ada PIC'}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">Pengirim</div>
+          <div className="t-body-strong truncate">{r.submittedBy ?? project.picName ?? 'PIC'}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">Dikirim</div>
+          <div className="t-body-strong tabular-nums">pukul {formatTime(r.submittedAt)} WIB</div>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="t-headline">Status &amp; progres</h3>
+          <span className="flex flex-wrap items-center gap-2">
+            <DailyStatusBadge status={r.status} />
+            {r.isLate ? (
+              <StatusBadge status="late" size="sm">
+                Terlambat masuk
+              </StatusBadge>
+            ) : null}
+            {r.needsEscalation ? (
+              <StatusBadge status="risk" size="sm">
+                Perlu eskalasi
+              </StatusBadge>
+            ) : null}
+          </span>
+        </div>
+        <ProgressBar value={r.progressPct} status={dailyStatus(r.status)} label={`Progres ${project.name}`} />
+      </div>
+
+      <div>
+        <h3 className="t-headline mb-2">Capaian hari ini</h3>
+        <p className={cx('mk-note-box', 'bg-fill-1')}>{r.achievement || 'PIC belum menuliskan capaian.'}</p>
+      </div>
+
+      <div>
+        <h3 className="t-headline mb-2">Kendala &amp; tindak lanjut</h3>
+        {detail.loading ? (
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Memuat kendala dan tindak lanjut">
+            <Skeleton h={44} r={10} />
+            <Skeleton h={44} r={10} />
+          </div>
+        ) : detail.error ? (
+          <ErrorNote message={detail.error} onRetry={detail.reload} />
+        ) : (
+          <>
+            <p className={item?.obstacle ? 'mk-note-box mk-soft--risk' : 't-body text-ink-2'}>
+              {item?.obstacle || 'Tidak ada kendala yang dilaporkan.'}
+            </p>
+            {item?.followUp ? (
+              <p className="mk-inset t-body mt-3">
+                {item.followUp}
+                {item.followUpTargetDate ? (
+                  <span className="text-ink-2"> · target {formatDateShort(item.followUpTargetDate)}</span>
+                ) : null}
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="t-headline">Bukti pendukung</h3>
+          <span className="t-footnote text-ink-2 tabular-nums">{r.evidenceCount} berkas</span>
+        </div>
+        <EvidenceGallery targetId={r.id} />
+      </div>
+    </>
+  )
+}
+
+function DailyReportSheet({
+  row,
+  today,
+  open,
+  onClose,
+}: {
+  row: AdminProject | null
+  today: string
+  open: boolean
+  onClose: () => void
+}) {
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={row?.name ?? ''}
+      subtitle={row ? `${row.code} · PIC ${row.picName ?? 'belum ditetapkan'}` : undefined}
+      eyebrow={
+        row?.report ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <DailyStatusBadge status={row.report.status} />
+            <ForwardBadge forwardedAt={row.report.forwardedAt} />
+          </span>
+        ) : undefined
+      }
+      backLabel="Meja kerja"
+    >
+      {row && row.report ? <DailyReportBody key={`${row.id}:${row.report.id}`} project={row} today={today} /> : null}
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Sheet rincian laporan divisi                                        */
+/* ------------------------------------------------------------------ */
+
+function WeeklyReportBody({ division, week }: { division: AdminDesk['divisions'][number]; week: AdminDesk['week'] }) {
+  const r = division.report
+  if (!r) return null
+  return (
+    <>
+      <div className="mk-kv" aria-label="Identitas laporan">
+        <div className="min-w-0">
+          <div className="t-footnote text-ink-2">Divisi</div>
+          <div className="t-body-strong truncate">{division.name}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">Kepala divisi</div>
+          <div className="t-body-strong truncate">{division.head?.name ?? 'Belum ditetapkan'}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">Minggu</div>
+          <div className="t-body-strong tabular-nums">M{week.isoWeek} {week.isoYear}</div>
+        </div>
+        <div>
+          <div className="t-footnote text-ink-2">Diserahkan</div>
+          <div className="t-body-strong tabular-nums">pukul {formatTime(r.submittedAt)} WIB</div>
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="t-headline">Status</h3>
+          <span className="flex flex-wrap items-center gap-2">
+            <WeeklyHeaderBadge status={r.statusHeader} />
+            <ForwardBadge forwardedAt={r.forwardedAt} />
+          </span>
+        </div>
+        <p className="t-footnote text-ink-2">
+          {r.forwardedAt
+            ? `Diteruskan ke Direksi ${formatDateTime(r.forwardedAt)} WIB.`
+            : 'Menunggu diteruskan lewat tombol penerusan di Ringkasan.'}
+          {r.approvedAt ? ` Disetujui kepala divisi pukul ${formatTime(r.approvedAt)} WIB.` : ' Belum disetujui kepala divisi.'}
+        </p>
+      </div>
+
+      <div>
+        <h3 className="t-headline mb-2">Ringkasan butir</h3>
+        <p className="t-body-strong mb-2">
+          {r.done} dari {r.items} item selesai
+        </p>
+        <ProgressBar value={pct(r.done, r.items)} status="accent" label={`Capaian divisi ${division.name}`} />
+        <p className="t-footnote text-ink-2 mt-2">
+          {r.blocked > 0 ? `${r.blocked} item terkendala` : 'Tidak ada item terkendala'}
+          {r.missingEvidence > 0 ? ` · ${r.missingEvidence} item tanpa bukti` : ''}
+        </p>
+      </div>
+    </>
+  )
+}
+
+function WeeklyReportSheet({
+  row,
+  week,
+  open,
+  onClose,
+}: {
+  row: AdminDesk['divisions'][number] | null
+  week: AdminDesk['week']
+  open: boolean
+  onClose: () => void
+}) {
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={row?.name ?? ''}
+      subtitle={row ? `Kepala divisi ${row.head?.name ?? 'belum ditetapkan'} · M${week.isoWeek}` : undefined}
+      eyebrow={
+        row?.report ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <WeeklyHeaderBadge status={row.report.statusHeader} />
+            <ForwardBadge forwardedAt={row.report.forwardedAt} />
+          </span>
+        ) : undefined
+      }
+      backLabel="Meja kerja"
+    >
+      {row && row.report ? <WeeklyReportBody key={`${row.id}:${row.report.id}`} division={row} week={week} /> : null}
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Meja kerja                                                          */
+/* ------------------------------------------------------------------ */
+
+export function AdminDeskView({ data }: { data: AdminDesk }) {
+  // Akordeon terbuka otomatis: meja kerja langsung menunjukkan pelapor.
+  const [openDailySec, setOpenDailySec] = useState(true)
+  const [openWeeklySec, setOpenWeeklySec] = useState(true)
+  const [open, setOpen] = useState<OpenRow | null>(null)
+  // Baris terakhir dipertahankan supaya isi Sheet tidak berkedip saat menutup.
+  const [last, setLast] = useState<OpenRow | null>(null)
+  if (open && open !== last) setLast(open)
+
+  const daily = data.projects
+    .filter((p) => p.report?.submittedAt)
+    .sort((a, b) => newestFirst(a.report?.submittedAt, b.report?.submittedAt))
+  const weekly = data.divisions
+    .filter((d) => d.report?.submittedAt)
+    .sort((a, b) => newestFirst(a.report?.submittedAt, b.report?.submittedAt))
+
+  const missingDaily = data.projects.length - daily.length
+  const pendingForward =
+    daily.filter((p) => !p.report?.forwardedAt).length + weekly.filter((d) => !d.report?.forwardedAt).length
+
+  const answer =
+    daily.length + weekly.length === 0
+      ? 'Belum ada laporan yang masuk untuk diperiksa.'
+      : `${daily.length} laporan proyek masuk hari ini, ${weekly.length} laporan divisi minggu ini.`
+
+  const support = [
+    data.projects.length > 0
+      ? missingDaily > 0
+        ? `${missingDaily} proyek belum melapor hari ini.`
+        : 'Semua proyek sudah melapor hari ini.'
+      : null,
+    daily.length + weekly.length > 0
+      ? pendingForward > 0
+        ? `${pendingForward} laporan menunggu diteruskan dari Ringkasan.`
+        : 'Semua laporan yang masuk sudah diteruskan.'
+      : null,
   ]
+    .filter(Boolean)
+    .join(' ')
 
-  const hist = data.history
-  const dayLabel = (iso: string) => new Intl.DateTimeFormat('id-ID', { weekday: 'short', day: 'numeric', timeZone: WIB }).format(new Date(iso)).replace('.', '')
+  const dailyRow = open?.kind === 'daily' ? open.project : last?.kind === 'daily' ? last.project : null
+  const weeklyRow = open?.kind === 'weekly' ? open.division : last?.kind === 'weekly' ? last.division : null
 
   return (
     <>
-      <DashHeader
-        context={data.entity.name}
-        tools={
-          allIn ? (
-            <StatusBadge status="done">Laporan hari ini · Lengkap</StatusBadge>
-          ) : (
-            <StatusBadge status={data.locked ? 'late' : 'risk'}>
-              {missing.length} belum lapor
-            </StatusBadge>
-          )
-        }
-      />
+      <DashHeader context={data.entity.name} />
 
-      <Hero
-        eyebrow={`Meja kerja · ${new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', timeZone: WIB }).format(new Date(data.today))}`}
-        answer={n === 0 ? 'Belum ada proyek aktif di perusahaan Anda.' : `${received.length} dari ${n} proyek sudah lapor hari ini.`}
-        support={[
-          missing.length ? `${missing.length} belum lapor, ${remindedCount} sudah diingatkan.` : n ? 'Semua PIC sudah mengirim laporan.' : null,
-          noPic ? `${noPic} proyek belum punya PIC.` : null,
-          toForward.length ? `${toForward.length} laporan siap diteruskan ke holding.` : null,
-          waiting ? `${waiting} hal menunggu Anda.` : null,
-          data.locked ? `Tenggat ${data.cutoffLabel} sudah lewat.` : missing.length ? `Tenggat ${data.cutoffLabel} WIB, ${remainLong(data.countdown.totalMs)} lagi.` : null,
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        actions={
-          <>
-            {primary}
-            <Button variant="plain" onClick={() => setActiveTab('inbox')}>
-              Buka penerimaan
-            </Button>
-          </>
-        }
-        art={<DeadlineRing from={workStart} to={data.lockAt} done={allIn} doneLabel="Lengkap" doneCaption="semua PIC sudah lapor" caption={`menuju ${data.cutoffLabel} WIB`} />}
-        kpis={
-          <>
-            <StatTile variant="gradient" label="Laporan masuk" value={`${received.length} dari ${n}`} delta={`${pct(received.length, n)}% hari ini`} spark={hist.map((h) => h.submitted)} />
-            <StatTile label="Belum lapor" value={missing.length} delta={missing.length ? `${remindedCount} sudah diingatkan` : 'Lengkap'} tone={missing.length ? (data.locked ? 'late' : 'risk') : 'on'} onClick={() => setFilter('missing')} />
-            <StatTile label="Siap diteruskan" value={toForward.length} delta={`${forwarded.length} sudah diteruskan`} tone={toForward.length ? 'info' : 'neutral'} onClick={() => setActiveTab('inbox')} />
-            <StatTile label="Menunggu Anda" value={waiting} delta={`${data.approvals.length} pengajuan · ${data.escalations.length} eskalasi`} tone={waiting ? 'risk' : 'on'} />
-          </>
-        }
-      />
+      <Hero eyebrow={`Laporan masuk · ${formatDateLong(data.today)}`} answer={answer} support={support || undefined} />
 
-      <div className="mk-row">
-        <Card
-          className="is-wide"
-          title="Laporan harian per proyek"
-          subtitle={data.locked ? `Terkunci sejak ${data.cutoffLabel}` : 'Ketuk baris untuk detail · pengingat sekali per proyek per hari'}
-          action={
-            <SegmentedControl
-              size="sm"
-              label="Saring laporan"
-              value={filter}
-              onChange={(v) => setFilter(v as Filter)}
-              options={[
-                { value: 'all', label: `Semua ${n}` },
-                { value: 'missing', label: `Belum ${missing.length}` },
-                { value: 'in', label: `Masuk ${toForward.length}` },
-                { value: 'forwarded', label: `Diteruskan ${forwarded.length}` },
-              ]}
-            />
-          }
-        >
-          {shown.length === 0 ? (
-            <EmptyNote done={filter === 'missing'}>
-              {filter === 'missing' ? 'Semua proyek sudah lapor hari ini.' : n === 0 ? 'Belum ada proyek aktif.' : 'Tidak ada proyek pada saringan ini.'}
-            </EmptyNote>
-          ) : (
-            <ul className="mk-desk-queue">
-              {shown.map((p, i) => {
-                const st = rowStatus(p, data.locked, remindedAt(p))
-                const canRemindThis = data.canRemind && !data.locked && !p.report?.submittedAt && p.pic && !remindedAt(p)
-                return (
-                  <li key={p.id} className="mk-desk-queue__row" style={{ '--i': i } as React.CSSProperties}>
-                    <div className="mk-desk-queue__line">
-                      <button type="button" className="mk-desk-queue__hit" onClick={() => setOpenId(p.id)}>
-                        <span className="min-w-0 flex-1">
-                          <span className="t-body-strong block truncate">{p.name}</span>
-                          <span className="t-footnote text-ink-2 block truncate">
-                            {p.picName ?? 'Belum ada PIC'} · {p.code}
-                            {p.report ? ` · progres ${p.report.progressPct}%` : ''}
-                          </span>
-                        </span>
-                        <span className="mk-desk-queue__bar">
-                          <ProgressBar value={pct(p.tasks.done, p.tasks.total)} status="accent" showValue={false} label={`Task ${p.name}`} />
-                          <span className="t-caption text-ink-2 tabular-nums">{p.tasks.total ? `${p.tasks.done} dari ${p.tasks.total} task` : 'Tanpa task'}</span>
-                        </span>
-                        <span key={st.text} className="mk-desk-pop">
-                          <StatusBadge status={st.status} size="sm">
-                            {st.text}
-                          </StatusBadge>
-                        </span>
-                      </button>
-                      {canRemindThis ? (
-                        <Button size="sm" variant="secondary" icon="notifikasi" disabled={sending !== null} onClick={() => remind(p)} aria-label={`Ingatkan ${p.picName} untuk ${p.name}`}>
-                          {sending === p.id ? 'Mengirim…' : 'Ingatkan'}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Card>
-        <Card className="is-narrow" title="Alur hari ini" subtitle={`Laporan harian ${data.entity.code}`}>
-          <div className="flex flex-col gap-5">
-            <div className="mk-desk-tallies">
-              <TallyPill label="masuk" value={received.length} total={n} status={allIn ? 'done' : undefined} />
-              <TallyPill label="diteruskan" value={forwarded.length} total={n} />
-            </div>
-            <FlowDiagram orientation="vertical" steps={flow} label="Alur laporan harian" />
-          </div>
-        </Card>
-      </div>
-
-      <div className="mk-row">
-        <Card
-          className="is-half"
-          title={`Capaian mingguan M${data.week.isoWeek}`}
-          subtitle={`${weeklyIn} dari ${data.divisions.length} divisi menyerahkan · tenggat ${new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: WIB }).format(new Date(data.week.handoverBy))} ${formatTime(data.week.handoverBy)}`}
-          action={
-            <Button size="sm" variant="secondary" onClick={() => setActiveTab('divisions')}>
-              Buka divisi
-            </Button>
-          }
-        >
-          {data.divisions.length === 0 ? (
-            <EmptyNote icon="tim">Belum ada divisi aktif.</EmptyNote>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {data.divisions.map((d, i) => {
-                const r = d.report
-                const warn = r ? [r.blocked ? `${r.blocked} terkendala` : null, r.missingEvidence ? `${r.missingEvidence} tanpa bukti` : null].filter(Boolean).join(' · ') : ''
-                return (
-                  <div key={d.id} className="mk-desk-div" style={{ '--i': i } as React.CSSProperties}>
-                    <DivisionBar
-                      name={`Divisi ${d.name}`}
-                      value={r ? pct(r.done, r.items) : 0}
-                      tone={divisionTone(d.name)}
-                      meta={r ? `${r.done} dari ${r.items} item${warn ? ` · ${warn}` : ''}` : (d.head?.name ?? 'Kepala divisi belum ditetapkan')}
-                    />
-                    <StatusBadge status={r ? (r.forwardedAt ? 'done' : weeklyHeaderStatus(r.statusHeader)) : data.week.locked ? 'late' : 'neutral'} size="sm">
-                      {weeklyText(r)}
-                    </StatusBadge>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </Card>
-        <Card className="is-half" title="Menunggu Anda" subtitle={waiting ? 'Pengajuan proyek dan eskalasi' : 'Tidak ada yang tertunda'}>
-          {waiting === 0 ? (
-            <EmptyNote done>Tidak ada yang menunggu tindakan Anda.</EmptyNote>
-          ) : (
-            <div>
-              {data.approvals.map((a) => (
-                <AttentionItem
-                  key={a.id}
-                  title={a.name}
-                  reason={`Pengajuan proyek dari ${a.proposer} · perlu tanda tangan Anda`}
-                  status="info"
-                  meta={formatDateShort(a.proposedAt)}
-                  onClick={() => setActiveTab('projects')}
-                />
-              ))}
-              {data.escalations.map((e) => (
-                <AttentionItem
-                  key={e.id}
-                  title={e.summary}
-                  reason={`${ESCALATION_NEEDED_LABELS[e.needed] ?? e.needed} · ${e.raisedBy ?? 'Pengaju'} · ${e.ageDays} hari${e.overdue ? ', lewat SLA' : ''}`}
-                  status={e.overdue ? 'late' : 'risk'}
-                  meta={e.status === 'DIAJUKAN' ? 'Diajukan' : 'Ditinjau'}
-                  onClick={() => setActiveTab('escalations')}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Permintaan akses & buka kunci (P2-C): diproses di sini, tercatat di log aktivitas. */}
-      <div className="mk-row">
-        <AccessRequestsCard className="is-half" />
-        <UnlockCard className="is-half" />
-      </div>
-
-      <Card
-        title="Pola 10 hari kerja"
-        subtitle={`Persentase dari ${n} proyek · ${data.lateThisMonth} keterlambatan tercatat bulan ini`}
+      <Disclosure
+        id="mk-desk-admin-proyek"
+        title="Laporan proyek"
+        sub={`Hari ini · ${daily.length} pelapor`}
+        open={openDailySec}
+        onToggle={() => setOpenDailySec((v) => !v)}
       >
-        {hist.length === 0 || n === 0 ? (
-          <EmptyNote>Belum ada riwayat.</EmptyNote>
+        {daily.length === 0 ? (
+          <EmptyNote icon="proyek">
+            {data.projects.length === 0
+              ? 'Belum ada proyek aktif di perusahaan Anda.'
+              : 'Belum ada proyek yang mengirim laporan hari ini.'}
+          </EmptyNote>
         ) : (
-          <div className="mk-scroll-x">
-            <Heatmap
-              data={[hist.map((h) => pct(h.submitted, n)), hist.map((h) => pct(h.onTime, n)), hist.map((h) => pct(h.forwarded, n))]}
-              rowLabels={['Masuk', 'Tepat waktu', 'Diteruskan']}
-              colLabels={hist.map((h) => dayLabel(h.date))}
-              max={100}
-              cell={30}
-              tone="data-2"
-              formatCell={(v) => `${v}%`}
-              label="Kepatuhan laporan harian 10 hari kerja"
-              lowLabel="0%"
-              highLabel="100%"
-              showLegend
-            />
-          </div>
+          <ul className="mk-desk-queue" aria-label="Laporan proyek hari ini">
+            {daily.map((p, i) => {
+              const r = p.report
+              if (!r?.submittedAt) return null
+              return (
+                <li key={p.id} className="mk-desk-queue__row" style={{ '--i': i } as React.CSSProperties}>
+                  <button
+                    type="button"
+                    className="mk-desk-queue__hit mk-wk-tap"
+                    aria-label={`Buka laporan proyek ${p.name}`}
+                    onClick={() => setOpen({ kind: 'daily', project: p })}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="t-body-strong block truncate">{p.name}</span>
+                      <span className="t-footnote text-ink-2 block truncate">
+                        {p.picName ?? 'Belum ada PIC'} · {p.code}
+                      </span>
+                    </span>
+                    <span className="mk-desk-pop flex shrink-0 flex-col items-end gap-1">
+                      <ForwardBadge forwardedAt={r.forwardedAt} />
+                      <span className="t-footnote text-ink-2 tabular-nums">{formatTime(r.submittedAt)}</span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
-      </Card>
+      </Disclosure>
 
-      <Sheet
-        open={!!open}
-        onOpenChange={(o) => !o && setOpenId(null)}
-        title={sheetP?.name ?? ''}
-        subtitle={sheetP ? `${sheetP.code} · ${sheetP.picName ?? 'Belum ada PIC'}` : undefined}
-        eyebrow={sheetP ? <StatusBadge status={rowStatus(sheetP, data.locked, remindedAt(sheetP)).status} size="sm">{rowStatus(sheetP, data.locked, remindedAt(sheetP)).text}</StatusBadge> : undefined}
-        backLabel="Meja kerja"
-        footer={
-          sheetP ? (
-            !sheetP.report?.submittedAt ? (
-              <Button
-                variant="primary"
-                icon="notifikasi"
-                disabled={!data.canRemind || data.locked || !sheetP.pic || Boolean(remindedAt(sheetP)) || sending !== null}
-                onClick={() => remind(sheetP)}
-              >
-                {remindedAt(sheetP) ? `Diingatkan ${formatTime(remindedAt(sheetP))}` : sheetP.pic ? `Ingatkan ${sheetP.pic.name}` : 'Belum ada PIC'}
-              </Button>
-            ) : !sheetP.report.forwardedAt && data.canForward ? (
-              <Button
-                variant="primary"
-                icon="kirim"
-                onClick={() => {
-                  setOpenId(null)
-                  setActiveTab('inbox')
-                }}
-              >
-                Teruskan di penerimaan
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => setOpenId(null)}>
-                Tutup
-              </Button>
-            )
-          ) : null
-        }
+      <Disclosure
+        id="mk-desk-admin-divisi"
+        title="Laporan divisi"
+        sub={`Minggu ini (M${data.week.isoWeek}) · ${weekly.length} pelapor`}
+        open={openWeeklySec}
+        onToggle={() => setOpenWeeklySec((v) => !v)}
       >
-        {sheetP && (
-          <>
-            <div className="mk-kv">
-              <div>
-                <div className="t-footnote text-ink-2">Tahap</div>
-                <div className="t-body-strong">{PROJECT_PHASE_LABELS[sheetP.phase] ?? sheetP.phase}</div>
-              </div>
-              <div>
-                <div className="t-footnote text-ink-2">Progres</div>
-                <div className="t-body-strong">{sheetP.report ? `${sheetP.report.progressPct}%` : '—'}</div>
-              </div>
-              <div>
-                <div className="t-footnote text-ink-2">Task hari ini</div>
-                <div className="t-body-strong">
-                  <CountUp value={sheetP.tasks.done} /> dari {sheetP.tasks.total}
-                </div>
-              </div>
-              <div>
-                <div className="t-footnote text-ink-2">Bukti</div>
-                <div className="t-body-strong">{sheetP.report?.evidenceCount ?? 0} berkas</div>
-              </div>
-            </div>
-            <div>
-              <h3 className="t-headline mb-3">Alur laporan</h3>
-              <FlowDiagram
-                orientation="vertical"
-                label="Alur laporan proyek"
-                steps={[
-                  {
-                    title: 'Diisi PIC',
-                    sub: sheetP.report?.submittedAt ? `${sheetP.report.submittedBy ?? sheetP.picName ?? 'PIC'} · ${formatTime(sheetP.report.submittedAt)}` : remindedAt(sheetP) ? `Diingatkan ${formatTime(remindedAt(sheetP))}` : 'Belum dikirim',
-                    status: sheetP.report?.submittedAt ? 'done' : data.locked ? 'blocked' : 'current',
-                    icon: 'catatan',
-                    meta: sheetP.report?.isLate ? 'Terlambat masuk' : undefined,
-                  },
-                  { title: 'Masuk ke Anda', status: sheetP.report?.forwardedAt ? 'done' : sheetP.report?.submittedAt ? 'current' : 'todo', icon: 'dokumen' },
-                  { title: 'Diteruskan ke holding', sub: sheetP.report?.forwardedAt ? formatTime(sheetP.report.forwardedAt) : undefined, status: sheetP.report?.forwardedAt ? 'done' : 'todo', icon: 'kirim' },
-                ]}
-              />
-            </div>
-            {sheetP.report ? (
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <h3 className="t-headline">Capaian hari ini</h3>
-                  <DailyStatusBadge status={sheetP.report.status} size="xs" />
-                </div>
-                <p className={cx('mk-note-box', 'bg-fill-1')}>{sheetP.report.achievement || 'Belum ditulis.'}</p>
-                {sheetP.report.needsEscalation && <div className="mk-note-box mk-soft--risk mt-3">PIC menandai laporan ini perlu eskalasi.</div>}
-              </div>
-            ) : (
-              <EmptyNote icon="catatan">PIC belum membuat laporan hari ini.</EmptyNote>
-            )}
-          </>
+        {weekly.length === 0 ? (
+          <EmptyNote icon="tim">
+            {data.divisions.length === 0 ? 'Belum ada divisi aktif.' : 'Belum ada divisi yang menyerahkan laporan minggu ini.'}
+          </EmptyNote>
+        ) : (
+          <ul className="mk-desk-queue" aria-label="Laporan divisi minggu ini">
+            {weekly.map((d, i) => {
+              const r = d.report
+              if (!r?.submittedAt) return null
+              return (
+                <li key={d.id} className="mk-desk-queue__row" style={{ '--i': i } as React.CSSProperties}>
+                  <button
+                    type="button"
+                    className="mk-desk-queue__hit mk-wk-tap"
+                    aria-label={`Buka laporan divisi ${d.name}`}
+                    onClick={() => setOpen({ kind: 'weekly', division: d })}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="t-body-strong block truncate">{d.name}</span>
+                      <span className="t-footnote text-ink-2 block truncate">
+                        {d.head?.name ? `Kadiv ${d.head.name}` : 'Kepala divisi belum ditetapkan'}
+                      </span>
+                    </span>
+                    <span className="mk-desk-pop flex shrink-0 flex-col items-end gap-1">
+                      <ForwardBadge forwardedAt={r.forwardedAt} />
+                      <span className="t-footnote text-ink-2 tabular-nums">{formatTime(r.submittedAt)}</span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
-      </Sheet>
+      </Disclosure>
+
+      <DailyReportSheet row={dailyRow} today={data.today} open={open?.kind === 'daily'} onClose={() => setOpen(null)} />
+      <WeeklyReportSheet row={weeklyRow} week={data.week} open={open?.kind === 'weekly'} onClose={() => setOpen(null)} />
     </>
   )
 }

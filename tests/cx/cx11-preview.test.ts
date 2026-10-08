@@ -191,9 +191,16 @@ describe('CX11 pratinjau: API yang sama, state lintas peran', () => {
       expect(d.history.every((v: unknown) => typeof v === 'number')).toBe(true)
       expect(d.history.at(-1)).toBe(d.expected ? Math.round(d.reported / d.expected * 100) : 0)
     }
-    const labels = (await request('ADMIN_PT', '/api/admin/overview')).data.usersByRole
-    expect(labels.find((r: { role: string }) => r.role === 'KEPALA_DIVISI').label).toBe('Kepala divisi')
-    expect(labels.find((r: { role: string }) => r.role === 'PIC_PROYEK').label).not.toBe('PIC_PROYEK')
+    // [T8-W3] /api/admin/overview ditarik dari tiruan pratinjau (kartu data
+    // induk & pengguna per peran dihapus dari Ringkasan Admin). Label peran
+    // tetap diperiksa lewat kepatuhan (PIC yang belum lapor) dan pilihan
+    // formulir permintaan akses.
+    const missing = c.divisions.flatMap((d: { missing: { role: string }[] }) => d.missing)
+    expect(missing.length).toBeGreaterThan(0)
+    expect(missing.every((m: { role: string }) => m.role !== 'PIC_PROYEK' && m.role.length > 0)).toBe(true)
+    const roles = (await request('ADMIN_PT', '/api/access-requests/options')).data.roles
+    expect(roles.find((r: { role: string }) => r.role === 'KEPALA_DIVISI').label).toBe('Kepala divisi')
+    expect(roles.find((r: { role: string }) => r.role === 'PIC_PROYEK').label).not.toBe('PIC_PROYEK')
   })
 
   it('output diterima mengubah total PIC, kepala divisi, Direktur dan Manajemen; undo kedaluwarsa tidak mengubahnya', async () => {

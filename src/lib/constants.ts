@@ -199,6 +199,9 @@ export const NAV_TABS = [
   { id: 'dashboard', label: 'Ringkasan', short: 'Ringkasan' },
   { id: 'companies', label: 'Perusahaan & akun', short: 'Perusahaan' },
   { id: 'work-desk', label: 'Meja kerja', short: 'Kerja' },
+  // Keputusan pemilik 9 Okt 2026: statistik kepatuhan Admin PT (per divisi +
+  // peta panas 10 hari) punya tab sendiri, dipindah dari Ringkasan.
+  { id: 'statistik', label: 'Statistik', short: 'Statistik' },
   { id: 'daily-input', label: 'Laporan harian', short: 'Laporan' },
   { id: 'weekly-input', label: 'Capaian mingguan', short: 'Mingguan' },
   { id: 'inbox', label: 'Penerimaan', short: 'Masuk' },

@@ -3,8 +3,8 @@
 /**
  * Meja kerja — pekerjaan HARI INI akun yang sedang masuk, menurut perannya:
  * PIC proyek (laporan & agenda task), Kepala divisi (penyerahan capaian
- * mingguan), Admin PT (kepatuhan laporan, pengingat, yang menunggu tanda
- * tangan). Data dari /api/work-desk; Kepala divisi juga membaca papan minggu
+ * mingguan), Admin PT (pemeriksaan laporan proyek & divisi yang masuk).
+ * Data dari /api/work-desk; Kepala divisi juga membaca papan minggu
  * berjalan dari /api/weekly-input.
  */
 
@@ -63,7 +63,7 @@ export function WorkDeskView() {
     <div className={desk.loading || weekly.loading ? 'mk-desk is-refreshing' : 'mk-desk'}>
       {d.kind === 'PIC' && <PicDeskView data={d} reload={reload} />}
       {d.kind === 'KADIV' && weekly.data && <KadivDeskView desk={d} weekly={weekly.data} reload={reload} />}
-      {d.kind === 'ADMIN' && <AdminDeskView data={d} reload={reload} />}
+      {d.kind === 'ADMIN' && <AdminDeskView data={d} />}
     </div>
   )
 }

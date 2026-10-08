@@ -1,22 +1,28 @@
 import { ROLE_LABELS } from '@/lib/constants'
 import { complianceFor, companiesFor } from './mock-summary'
-import { people, divisions, entities, groupRoles, actor } from './mock-catalog'
+import { people, entities, groupRoles, actor } from './mock-catalog'
 import { projectSnapshots } from './mock-proyek'
 import { reportHistory } from './mock-history'
-import { unlockItems, dailyProjects, deskWeeklyReports } from './mock-laporan'
+import { dailyProjects, deskWeeklyReports } from './mock-laporan'
 import { isWorkingDay, startOfWibDay } from '@/lib/lock'
 import { can } from '@/lib/rbac'
 /**
  * Rute pratinjau tambahan untuk area ini (P2). Kembalikan Response untuk path
  * yang ditangani, atau null agar diteruskan ke rute lain. Hanya mode pengembangan.
  *
- * P2-C (Admin PT): permintaan akses, pengingat otomatis, buka kunci, data
- * induk, pengguna per peran, dan kepatuhan per orang. Data contoh disimpan di
- * memori agar sakelar, persetujuan, dan pengajuan terlihat hasilnya.
+ * P2-C (Admin PT): permintaan akses, pengingat otomatis, buka kunci, dan
+ * kepatuhan per orang. Data contoh disimpan di memori agar sakelar,
+ * persetujuan, dan pengajuan terlihat hasilnya.
+ *
+ * Keputusan pemilik 9 Okt 2026: data induk, pengguna per peran, dan log
+ * aktivitas ditarik dari Ringkasan Admin (kartunya dihapus), jadi rute tiruannya
+ * (/api/admin/overview, /api/admin/activity) ikut dicabut. Kepatuhan tetap —
+ * kini dipakai modul Statistik; unduhan CSV log tetap melayani modul Log
+ * aktivitas peran holding.
  */
 
 import * as mock from './mock-data'
-import type { AccessRequestItem, AdminOverview, ReminderKind, ReminderRuleView } from '@/lib/admin-meta'
+import type { AccessRequestItem, ReminderKind, ReminderRuleView } from '@/lib/admin-meta'
 import { REMINDER_DEFAULTS, REMINDER_KINDS, REMINDER_LABELS } from '@/lib/admin-meta'
 import type { ComplianceData } from '@/lib/admin-compliance'
 import { csvRow } from '@/lib/admin-compliance'
@@ -171,15 +177,11 @@ function reminderRules(init?: RequestInit) {
 // ------------------------------------------------------------------
 
 // ------------------------------------------------------------------
-// Data induk, pengguna per peran, kepatuhan per orang
+// Data induk & pengguna per peran (/api/admin/overview) dicabut dari tiruan
+// pratinjau: kartunya dihapus dari Ringkasan Admin (keputusan pemilik 9 Okt
+// 2026). Log aktivitas (/api/admin/activity) juga kartu Ringkasan — jejaknya
+// tetap tercatat dan bisa diunduh dari modul Log aktivitas (exportCsv di bawah).
 // ------------------------------------------------------------------
-
-function overviewFor(): AdminOverview {
-  const c = complianceFor()
-  const users = people.filter((p) => p.scopeEntityId === 'e1')
-  const projects = projectSnapshots('ADMIN_PT')
-  return { scope: 'ENTITY', entityName: 'PT Ratu Karya', masterData: { entities: 1, divisions: divisions.filter((d) => d.entityId === 'e1').length, projects: projects.length, activeProjects: projects.filter((p) => p.lifecycle === 'AKTIF').length, users: users.length, activeUsers: users.filter((p) => p.isActive).length, templates: new Set(divisions.map((d) => d.name)).size }, usersByRole: [...new Set(users.map((p) => p.role))].map((role) => ({ role, label: ROLE_LABELS[role] ?? role, count: users.filter((p) => p.role === role).length })), compliance: { hasMembership: true, divisions: c.divisions.map((d) => ({ ...d, head: d.head?.name ?? null })) }, unlocks: { pending: unlockItems.filter((u) => u.status === 'DIAJUKAN').length, approved: unlockItems.filter((u) => u.status === 'DISETUJUI').length }, canManageReminders: true }
-}
 // ------------------------------------------------------------------
 // [F2-ADMIN] Kepatuhan per divisi, pengingat per orang, log aktivitas, unduh log,
 // pilihan formulir permintaan akses, keanggotaan divisi di sheet akun.
@@ -441,7 +443,6 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
   const method = init?.method ?? 'GET'
   if (path === '/api/admin/compliance') return json(complianceFor())
   if (path === '/api/admin/compliance/remind') return can(role, 'notify:remind') ? remindCompliance(init) : json({ error: 'Peran Anda tidak mengirim pengingat.' }, 403)
-  if (path === '/api/admin/activity') return json({ items: activity.slice(0, 12) })
   if (path === '/api/audit-logs/export') return exportCsv()
   if (path === '/api/access-requests/options') return requestOptions(role)
   if (path === '/api/companies/users' && method === 'GET' && url.includes('id=')) {
@@ -451,7 +452,6 @@ export function handle(path: string, url: string, init: RequestInit | undefined,
   }
   if (path === '/api/access-requests') return accessRequests(url, init, role)
   if (path === '/api/admin/reminder-rules') return reminderRules(init)
-  if (path === '/api/admin/overview') return json(overviewFor())
   // Hanya panggilan kartu Admin (penanda ?for=…) supaya rute area lain tidak tertimpa.
   if (url.includes('for=unlock') && path === '/api/daily-reports') return json({ items: dailyProjects().filter((p) => p.entityId === 'e1' && p.report).map((p) => ({ ...p.report, reportDate: mock.deskAdmin.today, project: { name: p.name } })) })
   // [T3-A4] Arsip umum (tanpa penanda for=…): dukung projectId & pageSize untuk drill-down.

@@ -44,7 +44,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import id.co.monitorkarya.app.R
 import id.co.monitorkarya.app.ui.placeholder.PlaceholderTabScreen
-import id.co.monitorkarya.app.ui.admin.MejaAdminScreen
+import id.co.monitorkarya.app.ui.admin.DashboardAdminScreen
+import id.co.monitorkarya.app.ui.admin.MejaKerjaAdminScreen
+import id.co.monitorkarya.app.ui.admin.StatistikAdminScreen
 import id.co.monitorkarya.app.ui.laporan.LaporanHarianScreen
 import id.co.monitorkarya.app.ui.mejakerja.MejaKerjaScreen
 import id.co.monitorkarya.app.ui.mingguan.MingguanScreen
@@ -133,23 +135,39 @@ fun MKShell(
 
 /**
  * Isi satu tab per peran. Fase 1: PIC memuat layar nyata B4/B5; Fase 2:
- * KEPALA_DIVISI (capaian mingguan + tim) dan ADMIN_PT (meja gabungan
- * Penerimaan/Kepatuhan/Akun); RINGKASAN nyata semua peran (F0); tab PROYEK
- * PIC dan scheduler sinkron menunggu batch integrasi berikutnya (T5-B7/B2).
+ * KEPALA_DIVISI (capaian mingguan + tim); T8-A1 (9 Okt): ADMIN_PT dirubah
+ * tiga layar — dasbor penerusan di Ringkasan, daftar pelapor + sheet rincian
+ * di Meja kerja, statistik kepatuhan di tab Divisi; RINGKASAN nyata semua
+ * peran lain (F0); tab PROYEK PIC dan scheduler sinkron menunggu batch
+ * integrasi berikutnya (T5-B7/B2).
  */
 @Composable
 private fun IsiTab(peran: Peran, tab: TabId) {
     when {
+        // T8-A1: Ringkasan ADMIN_PT = dasbor penerusan (kalimat jawaban +
+        // dua StatTile + tombol "Teruskan laporan ke Direksi"), bukan
+        // RingkasanScreen umum — karena itu dicabang sebelum cabang generik.
+        peran == Peran.ADMIN_PT && tab == TabId.RINGKASAN -> DashboardAdminScreen()
         tab == TabId.RINGKASAN -> RingkasanScreen(vm = hiltViewModel())
         peran == Peran.PIC_PROYEK && tab == TabId.MEJA_KERJA ->
             MejaKerjaScreen(vm = hiltViewModel(), onBukaLaporan = { }, onBukaTugas = { })
+        // T8-A1: Meja kerja ADMIN_PT = daftar pelapor proyek/divisi + sheet
+        // rincian baca-saja (bukan MejaKerjaScreen milik PIC).
+        peran == Peran.ADMIN_PT && tab == TabId.MEJA_KERJA -> MejaKerjaAdminScreen()
         peran == Peran.PIC_PROYEK && tab == TabId.LAPORAN_HARIAN ->
             LaporanHarianScreen(vm = hiltViewModel())
         peran == Peran.KEPALA_DIVISI && tab == TabId.CAPAIAN_MINGGUAN ->
             MingguanScreen(vm = hiltViewModel(), onAjukanBukaKunci = { })
         peran == Peran.KEPALA_DIVISI && tab == TabId.PEMBAGIAN_DIVISI ->
             TimScreen(vm = hiltViewModel())
-        peran == Peran.ADMIN_PT && tab == TabId.PENERIMAAN -> MejaAdminScreen()
+        // PEMETAAN SEMENTARA (T8-A1): ADMIN_PT belum punya TabId statistik di
+        // RoleTabs android, jadi tab "Divisi" (sebelumnya placeholder) memuat
+        // StatistikAdminScreen sebagai pengganti tab statistik web sampai
+        // NavTabId-nya ditambahkan ke core/domain/roles.
+        peran == Peran.ADMIN_PT && tab == TabId.PEMBAGIAN_DIVISI -> StatistikAdminScreen()
+        // T8-A1: pemetaan lama ADMIN_PT PENERIMAAN (MejaAdminScreen gabungan
+        // Penerimaan/Kepatuhan/Akun) dihapus — tab itu kini jatuh ke placeholder;
+        // berkas MejaAdminScreen.kt dibiarkan tanpa rujukan.
         else -> PlaceholderTabScreen(label = labelTab(peran, tab))
     }
 }

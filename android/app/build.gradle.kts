@@ -95,6 +95,11 @@ dependencies {
     // (artefak beku 1.7.8), pin versi itu lalu pindahkan ke libs.versions.toml.
     implementation(libs.androidx.compose.material.icons.extended)
 
+    // CATATAN PARENT (T8-A1): dependensi BARU — AsyncImage grid bukti laporan
+    // di Meja kerja Admin PT (ui/admin/MejaKerjaAdminScreen.kt). Agen T8-A1
+    // dilarang menjalankan gradle, jadi sync/build menunggu parent.
+    implementation(libs.coil.compose)
+
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.work)

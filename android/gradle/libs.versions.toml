@@ -15,6 +15,8 @@ hiltNavigationCompose = "1.3.0"
 androidxHilt = "1.3.0"
 retrofit = "3.0.0"
 okhttp = "5.5.0"
+# Gambar jaringan (grid bukti AsyncImage Admin PT, T8-A1) — keputusan pemilik 9 Okt 2026.
+coil = "2.7.0"
 kotlinxSerializationJson = "1.9.0"
 retrofitKotlinxSerialization = "1.0.0"
 room = "2.8.4"
@@ -61,6 +63,9 @@ retrofit-kotlinx-serialization-converter = { group = "com.jakewharton.retrofit",
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
+# Gambar — AsyncImage bukti laporan di Meja kerja Admin PT (T8-A1)
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 # Data lokal
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

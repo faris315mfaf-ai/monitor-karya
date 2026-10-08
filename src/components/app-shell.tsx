@@ -14,6 +14,7 @@ import { AuditView } from '@/components/views/audit-view'
 import { DailyInputView } from '@/components/views/daily-input-view'
 import { WeeklyInputView } from '@/components/views/weekly-input-view'
 import { InboxView } from '@/components/views/inbox-view'
+import { StatistikView } from '@/components/views/statistik-view'
 import { SystemView } from '@/components/views/system-view'
 import { CompaniesView } from '@/components/views/companies-view'
 import { ApprovalsView } from '@/components/oversight/approvals-view' // [F2-DIREKTUR]
@@ -36,6 +37,7 @@ function MainContent() {
       {activeTab === 'daily-input' && <DailyInputView />}
       {activeTab === 'weekly-input' && <WeeklyInputView />}
       {activeTab === 'inbox' && <InboxView />}
+      {activeTab === 'statistik' && <StatistikView />}
       {activeTab === 'projects' && <ProjectsView />}
       {activeTab === 'divisions' && <DivisionsView />}
       {activeTab === 'escalations' && <EscalationsView />}
