@@ -16,6 +16,8 @@ export type OversightProject = ProjectLite & {
   /** [F2-DIREKTUR] Tinjauan terakhir (siapa pun) dan tinjauan saya. */
   lastReview?: { at: string; by: string | null } | null
   reviewedByMeAt?: string | null
+  /** Keputusan pemilik 8 Okt 2026 (drill-down per perusahaan): eskalasi laporan harian pada proyek ini. */
+  escalations?: { id: string; summary: string; needed: string; status: string; raisedAt: string; raisedBy: string | null; ageDays: number; overdue: boolean }[]
 }
 
 /** Lencana laporan mingguan: Terkirim / Terlambat masuk / Belum masuk / Sudah dibaca. */

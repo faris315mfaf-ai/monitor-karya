@@ -13,6 +13,11 @@ import { NextRequest } from 'next/server'
  * terhadap fixture, termasuk kolom yang kini tidak diambil diberi nilai
  * iseng (bila route membutuhkannya, pemetaan akan menghasilkan undefined dan
  * tes ini gagal).
+ *
+ * [T3-A1] Tambahan: `projects[].escalations` pada /api/ringkasan memuat
+ * eskalasi yang bersumber laporan harian proyek itu (sourceType DAILY_REPORT),
+ * termasuk sourceId lama di luar jendela recentReports; proyek tanpa eskalasi
+ * menerima array kosong; butir mingguan (WEEKLY_ITEM) tidak dipetakan ke proyek.
  */
 
 vi.mock('@/lib/db', async () => ({ db: (await import('./admin-fake-db')).db }))
@@ -43,6 +48,7 @@ const get = (url: string) => new NextRequest(`http://localhost${url}`)
 type QueryFn = (args: Record<string, unknown>) => Promise<unknown>
 const escDb = db.escalation as unknown as { findMany: QueryFn }
 const reportCountDb = db.dailyProjectReport as unknown as { count: QueryFn }
+const reportFindDb = db.dailyProjectReport as unknown as { findMany: QueryFn }
 const entityDb = db.entity as unknown as { findUnique: QueryFn }
 
 /** Satu eskalasi dengan semua kolom terisi (termasuk yang kini tidak di-select). */
@@ -168,5 +174,93 @@ describe('GET /api/ringkasan (kueri, T2-B6)', () => {
     // Bagian yang sama-sama dibaca endpoint tetap terisi dari fixture.
     expect(body.scope).toEqual({ entities: 2, divisions: 3, global: true })
     expect(body.attendance).toEqual({ people: 13, present: 13, late: 0, leave: 0 })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* GET /api/ringkasan — projects[].escalations (T3-A1)                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Laporan harian + eskalasi tambahan di atas world():
+ * - dpr-a-baru (2026-10-05) berada DALAM jendela recentReports,
+ * - dpr-a-lama (2026-07-15) berada DI LUAR jendela (jendela ± 7 minggu),
+ * - prj-b mempunyai laporan tetapi tanpa eskalasi,
+ * - esc-mingguan bersumber WEEKLY_ITEM — tidak boleh masuk proyek mana pun.
+ */
+describe('GET /api/ringkasan (eskalasi per proyek, T3-A1)', () => {
+  const report = { status: 'LANCAR', progressPct: 40, obstacle: null, needsEscalation: false, achievementToday: 'Pengecoran lantai' }
+
+  beforeEach(() => {
+    seed('dailyProjectReport', [
+      { id: 'dpr-a-baru', projectId: 'prj-a', entityId: 'pt-a', reportDate: new Date('2026-10-05T00:00:00Z'), submittedAt: new Date('2026-10-05T02:00:00Z'), submittedById: 'u-pic-a', ...report },
+      { id: 'dpr-a-lama', projectId: 'prj-a', entityId: 'pt-a', reportDate: new Date('2026-07-15T00:00:00Z'), submittedAt: new Date('2026-07-15T02:00:00Z'), submittedById: 'u-pic-a', ...report, achievementToday: null },
+      { id: 'dpr-b-1', projectId: 'prj-b', entityId: 'pt-b', reportDate: new Date('2026-10-05T00:00:00Z'), submittedAt: new Date('2026-10-05T02:00:00Z'), submittedById: 'u-pic-b', ...report, achievementToday: null },
+    ])
+    seed('escalation', [
+      { id: 'esc-lama', sourceType: 'DAILY_REPORT', sourceId: 'dpr-a-lama', entityId: 'pt-a', raisedById: 'u-pic-a', raisedAt: new Date('2026-08-20T00:00:00Z'), summary: 'Kendala lama belum selesai', needed: 'BANTUAN', status: 'DITINJAU', slaDays: 5 },
+      { id: 'esc-baru', sourceType: 'DAILY_REPORT', sourceId: 'dpr-a-baru', entityId: 'pt-a', raisedById: 'u-pic-a', raisedAt: new Date('2026-10-04T00:00:00Z'), summary: 'Material telat', needed: 'KEPUTUSAN', status: 'DIAJUKAN', slaDays: 7 },
+      { id: 'esc-mingguan', sourceType: 'WEEKLY_ITEM', sourceId: 'wri-1', entityId: 'pt-a', raisedById: 'u-kadiv-a', raisedAt: new Date('2026-10-03T00:00:00Z'), summary: 'Butir mingguan', needed: 'KEPUTUSAN', status: 'DIAJUKAN', slaDays: 7 },
+    ])
+  })
+
+  it('memuat eskalasi laporan harian proyek itu, termasuk sourceId lama di luar recentReports', async () => {
+    signIn('u-mgmt')
+    const findManySpy = vi.spyOn(reportFindDb, 'findMany')
+    const res = await ringkasanGET()
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    const prjA = body.projects.find((p: { id: string }) => p.id === 'prj-a')
+    // Urutan mengikuti raisedAt asc pada kueri eskalasi.
+    expect(prjA.escalations).toEqual([
+      {
+        id: 'esc-lama', summary: 'Kendala lama belum selesai', needed: 'BANTUAN', status: 'DITINJAU',
+        raisedAt: '2026-08-20T00:00:00.000Z', raisedBy: 'Putra PIC A', ageDays: 47, overdue: true,
+      },
+      {
+        id: 'esc-baru', summary: 'Material telat', needed: 'KEPUTUSAN', status: 'DIAJUKAN',
+        raisedAt: '2026-10-04T00:00:00.000Z', raisedBy: 'Putra PIC A', ageDays: 2, overdue: false,
+      },
+    ])
+
+    // Mekanisme: sourceId → projectId lewat findMany kecil per id (pola srcDaily),
+    // bukan lewat jendela recentReports — dpr-a-lama memang di luar jendela itu.
+    const calls = findManySpy.mock.calls.map((c) => c[0])
+    const byId = calls.find((a) => (a.where as { id?: { in?: string[] } })?.id?.in?.includes('dpr-a-lama'))
+    expect(byId?.select).toEqual({ id: true, projectId: true })
+    const windowed = calls.find((a) => (a.where as { reportDate?: { gte?: Date } })?.reportDate?.gte)
+    expect(
+      (windowed!.where as { reportDate: { gte: Date } }).reportDate.gte.getTime(),
+    ).toBeGreaterThan(new Date('2026-07-15T00:00:00Z').getTime())
+  })
+
+  it('butir mingguan (WEEKLY_ITEM) tidak dipetakan ke proyek mana pun', async () => {
+    signIn('u-mgmt')
+    const res = await ringkasanGET()
+    const body = await res.json()
+    expect(body.projects.some((p: { escalations: { id: string }[] }) => p.escalations.some((e) => e.id === 'esc-mingguan'))).toBe(false)
+    // Tetap tampil di daftar eskalasi tingkat atas.
+    expect(body.escalations.some((e: { id: string }) => e.id === 'esc-mingguan')).toBe(true)
+  })
+
+  it('proyek tanpa eskalasi menerima array kosong, bukan undefined', async () => {
+    signIn('u-mgmt')
+    const res = await ringkasanGET()
+    const body = await res.json()
+    const prjB = body.projects.find((p: { id: string }) => p.id === 'prj-b')
+    expect(prjB.escalations).toEqual([])
+    // Semua baris proyek memuat bidang ini.
+    expect(body.projects.every((p: { escalations: unknown[] }) => Array.isArray(p.escalations))).toBe(true)
+  })
+
+  it('peran berlingkup hanya melihat eskalasi per proyek pada entitasnya sendiri', async () => {
+    signIn('u-dir-b') // DIREKTUR_ENTITAS pt-b
+    const res = await ringkasanGET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.projects.map((p: { id: string }) => p.id)).toEqual(['prj-b'])
+    expect(body.projects[0].escalations).toEqual([]) // eskalasi pt-a tidak bocor
+    expect(body.escalations).toEqual([])
   })
 })

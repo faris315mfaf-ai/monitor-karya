@@ -96,6 +96,22 @@ function wibMonthStart(now: Date, back: number) {
 
 type WeeklyState = 'sent' | 'late' | 'missing' | 'read'
 
+/**
+ * [T3-A1] Eskalasi laporan harian pada satu proyek (bagian `projects[].escalations`,
+ * keputusan pemilik 8 Okt 2026: drill-down per perusahaan). Bentuk nilai sama
+ * dengan butir `escalations` tingkat atas, tanpa kolom entitas/divisi.
+ */
+type ProjectEscalation = {
+  id: string
+  summary: string
+  needed: string
+  status: string
+  raisedAt: Date
+  raisedBy: string | null
+  ageDays: number
+  overdue: boolean
+}
+
 /** Peran yang menandai laporan mingguan divisi "Sudah dibaca" (sama dengan laporan-dibaca/route.ts). */
 const READERS = ['MANAJEMEN', 'DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'SUPERADMIN']
 
@@ -463,6 +479,33 @@ export async function GET() {
       }
     })
 
+    // ---- [T3-A1] Eskalasi laporan harian dikelompokkan per proyek (keputusan
+    // pemilik 8 Okt 2026: drill-down per perusahaan). sourceId = id laporan
+    // harian → projectId lewat srcDaily (pola pemetaan sama dengan escDivision);
+    // laporan dicari langsung per id, jadi sourceId lama di luar jendela
+    // recentReports pun tetap terpetakan. Butir mingguan (WEEKLY_ITEM) tidak
+    // dipetakan ke proyek.
+    const escProjectOf = new Map<string, string>(srcDaily.map((d) => [d.id, d.projectId] as const))
+    const escByProject = new Map<string, ProjectEscalation[]>()
+    for (const e of escalations) {
+      if (e.sourceType !== 'DAILY_REPORT') continue
+      const projectId = escProjectOf.get(e.sourceId)
+      if (!projectId) continue
+      const age = Math.floor((now.getTime() - e.raisedAt.getTime()) / DAY)
+      const list = escByProject.get(projectId) ?? []
+      list.push({
+        id: e.id,
+        summary: e.summary,
+        needed: e.needed,
+        status: e.status,
+        raisedAt: e.raisedAt,
+        raisedBy: e.raisedBy?.name ?? null,
+        ageDays: age,
+        overdue: age > e.slaDays,
+      })
+      escByProject.set(projectId, list)
+    }
+
     // ---- Output (model Output): tepat waktu = diserahkan paling lambat tenggatnya.
     const projectDivision = new Map(rows.map((r) => [r.id, r.divisionId]))
     const outputByProject = new Map<string, { done: number; total: number }>()
@@ -636,6 +679,8 @@ export async function GET() {
           ? { at: lastReview.get(r.id)!.at, by: reviewerNames.get(lastReview.get(r.id)!.reviewerId) ?? null }
           : null,
         reviewedByMeAt: myReview.get(r.id) ?? null,
+        // [T3-A1] Eskalasi laporan harian proyek ini; array kosong bila tidak ada.
+        escalations: escByProject.get(r.id) ?? [],
       })),
       counts,
       progressComparison: compareProgress(
