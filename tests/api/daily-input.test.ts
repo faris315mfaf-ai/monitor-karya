@@ -345,3 +345,21 @@ describe('/api/tasks — task ikut dibekukan', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('PUT /api/daily-input — tabrakan pembuat pertama bersamaan (P2002)', () => {
+  it('menerjemahkan P2002 dari constraint unik menjadi 409 coba-lagi, bukan 500', async () => {
+    const p2002 = Object.assign(new Error('Unique constraint failed on the fields: (`projectId`,`reportDate`)'), { code: 'P2002' })
+    db.$transaction.mockImplementationOnce(() => Promise.reject(p2002))
+    const res = await putDaily({})
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { error: string; locked: boolean }
+    expect(json.error).toContain('bersamaan')
+    expect(json.error).toContain('kirim lagi')
+    expect(json.locked).toBe(false)
+  })
+
+  it('galat non-P2002 tetap diteruskan (bukan ditelan)', async () => {
+    db.$transaction.mockImplementationOnce(() => Promise.reject(new Error('db hilang')))
+    await expect(putDaily({})).rejects.toThrow('db hilang')
+  })
+})

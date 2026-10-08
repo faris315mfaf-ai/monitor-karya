@@ -308,7 +308,20 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
 export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  return db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  try {
+    return await db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  } catch (err) {
+    // Laporan baru belum punya baris yang bisa dikunci FOR UPDATE; dua kiriman
+    // bersamaan untuk (projectId, reportDate) yang sama bertabrakan di constraint
+    // unik. Balas 409 agar klien mencoba ulang, bukan 500. (Temuan T2-S2-S2.)
+    if ((err as { code?: unknown })?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Laporan tanggal ini sedang disimpan bersamaan. Muat ulang lalu kirim lagi.', locked: false },
+        { status: 409 }
+      )
+    }
+    throw err
+  }
 }
 
 async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
