@@ -572,6 +572,7 @@ model AuditLog {
 
   @@index([actorId], map: "AuditLog_actorId")
   @@index([at], map: "AuditLog_at")
+  @@index([targetType, targetId, at])
 }
 
 model LateIncident {
