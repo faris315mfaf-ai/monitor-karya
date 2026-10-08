@@ -127,3 +127,17 @@ Kontrak model untuk parent ada di laporan CX18; tool pesan ke native ancestor ti
 
 ### Perbaikan P1 PIC sementara — 7 Oktober 2026
 Parent menyerahkan `src/lib/access-requests.ts` kepada agen aktivasi untuk snapshot/pemulihan PIC sementara dan `tests/cx/temporary-pic.test.ts`; mock access-revert bila perlu. Kunci User, penjagaan hibah bertumpuk, dan klaim expiry atomik dipertahankan. Parent menangani atomisitas kata sandi/sesi (P2). Tanpa commit.
+
+## Serah terima Zcode — 8 Oktober 2026
+
+Pemilik meminta seluruh dokumentasi untuk berpindah dari Codex ke Zcode.
+Klaim parent: `ZCODE.md`, `docs/SERAH-TERIMA-ZCODE.md`, `docs/zcode/**`,
+serta tautan pembuka pada AGENTS/README/status. Lingkup dokumentasi saja.
+Tidak mengubah aplikasi, basis data, layanan, atau cabang Claude.
+Basis yang diperiksa: `codex/kerja` @ `4117a25`. Instruksi penerus dimulai
+di `ZCODE.md`; pembagian zona lama merupakan riwayat, bukan pekerjaan aktif.
+
+Penutupan dokumentasi Zcode: paket 14 Markdown baru dan tautan pembuka selesai;
+74 endpoint/45 model/111 Markdown diinventarisasi, tautan lokal diperiksa.
+Tidak ada perubahan kode aplikasi, DB atau layanan. Zona dokumentasi dilepas
+setelah commit lokal; penerimaan Zcode dan perpindahan mesin belum dilakukan.

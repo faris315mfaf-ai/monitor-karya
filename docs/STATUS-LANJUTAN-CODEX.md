@@ -1,3 +1,5 @@
+> Serah terima Zcode (8 Oktober 2026): baca [paket terbaru](SERAH-TERIMA-ZCODE.md). Catatan historis di bawah tetap disimpan; status dan batas penerusan ada di paket tersebut.
+
 # Status lanjutan Codex — hasil lokal terbaru
 
 7 Oktober 2026: lima prioritas lanjutan diimplementasikan — tenggat akses, sesi server, aktivasi akun, dependensi, dan kesiapan operasional. [Laporan CX16–20](codex/CX16-20-HASIL.md). Migrasi 0026–0028 diterapkan hanya pada DB Docker lokal setelah cadangan; 97 akun, 40 proyek, 741 laporan tetap ada. Pengguna perlu masuk ulang.

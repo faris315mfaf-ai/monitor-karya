@@ -1,3 +1,5 @@
+> Serah terima Zcode (8 Oktober 2026): baca [paket terbaru](docs/SERAH-TERIMA-ZCODE.md). Catatan historis di bawah tetap disimpan; status dan batas penerusan ada di paket tersebut.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
