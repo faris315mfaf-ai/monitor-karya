@@ -51,6 +51,7 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/codex/CX6-HASIL.md](../../docs/codex/CX6-HASIL.md)
 - [docs/codex/CX7-HASIL.md](../../docs/codex/CX7-HASIL.md)
 - [docs/codex/CX8-HASIL.md](../../docs/codex/CX8-HASIL.md)
+- [docs/codex/CX8–15-HASIL.md](../../docs/codex/CX8–15-HASIL.md)
 - [docs/codex/CX9-HASIL.md](../../docs/codex/CX9-HASIL.md)
 - [docs/codex/LANJUTAN-POIN1-7-DAN-CX8-15.md](../../docs/codex/LANJUTAN-POIN1-7-DAN-CX8-15.md)
 - [docs/codex/README.md](../../docs/codex/README.md)
@@ -119,6 +120,7 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [docs/zcode/09-PROMPT-ZCODE.md](../../docs/zcode/09-PROMPT-ZCODE.md)
 - [docs/zcode/10-INVENTARIS-KODE.md](../../docs/zcode/10-INVENTARIS-KODE.md)
 - [docs/zcode/11-INDEKS-DOKUMEN.md](../../docs/zcode/11-INDEKS-DOKUMEN.md)
+- [docs/zcode/PENERIMAAN-ZCODE.md](../../docs/zcode/PENERIMAAN-ZCODE.md)
 - [docs/zcode/README.md](../../docs/zcode/README.md)
 - [download/README.md](../../download/README.md)
 - [upload/prompt_fullstack_monitoring_bisnis_1.md](../../upload/prompt_fullstack_monitoring_bisnis_1.md)
@@ -126,4 +128,4 @@ Inventaris semua berkas Markdown yang tercatat Git ditambah paket baru pada8 Okt
 - [vendor/braces/package/README.md](../../vendor/braces/package/README.md)
 - [worklog.md](../../worklog.md)
 
-Jumlah: 111 dokumen Markdown dalam cakupan ini. Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
+Jumlah: 113 dokumen Markdown dalam cakupan ini (111 saat paket serah terima disusun; entri `CX8–15-HASIL` dan `PENERIMAAN-ZCODE` ditambahkan pada penerimaan Zcode, lihat [PENERIMAAN](PENERIMAAN-ZCODE.md)). Untuk mencari, gunakan `rg --files -g "*.md"` dengan pengecualian node_modules/vendor bila diperlukan.
