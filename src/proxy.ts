@@ -98,7 +98,9 @@ export function proxy(req: NextRequest) {
     return new NextResponse('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } })
   }
 
-  if (pathname.startsWith('/api/')) {
+  // '/api' tanpa garis miring pun dijaga: tidak boleh ada celah CSRF/batas
+  // badan hanya karena path-nya persis '/api'.
+  if (pathname === '/api' || pathname.startsWith('/api/')) {
     return guardApi(req) ?? NextResponse.next()
   }
 

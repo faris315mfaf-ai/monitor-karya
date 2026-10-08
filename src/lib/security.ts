@@ -32,16 +32,22 @@ export function safeEqual(given: string, expected: string): boolean {
 // ------------------------------------------------------------------
 
 /**
- * IP klien untuk jejak audit dan pembatas laju. Di Vercel `x-real-ip` dan
- * `x-forwarded-for` diisi oleh platform (nilai dari klien ditimpa); di belakang
- * Caddy `x-forwarded-for` juga ditulis ulang oleh proxy. Tanpa proxy tepercaya
- * nilai ini bisa dipalsukan, jadi pembatas laju tidak pernah HANYA memakai IP.
+ * IP klien untuk jejak audit dan pembatas laju. `x-real-ip` diisi Vercel; di
+ * VPS hanya Caddy yang menerbukan port dan Caddy MENAMBAHKAN alamat klien di
+ * belakang `x-forwarded-for` yang sudah ada (tidak menimpa), sehingga entri
+ * PERTAMA bisa diisi klien untuk memutasi ember pembatas. Entri TERAKHIR
+ * dipakai: itulah yang ditambahkan proxy tepercaya terdekat. Bila suatu saat
+ * ada lebih dari satu hop (mis. CDN di depan Caddy), entri terakhir jatuh ke
+ * peer proxy — pembatas jadi terlalu ketat, tidak pernah terlalu longgar.
+ * Tanpa proxy tepercaya nilai ini bisa dipalsukan, jadi pembatas laju tidak
+ * pernah HANYA memakai IP. (Tambalan temuan T2-S2-S1.)
  */
 export function clientIp(req: Request): string | null {
   const real = req.headers.get('x-real-ip')?.trim()
   if (real) return real.slice(0, 64)
-  const fwd = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return fwd ? fwd.slice(0, 64) : null
+  const parts = req.headers.get('x-forwarded-for')?.split(',') ?? []
+  const last = parts[parts.length - 1]?.trim()
+  return last ? last.slice(0, 64) : null
 }
 
 // ------------------------------------------------------------------
