@@ -1,0 +1,139 @@
+package id.co.monitorkarya.core.data.akun
+
+import id.co.monitorkarya.core.domain.model.Peran
+import id.co.monitorkarya.core.domain.roles.AkunGuard
+import id.co.monitorkarya.core.domain.roles.AksesMejaAkun
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Ignore
+import org.junit.Test
+
+/**
+ * Kontrak pagar meja akun terbatas Admin PT (tes agen T6-C10; pemilik kontrak:
+ * `AkunGuard`/`AksesMejaAkun` di `:core:domain` — agen meja akun. Spesifikasi di
+ * `android/docs/FASE2.md` bagian 3).
+ *
+ * Sumber kebenaran (diverifikasi 8 Okt 2026):
+ * - `src/lib/rbac.ts` — `ADMIN_PT_MANAGED_ROLES = ['ADMIN_PT','KEPALA_DIVISI','PIC_PROYEK']`,
+ *   `manageableRoles()`: meja penuh (companies:manage = SUPERADMIN) meliputi
+ *   seluruh ALL_ROLES; TI sengaja TIDAK diberi accounts:manage.
+ * - `src/lib/account-desk.ts` — `accountDesk()`: meja terbatas wajib terpaku
+ *   satu PT (`scopeEntityId` null → tidak pegang meja); `deskReachError()`:
+ *   baris beda PT atau peran di luar jangkauan ditolak 403.
+ * - `src/components/account-manager.tsx` — baris di luar wewenang TETAP
+ *   terlihat tetapi tidak bisa disentuh (canTouch): itulah bendera baca-saja.
+ *
+ * Berkas ini spesifikasi eksekusi — menghijau setelah zona domain menulis
+ * `AkunGuard`. Murni JVM.
+ */
+@Ignore("Menunggu AkunGuard/AksesMejaAkun di core:domain (kontrak C10; kelas belum ditulis agen mana pun)")
+class AkunGuardTest {
+
+    // --------------------------------------------------- peran terkelola
+
+    @Test
+    fun peranTerkelolaAdminPtPersisTiga() {
+        assertEquals(
+            listOf(Peran.ADMIN_PT, Peran.KEPALA_DIVISI, Peran.PIC_PROYEK),
+            AkunGuard.ADMIN_PT_MANAGED_ROLES,
+        )
+    }
+
+    // --------------------------------------------------------- meja akun
+
+    @Test
+    fun superadminMemegangMejaPenuhSeluruhPeran() {
+        val meja = AkunGuard.mejaAkun(Peran.SUPERADMIN, scopeEntitasId = null)
+        assertNotNull(meja)
+        meja!!
+        assertTrue(meja.penuh)
+        assertNull(meja.entitasId)
+        // Meja penuh meliputi semua peran, termasuk yang dilarang Admin PT.
+        assertTrue(meja.peranTerkelola.containsAll(Peran.entries))
+        assertEquals(Peran.entries.size, meja.peranTerkelola.size)
+    }
+
+    @Test
+    fun adminPtTerpakuPtMemegangMejaTerbatas() {
+        val meja = AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = "pt-1")
+        assertNotNull(meja)
+        meja!!
+        assertFalse(meja.penuh)
+        assertEquals("pt-1", meja.entitasId)
+        assertEquals(AkunGuard.ADMIN_PT_MANAGED_ROLES, meja.peranTerkelola)
+    }
+
+    @Test
+    fun adminPtTanpaPtTidakPegangMeja() {
+        // Gagal-tertutup (account-desk.ts): akun berlingkup tanpa PT tidak
+        // boleh menyentuh akun PT mana pun.
+        assertNull(AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = null))
+    }
+
+    @Test
+    fun peranLainTidakPegangMeja() {
+        // TI sengaja tanpa meja akun; peran sisanya tanpa kapabilitas meja.
+        assertNull(AkunGuard.mejaAkun(Peran.TI, scopeEntitasId = null))
+        assertNull(AkunGuard.mejaAkun(Peran.DIREKTUR_ENTITAS, scopeEntitasId = "pt-1"))
+        assertNull(AkunGuard.mejaAkun(Peran.KEPALA_DIVISI, scopeEntitasId = "pt-1"))
+        assertNull(AkunGuard.mejaAkun(Peran.PIC_PROYEK, scopeEntitasId = "pt-1"))
+        assertNull(AkunGuard.mejaAkun(Peran.MANAJEMEN, scopeEntitasId = null))
+        assertNull(AkunGuard.mejaAkun(Peran.DIREKTUR_SDM_GA, scopeEntitasId = null))
+        assertNull(AkunGuard.mejaAkun(Peran.AUDITOR, scopeEntitasId = null))
+    }
+
+    // ------------------------------------------------------ bendera baca-saja
+
+    @Test
+    fun mejaPenuhBolehMenyentuhSemuaBaris() {
+        val meja = AkunGuard.mejaAkun(Peran.SUPERADMIN, scopeEntitasId = null)
+        for (peranAkun in Peran.entries) {
+            assertTrue(AkunGuard.bolehKelola(meja, peranAkun, entitasAkunId = "pt-1"))
+            assertTrue(AkunGuard.bolehKelola(meja, peranAkun, entitasAkunId = null))
+        }
+    }
+
+    @Test
+    fun direkturEntitasBacaSajaBagiAdminPt() {
+        // Inti aturan: tidak ada yang bisa membuat penyetujunya sendiri —
+        // Direktur Entitas tetap milik Super Admin.
+        val meja = AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = "pt-1")
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.DIREKTUR_ENTITAS, entitasAkunId = "pt-1"))
+    }
+
+    @Test
+    fun peranGrupBacaSajaBagiAdminPt() {
+        val meja = AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = "pt-1")
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.SUPERADMIN, entitasAkunId = null))
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.TI, entitasAkunId = null))
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.MANAJEMEN, entitasAkunId = null))
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.DIREKTUR_SDM_GA, entitasAkunId = null))
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.AUDITOR, entitasAkunId = null))
+    }
+
+    @Test
+    fun tigaPeranTerkelolaBolehDisentuhDiPtSendiri() {
+        val meja = AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = "pt-1")
+        assertTrue(AkunGuard.bolehKelola(meja, Peran.ADMIN_PT, entitasAkunId = "pt-1"))
+        assertTrue(AkunGuard.bolehKelola(meja, Peran.KEPALA_DIVISI, entitasAkunId = "pt-1"))
+        assertTrue(AkunGuard.bolehKelola(meja, Peran.PIC_PROYEK, entitasAkunId = "pt-1"))
+    }
+
+    @Test
+    fun peranTerkelolaDiPtLainTetapBacaSaja() {
+        // deskReachError: "Akun ini bukan di perusahaan Anda." (403).
+        val meja = AkunGuard.mejaAkun(Peran.ADMIN_PT, scopeEntitasId = "pt-1")
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.PIC_PROYEK, entitasAkunId = "pt-2"))
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.ADMIN_PT, entitasAkunId = "pt-2"))
+    }
+
+    @Test
+    fun tanpaMejaSemuaBarisBacaSaja() {
+        // Peran tanpa meja (mis. TI yang membaca daftar) tidak menyentuh apa pun.
+        val meja: AksesMejaAkun? = AkunGuard.mejaAkun(Peran.TI, scopeEntitasId = null)
+        assertFalse(AkunGuard.bolehKelola(meja, Peran.PIC_PROYEK, entitasAkunId = "pt-1"))
+    }
+}

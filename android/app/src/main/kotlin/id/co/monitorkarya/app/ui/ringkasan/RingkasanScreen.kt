@@ -109,4 +109,4 @@ private fun statusRingkas(sesuai: Int?, total: Int?): Pair<MkStatus, String>? {
 }
 
 /** Angka format Indonesia (pemisah ribuan titik) — angka selalu di depan. */
-private fun angkaID(n: Int): String = NumberFormat.getIntegerInstance(Locale("id", "ID")).format(n)
+private fun angkaID(n: Int): String = NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID")).format(n)

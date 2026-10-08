@@ -1,6 +1,8 @@
 // Navigasi akar + gerbang sesi. Tiga rute: "login", "ganti_sandi", "beranda".
 // SesiViewModel menentukan rute tujuan; perpindahan rute mengosongkan tumpukan
 // (popUpTo graph) sehingga kembali dari beranda keluar aplikasi, bukan ke login.
+// Fase 1 (T5-B8): rute tab PIC (meja/laporan/proyek) TIDAK ditambahkan di sini —
+// navigasi tab hidup di NavHost MKShell sendiri; gerbang sesi F0 tetap utuh.
 package id.co.monitorkarya.app.navigation
 
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost

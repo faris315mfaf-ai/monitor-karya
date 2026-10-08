@@ -11,9 +11,13 @@ import androidx.room.RoomDatabase
         DailyReportEntity::class,
         TaskEntity::class,
         EscalationEntity::class,
-        OutboxEntity::class
+        OutboxEntity::class,
+        // Fase 2 (T6-C3):
+        MingguanLaporanEntity::class,
+        MingguanButirEntity::class,
+        PenerimaanEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class MkDatabase : RoomDatabase() {
@@ -22,4 +26,7 @@ abstract class MkDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun escalationDao(): EscalationDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun mingguanLaporanDao(): MingguanLaporanDao
+    abstract fun mingguanButirDao(): MingguanButirDao
+    abstract fun penerimaanDao(): PenerimaanDao
 }

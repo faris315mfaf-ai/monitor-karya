@@ -1,0 +1,184 @@
+package id.co.monitorkarya.core.data.mingguan
+
+import id.co.monitorkarya.core.data.db.MingguanLaporanEntity
+import id.co.monitorkarya.core.data.repo.KepatuhanDivisi
+import id.co.monitorkarya.core.domain.status.StatusHeaderMingguan
+import id.co.monitorkarya.core.network.dto.InboxResponse
+import id.co.monitorkarya.core.network.dto.MingguanDivisiDto
+import id.co.monitorkarya.core.network.dto.WeeklyAksiRequest
+import id.co.monitorkarya.core.network.dto.WeeklyReportHeadDto
+import id.co.monitorkarya.core.network.mkJson
+import kotlinx.serialization.decodeFromString
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+/**
+ * Kontrak status laporan mingguan divisi (tes agen T6-C10; pemilik kontrak:
+ * `StatusHeaderMingguan` di `:core:domain` — agen mingguan — mengikuti konstanta
+ * `MingguanLaporanEntity` zona data dan `WeeklyReportHeadDto` milik T6-C1.
+ * Spesifikasi: `android/docs/FASE2.md` bagian 3).
+ *
+ * Sumber kebenaran perilaku (diverifikasi 8 Okt 2026):
+ * - `src/app/api/weekly-input/route.ts` POST — alur status
+ *   DRAFT --submit--> MENUNGGU_PERSETUJUAN --approve--> DISETUJUI; "submit"
+ *   hanya untuk DRAFT (409 bila sudah diserahkan/disetujui), "approve" hanya
+ *   untuk MENUNGGU_PERSETUJUAN (422 bila masih draf, 409 bila sudah disetujui).
+ * - `src/components/status-badges.tsx` WEEKLY_HEADER + `src/lib/constants.ts`
+ *   WEEKLY_HEADER_META — label dan warna lencana.
+ *
+ * Bagian dekode DTO menguji kode yang sudah mendarat (T6-C1/T6-C2); bagian
+ * `StatusHeaderMingguan` adalah spesifikasi eksekusi — menghijau setelah zona
+ * domain menulis berkasnya. Murni JVM.
+ */
+class MingguanStatusTest {
+
+    // ----------------------------------------------- satu kosa kata status
+
+    @Test
+    fun konstantaStatusIdentikDiTigaZona() {
+        // Domain (StatusHeaderMingguan), data (Room), jaringan (DTO C1) memakai
+        // nilai kawat yang sama persis — istilah berbeda akan pecah di UI.
+        assertEquals(StatusHeaderMingguan.DRAFT, MingguanLaporanEntity.DRAFT)
+        assertEquals(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, MingguanLaporanEntity.MENUNGGU_PERSETUJUAN)
+        assertEquals(StatusHeaderMingguan.DISETUJUI, MingguanLaporanEntity.DISETUJUI)
+        assertEquals(StatusHeaderMingguan.TERKUNCI, MingguanLaporanEntity.TERKUNCI)
+
+        assertEquals(StatusHeaderMingguan.DRAFT, WeeklyReportHeadDto.DRAFT)
+        assertEquals(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, WeeklyReportHeadDto.MENUNGGU_PERSETUJUAN)
+        assertEquals(StatusHeaderMingguan.DISETUJUI, WeeklyReportHeadDto.DISETUJUI)
+        assertEquals(StatusHeaderMingguan.TERKUNCI, WeeklyReportHeadDto.TERKUNCI)
+    }
+
+    // ------------------------------------------------------ label + lencana
+
+    @Test
+    fun labelMengikutiWeb() {
+        // WEEKLY_HEADER_META (src/lib/constants.ts).
+        assertEquals("Draf", StatusHeaderMingguan.label(StatusHeaderMingguan.DRAFT))
+        assertEquals("Menunggu persetujuan", StatusHeaderMingguan.label(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN))
+        assertEquals("Disetujui", StatusHeaderMingguan.label(StatusHeaderMingguan.DISETUJUI))
+        assertEquals("Terkunci", StatusHeaderMingguan.label(StatusHeaderMingguan.TERKUNCI))
+    }
+
+    @Test
+    fun labelNilaiTakDikenalDitampilkanApaAdanya() {
+        // Padanan komponen Unknown web: nilai baru dari server tetap terbaca,
+        // tidak diganti diam-diam.
+        assertEquals("DITOLAK", StatusHeaderMingguan.label("DITOLAK"))
+    }
+
+    @Test
+    fun lencanaMengikutiPetaWarnaWeb() {
+        // WEEKLY_HEADER (status-badges.tsx): DRAFT=info, MENUNGGU=risk,
+        // DISETUJUI=done, TERKUNCI=neutral. Kosa kata kawat Status web;
+        // lapisan UI memetakannya ke MkStatus (INFO/RISK/DONE/NEUTRAL).
+        assertEquals("info", StatusHeaderMingguan.lencana(StatusHeaderMingguan.DRAFT))
+        assertEquals("risk", StatusHeaderMingguan.lencana(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN))
+        assertEquals("done", StatusHeaderMingguan.lencana(StatusHeaderMingguan.DISETUJUI))
+        assertEquals("neutral", StatusHeaderMingguan.lencana(StatusHeaderMingguan.TERKUNCI))
+        assertEquals("neutral", StatusHeaderMingguan.lencana("STATUS_BARU"))
+    }
+
+    // ------------------------------------------------------------ transisi
+
+    @Test
+    fun serahHanyaDariDraf() {
+        assertEquals(
+            StatusHeaderMingguan.MENUNGGU_PERSETUJUAN,
+            StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DRAFT, WeeklyAksiRequest.SUBMIT),
+        )
+        // 409 "sudah diserahkan" / "sudah disetujui" di server.
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, WeeklyAksiRequest.SUBMIT))
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DISETUJUI, WeeklyAksiRequest.SUBMIT))
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.TERKUNCI, WeeklyAksiRequest.SUBMIT))
+    }
+
+    @Test
+    fun setujuiHanyaDariMenungguPersetujuan() {
+        assertEquals(
+            StatusHeaderMingguan.DISETUJUI,
+            StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, WeeklyAksiRequest.APPROVE),
+        )
+        // 422 "masih draf" / 409 "sudah disetujui" di server.
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DRAFT, WeeklyAksiRequest.APPROVE))
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DISETUJUI, WeeklyAksiRequest.APPROVE))
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.TERKUNCI, WeeklyAksiRequest.APPROVE))
+    }
+
+    @Test
+    fun alurPenuhSerahLaluSetujui() {
+        var sekarang = StatusHeaderMingguan.DRAFT
+        sekarang = StatusHeaderMingguan.transisiSah(sekarang, WeeklyAksiRequest.SUBMIT)
+        assertEquals(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, sekarang)
+        sekarang = StatusHeaderMingguan.transisiSah(sekarang, WeeklyAksiRequest.APPROVE)
+        assertEquals(StatusHeaderMingguan.DISETUJUI, sekarang)
+        // Setelah DISETUJUI hanya Admin PT meneruskan (beku) — kadiv tidak
+        // bisa apa-apa lagi lewat submit/approve.
+        assertNull(StatusHeaderMingguan.transisiSah(sekarang, WeeklyAksiRequest.SUBMIT))
+        assertNull(StatusHeaderMingguan.transisiSah(sekarang, WeeklyAksiRequest.APPROVE))
+    }
+
+    @Test
+    fun aksiTakDikenalTidakSah() {
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DRAFT, "delete"))
+        assertNull(StatusHeaderMingguan.transisiSah(StatusHeaderMingguan.DRAFT, ""))
+    }
+
+    // ------------------------------------- dekode bentuk kawat yang mendarat
+
+    @Test
+    fun dekodeBarisMingguanPenerimaan() {
+        // GET /api/inbox (T6-C2 InboxMingguanDto): statusHeader sampai apa adanya.
+        val meja = mkJson.decodeFromString<InboxResponse>(
+            """
+            {
+              "reportDate": "2026-10-08T00:00:00.000Z",
+              "dailyLockAt": "2026-10-08T10:00:00.000Z",
+              "dailyLocked": false,
+              "week": { "isoYear": 2026, "isoWeek": 41,
+                        "handoverBy": "2026-10-15T10:00:00.000Z", "lockAt": "2026-10-16T10:00:00.000Z" },
+              "daily": [],
+              "weekly": [
+                { "divisionId": "d-1", "name": "Divisi Keuangan", "headName": "Budi",
+                  "reportId": "w-1", "statusHeader": "MENUNGGU_PERSETUJUAN", "itemCount": 4,
+                  "submittedAt": "2026-10-12T09:00:00.000Z", "approvedAt": null,
+                  "forwardedAt": null, "readyToForward": false }
+              ]
+            }
+            """.trimIndent(),
+        )
+        val baris = meja.weekly.single()
+        assertEquals(StatusHeaderMingguan.MENUNGGU_PERSETUJUAN, baris.statusHeader)
+        // Belum disetujui kadiv → tidak siap diteruskan (route hanya membaca
+        // statusHeader === 'DISETUJUI').
+        assertEquals(false, baris.readyToForward)
+    }
+
+    @Test
+    fun dekodeStatusMingguanKepatuhan() {
+        // GET /api/admin/compliance (T6-C2 MingguanDivisiDto).
+        val mingguan = mkJson.decodeFromString<MingguanDivisiDto>(
+            """
+            { "state": "TERLAMBAT", "statusHeader": "DRAFT", "submittedAt": null,
+              "approvedAt": null, "forwardedAt": null }
+            """.trimIndent(),
+        )
+        assertEquals(MingguanDivisiDto.STATE_TERLAMBAT, mingguan.state)
+        assertEquals(StatusHeaderMingguan.DRAFT, mingguan.statusHeader)
+        // Label state kepatuhan (zona data, sudah mendarat).
+        assertEquals("Masuk", KepatuhanDivisi.labelState(KepatuhanDivisi.STATE_MASUK))
+        assertEquals("Terlambat", KepatuhanDivisi.labelState(KepatuhanDivisi.STATE_TERLAMBAT))
+        assertEquals("Belum masuk", KepatuhanDivisi.labelState(KepatuhanDivisi.STATE_BELUM))
+    }
+
+    @Test
+    fun pembantuAksiC1SelarasTransisi() {
+        // WeeklyAksiRequest.serahkan()/setujui() (T6-C1) menghasilkan string
+        // aksi yang dikenal StatusHeaderMingguan.transisiSah.
+        val serah = WeeklyAksiRequest.serahkan("d-1")
+        assertEquals(WeeklyAksiRequest.SUBMIT, serah.action)
+        val setujui = WeeklyAksiRequest.setujui("d-1")
+        assertEquals(WeeklyAksiRequest.APPROVE, setujui.action)
+    }
+}

@@ -54,6 +54,9 @@ interface TaskDao {
 
     @Query("DELETE FROM tugas WHERE tersinkronPada < :sebelum")
     suspend fun hapusTersinkronLama(sebelum: Long)
+
+    @Query("DELETE FROM tugas WHERE id = :id")
+    suspend fun hapusSatu(id: String)
 }
 
 @Dao

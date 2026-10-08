@@ -34,4 +34,11 @@
     <!-- Navigasi & Fase 0 -->
     <string name="nav_utama">Navigasi utama</string>
     <string name="fase0_belum_dibangun">Modul ini dibangun pada fase berikutnya.</string>
+
+    <!-- Fase 1: judul layar tab PIC (MejaKerjaScreen B4, LaporanHarianScreen B5,
+         ProyekScreen B7) — teks sama dengan label tab, dipisah agar judul layar
+         bisa berbeda dari label navigasi tanpa menyentuh tab. -->
+    <string name="layar_meja_kerja">Meja kerja</string>
+    <string name="layar_laporan_harian">Laporan harian</string>
+    <string name="layar_proyek">Proyek</string>
 </resources>

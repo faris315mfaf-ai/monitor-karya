@@ -37,6 +37,10 @@ detekt {
 dependencies {
     api(project(":core:domain")) // repository memamerkan model domain
     implementation(project(":core:network"))
+    // Repo memakai Response/HttpException langsung — Retrofit harus terlihat.
+    api(libs.retrofit)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json) // C10-A6: repo mem-parse JsonObject
 
     api(libs.androidx.room.runtime) // app perlu melihat RoomDatabase untuk factory Hilt
     implementation(libs.androidx.room.ktx)
@@ -46,6 +50,9 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     implementation(libs.hilt.android)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     ksp(libs.hilt.compiler)
 
     implementation(libs.kotlinx.coroutines.core)

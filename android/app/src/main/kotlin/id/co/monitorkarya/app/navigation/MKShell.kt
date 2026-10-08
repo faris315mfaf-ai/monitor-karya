@@ -44,6 +44,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import id.co.monitorkarya.app.R
 import id.co.monitorkarya.app.ui.placeholder.PlaceholderTabScreen
+import id.co.monitorkarya.app.ui.admin.MejaAdminScreen
+import id.co.monitorkarya.app.ui.laporan.LaporanHarianScreen
+import id.co.monitorkarya.app.ui.mejakerja.MejaKerjaScreen
+import id.co.monitorkarya.app.ui.mingguan.MingguanScreen
+import id.co.monitorkarya.app.ui.tim.TimScreen
 import id.co.monitorkarya.app.ui.ringkasan.RingkasanScreen
 import id.co.monitorkarya.core.domain.model.Peran
 import id.co.monitorkarya.core.domain.model.PeranPengguna
@@ -119,16 +124,33 @@ fun MKShell(
                 .padding(padding),
         ) {
             tabs.forEach { tab ->
-                composable(tab.rute()) {
-                    if (tab == TabId.RINGKASAN) {
-                        // offline = false dulu: pemantau konektivitas belum ada di Fase 0.
-                        RingkasanScreen(vm = hiltViewModel())
-                    } else {
-                        PlaceholderTabScreen(label = labelTab(pengguna.peran, tab))
-                    }
-                }
+                composable(tab.rute()) { IsiTab(pengguna.peran, tab) }
             }
         }
+    }
+}
+
+
+/**
+ * Isi satu tab per peran. Fase 1: PIC memuat layar nyata B4/B5; Fase 2:
+ * KEPALA_DIVISI (capaian mingguan + tim) dan ADMIN_PT (meja gabungan
+ * Penerimaan/Kepatuhan/Akun); RINGKASAN nyata semua peran (F0); tab PROYEK
+ * PIC dan scheduler sinkron menunggu batch integrasi berikutnya (T5-B7/B2).
+ */
+@Composable
+private fun IsiTab(peran: Peran, tab: TabId) {
+    when {
+        tab == TabId.RINGKASAN -> RingkasanScreen(vm = hiltViewModel())
+        peran == Peran.PIC_PROYEK && tab == TabId.MEJA_KERJA ->
+            MejaKerjaScreen(vm = hiltViewModel(), onBukaLaporan = { }, onBukaTugas = { })
+        peran == Peran.PIC_PROYEK && tab == TabId.LAPORAN_HARIAN ->
+            LaporanHarianScreen(vm = hiltViewModel())
+        peran == Peran.KEPALA_DIVISI && tab == TabId.CAPAIAN_MINGGUAN ->
+            MingguanScreen(vm = hiltViewModel(), onAjukanBukaKunci = { })
+        peran == Peran.KEPALA_DIVISI && tab == TabId.PEMBAGIAN_DIVISI ->
+            TimScreen(vm = hiltViewModel())
+        peran == Peran.ADMIN_PT && tab == TabId.PENERIMAAN -> MejaAdminScreen()
+        else -> PlaceholderTabScreen(label = labelTab(peran, tab))
     }
 }
 

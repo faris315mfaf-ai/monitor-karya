@@ -3,6 +3,7 @@ package id.co.monitorkarya.core.network
 import java.io.IOException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -12,7 +13,21 @@ sealed class ApiError {
     data class TidakTerautentikasi(val pesan: String? = null) : ApiError()
     data class WajibGantiSandi(val pesan: String) : ApiError()
     data class TerlaluBanyakPesan(val retryDetik: Long) : ApiError()
-    data class Konflik(val pesan: String) : ApiError()
+
+    /**
+     * 409 — tindakan bertabrakan dengan keadaan server. Route Fase 1 kerap
+     * menyertakan {locked, frozen, reportId} pada body-nya (mis. laporan
+     * dibekukan "FORWARDED"/"LOCKED" atau terkunci lewat 17.00); ketiganya
+     * null bila server tidak menuliskannya.
+     */
+    data class Konflik(
+        val pesan: String,
+        val locked: Boolean? = null,
+        val frozen: String? = null,
+        val reportId: String? = null,
+        /** Alasan beku dari server ("FORWARDED"/"LOCKED"); C10-A5. */
+        val reason: String? = null,
+    ) : ApiError()
     data class Validasi(val pesan: String, val errors: List<String> = emptyList()) : ApiError()
     data class Server(val pesan: String) : ApiError()
     data class Jaringan(val pesan: String) : ApiError()
@@ -61,6 +76,13 @@ sealed class ApiError {
                 } else {
                     Konflik(pesan ?: "Akses ditolak.")
                 }
+                409 -> Konflik(
+                    pesan = pesan ?: "Terjadi konflik. Muat ulang lalu coba lagi.",
+                    locked = obj.bool("locked"),
+                    frozen = obj.teks("frozen"),
+                    reportId = obj.teks("reportId"),
+                    reason = obj.teks("reason"),
+                )
                 429 -> TerlaluBanyakPesan(
                     retryDetik = obj.angka("retryAfter")
                         ?: t.response()?.headers()?.get("Retry-After")?.toLongOrNull()
@@ -74,6 +96,9 @@ sealed class ApiError {
 
         private fun JsonObject?.teks(kunci: String): String? =
             runCatching { this?.get(kunci)?.jsonPrimitive?.contentOrNull }.getOrNull()
+
+        private fun JsonObject?.bool(kunci: String): Boolean? =
+            runCatching { this?.get(kunci)?.jsonPrimitive?.booleanOrNull }.getOrNull()
 
         private fun JsonObject?.angka(kunci: String): Long? = teks(kunci)?.toLongOrNull()
 
