@@ -117,3 +117,24 @@ Stage Summary:
 - Files modified: docs/zcode/11-INDEKS-DOKUMEN.md (two entries plus count), worklog.md (this entry).
 - Agent report files (T2-B1-LAPORAN.md through T2-B10-LAPORAN.md, T2-S1-LAPORAN.md, T2-S2-LAPORAN.md) were intentionally NOT created; each agent writes its own report into docs/zcode/laporan-swarm/.
 - Nothing committed; no secrets recorded.
+
+---
+Task ID: T3-D
+Agent: Documentation Subagent (Tahap 3 swarm — Dashboard Manajemen per perusahaan)
+Date: 8 October 2026 (Asia/Jakarta)
+Task: Document the owner's 8 Oct 2026 decision on the Manajemen Ringkasan screen for the 5-agent Tahap 3 swarm
+
+Work Log:
+- Read AGENTS.md, docs/design/peran/01-manajemen.md (full), docs/SISA-PEKERJAAN.md (sections B and C), docs/zcode/USULAN-GRAFIK-TERTUNDA.md, docs/zcode/laporan-swarm/README.md (conventions), and docs/zcode/HASIL-TAHAP2-SWARM.md (consolidation style) for context.
+- Inspected src/components/views/oversight-dashboard.tsx and src/components/oversight/management-dashboard.tsx read-only to confirm component names (BarChart, Timeline, DonutChart, AttentionItem, ApprovalItem, ActivityItem, StatTile, ActivityRings) and role wiring behind ManagementDashboard.
+- Revised docs/design/peran/01-manajemen.md without discarding history: added a dated owner-decision blockquote after the header (six cards removed; hero + Rata-rata progres/Kehadiran StatTiles kept; "Laporan per perusahaan" mandatory with card per PT -> company Sheet -> project Sheet containing daily report selesai/dikerjakan/belum plus escalation section); marked the removed items across Desktop rows 1/2/4, the Interaksi table, Tablet, and Ponsel with strikethrough plus "dihapus 8 Okt" annotations while keeping the original text; added the new "Laporan per perusahaan" section before the old Baris 1; extended "Data yang dibutuhkan" with per-company drill-down data; appended an implementation-status pointer to the Tahap 3 consolidation report.
+- Updated docs/SISA-PEKERJAAN.md: section B "Navigasi per spesifikasi" gained a note on the partial owner decision of 8 Oct for Ringkasan Manajemen (cards removed + per-company drill-down), with other roles still open and the checkbox intentionally left open; section C three deferred charts item gained a note that the decision removed the largest potential consumer (Output selesai/Timeline/Donut cards) so the memo recommendation now leans delete, final call still the owner's.
+- Created docs/zcode/HASIL-TAHAP3-DASH-MANAJEMEN.md as the consolidation skeleton in the HASIL-TAHAP2-SWARM style: purpose, owner decision section, 5-agent topology table (T3-A1..A4 build + T3-D documentation) with "menunggu laporan" placeholders, shared constraints, and parent-run integration/gate sections left as placeholders.
+- Added the new report to docs/zcode/11-INDEKS-DOKUMEN.md alphabetically (after HASIL-TAHAP2-SWARM.md) and updated the count line from 121 to 122; no other index lines changed.
+- Appended this entry. Per constraints: no code/mock/test files touched, no other agents' laporan-swarm/T3-A*.md files touched, no tests/builds run, no network/ports/containers, no git add/commit/push.
+
+Stage Summary:
+- Files modified: docs/design/peran/01-manajemen.md, docs/SISA-PEKERJAAN.md, docs/zcode/11-INDEKS-DOKUMEN.md, worklog.md (this entry).
+- Files created: docs/zcode/HASIL-TAHAP3-DASH-MANAJEMEN.md.
+- Section B item "Navigasi per spesifikasi" and section C three-charts item both intentionally left unchecked; the T3 report skeleton awaits parent consolidation.
+- Nothing committed; no secrets recorded.
