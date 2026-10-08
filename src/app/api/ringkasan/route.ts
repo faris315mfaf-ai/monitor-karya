@@ -143,7 +143,15 @@ export async function GET() {
       }),
       db.escalation.findMany({
         where: { ...inScope, status: { in: ['DIAJUKAN', 'DITINJAU'] } },
-        include: { entity: { select: { name: true, code: true } }, raisedBy: { select: { name: true } } },
+        // Select eksplisit (T2-B6): hanya kolom yang dipakai jawaban (pemetaan esc
+        // + asal divisi lewat sourceType/sourceId); `include` memuat seluruh skalar
+        // Eskalasi (decisionText, decidedById, decidedAt, createdAt, updatedAt, dst.).
+        select: {
+          id: true, sourceType: true, sourceId: true, summary: true, needed: true, status: true,
+          raisedAt: true, slaDays: true,
+          entity: { select: { name: true, code: true } },
+          raisedBy: { select: { name: true } },
+        },
         orderBy: { raisedAt: 'asc' },
       }),
       db.project.findMany({

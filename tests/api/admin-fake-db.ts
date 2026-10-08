@@ -33,6 +33,7 @@ const REL_MODEL: Record<string, string> = {
   headUser: 'user',
   picUser: 'user',
   actor: 'user',
+  raisedBy: 'user',
   updatedBy: 'user',
   user: 'user',
   entity: 'entity',

@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   // Build path prefix filter for subtree scoping
   let pathPrefix = ''
   if (scopeEntityId) {
-    const scopeEntity = await db.entity.findUnique({ where: { id: scopeEntityId } })
+    // Hanya kolom path yang dipakai; select eksplisit agar tidak memuat seluruh baris Entity.
+    const scopeEntity = await db.entity.findUnique({ where: { id: scopeEntityId }, select: { path: true } })
     if (scopeEntity) pathPrefix = scopeEntity.path
   }
 
@@ -31,17 +32,15 @@ export async function GET(req: NextRequest) {
   const requesterIds = await scopeUserIds(user)
   const unlockWhere = requesterIds ? { requestedById: { in: requesterIds } } : {}
 
-  const [entities, todayReports, lateToday, pendingEscalations, unlockPending, kpiThisMonth, weeklyPending] =
+  // Catatan kueri (T2-B6): jumlah laporan hari ini dipakai dari agregat KpiSnapshot
+  // (`summary.reportsToday`); count DailyProjectReport tanpa `isLate` dulu diambil
+  // tetapi tidak pernah dipakai, jadi dilepas. Count terpisah yang tersisa hanya
+  // `lateToday`, dan itu memang tidak bisa digabung (saringan berbeda).
+  const [entities, lateToday, pendingEscalations, unlockPending, kpiThisMonth, weeklyPending] =
     await Promise.all([
       db.entity.findMany({
         where: entityWhere,
         select: { id: true, name: true, path: true, region: true, code: true },
-      }),
-      db.dailyProjectReport.count({
-        where: {
-          reportDate: { gte: startOfTodayWIB(), lt: endOfTodayWIB() },
-          ...reportEntityWhere,
-        },
       }),
       db.dailyProjectReport.count({
         where: {
@@ -55,7 +54,12 @@ export async function GET(req: NextRequest) {
           status: { in: ['DIAJUKAN', 'DITINJAU'] },
           ...escalationEntityWhere,
         },
-        include: { entity: { select: { name: true, code: true, region: true } } },
+        // Select eksplisit (T2-B6): hanya kolom yang dipetakan ke jawaban; tanpa ini
+        // `include` memuat seluruh skalar Eskalasi (decisionText, decidedById, dst.).
+        select: {
+          id: true, summary: true, status: true, needed: true, raisedAt: true, slaDays: true,
+          entity: { select: { name: true, code: true, region: true } },
+        },
         orderBy: { raisedAt: 'asc' },
         take: 50,
       }),
