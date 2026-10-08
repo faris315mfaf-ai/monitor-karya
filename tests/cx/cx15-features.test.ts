@@ -41,6 +41,7 @@ vi.mock('@/components/admin/reminder-rules-card', () => ({ ReminderRulesCard: ()
 vi.mock('@/components/admin/master-data', () => ({ MasterDataCard: () => null, UsersByRoleCard: () => null, useAdminOverview: () => ({ data: null }) }))
 vi.mock('@/components/admin/compliance', () => ({ ComplianceCard: () => null, ComplianceHeatmapCard: () => null, useCompliance: () => ({ data: null }), sendReminder: vi.fn() }))
 vi.mock('@/hooks/use-resource', () => ({ useResource: (url: string | null) => { h.resourceCalls.push(url); return { data: url?.startsWith('/api/evidence') ? { items: h.evidence } : h.list, loading: false, error: null } } }))
+vi.mock('@/hooks/use-fetch', () => ({ useFetch: () => ({ data: null, loading: false, error: null, reload: vi.fn() }) }))
 vi.mock('@/components/mk', () => {
   const container = ({ children }: { children?: ReactNode }) => createElement('div', null, children)
   const nothing = () => null
@@ -66,11 +67,15 @@ beforeEach(() => { h.cards = []; h.tiles = []; h.header = null; h.role = 'AUDITO
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('CX8 dan CX15 UI', () => {
-  it('Auditor: subtitle Keputusan terbuka hanya eskalasi; Manajemen tetap lengkap', () => {
-    renderManagement()
-    expect(h.cards.find((p) => p.title === 'Keputusan terbuka').subtitle).toBe('Eskalasi terbuka')
-    h.role = 'MANAJEMEN'; h.cards = []; renderManagement()
-    expect(h.cards.find((p) => p.title === 'Keputusan terbuka').subtitle).toContain('Materi, anggaran, cuti')
+  it('Keputusan terbuka dihapus 8 Okt 2026; bagian Laporan per perusahaan hadir (keputusan pemilik)', () => {
+    // Kartu "Keputusan terbuka"/"Persetujuan menunggu" dihapus pemilik dari Ringkasan
+    // Manajemen; penggantinya bagian drill-down per perusahaan (CompanyReports).
+    for (const role of ['AUDITOR', 'MANAJEMEN'] as const) {
+      h.role = role; h.cards = []
+      const html = renderManagement()
+      expect(h.cards.find((p) => p.title === 'Keputusan terbuka' || p.title === 'Persetujuan menunggu')).toBeUndefined()
+      expect(html).toContain('Laporan per perusahaan')
+    }
   })
   it('Admin PT memasang pemicu palet yang sudah ada di header', () => {
     h.role = 'ADMIN_PT'
@@ -191,8 +196,15 @@ describe('CX15 integrasi palet → Sheet proyek', () => {
 
 it('CX15 integrasi: PIC null tidak menjatuhkan Ringkasan Manajemen', () => {
   h.role = 'MANAJEMEN'
-  expect(() => renderManagement({ projects: [{ id: 'p-null', name: 'Audit Pajak 2026', pic: null, picName: null, progress: 20, status: 'on', entityCode: 'A', entityName: 'PT A', entityId: 'pt-a', targetEndDate: null }] })).not.toThrow()
-  expect(h.projectRows[0]).toMatchObject({ pic: 'PIC belum ditentukan', initials: '—' })
+  // Tabel "Proyek prioritas" dihapus 8 Okt; proyek kini tampil lewat kartu
+  // perusahaan. PIC null tetap tidak boleh menjatuhkan render, dan kartu
+  // perusahaan PT A tetap terbentuk (baris proyeknya ada di dalam Sheet).
+  let html = ''
+  expect(() => {
+    html = renderManagement({ projects: [{ id: 'p-null', name: 'Audit Pajak 2026', pic: null, picName: null, progress: 20, status: 'on', entityCode: 'A', entityName: 'PT A', entityId: 'pt-a', targetEndDate: null }] })
+  }).not.toThrow()
+  expect(html).toContain('Laporan per perusahaan')
+  expect(html).toContain('PT A')
 })
 
 
