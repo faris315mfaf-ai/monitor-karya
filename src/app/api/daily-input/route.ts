@@ -95,6 +95,16 @@ export async function GET(req: NextRequest) {
   const projects = await visibleProjects(user)
   const projectIds = projects.map((p) => p.id)
 
+  // Aturan pelaporan: baca settings entity (24/7 = null cutoff → tidak terkunci).
+  // Dihitung sebelum projects.map karena lockReason tiap proyek memakainya.
+  const settingsEntityId = projects[0]?.entityId ?? user.scopeEntityId
+  const rptSettings = await getReportSettings(settingsEntityId)
+  const timeLocked = rptSettings.dailyCutoffHour === null
+    ? false  // 24/7: tanpa kunci waktu
+    : !rptSettings.dailyOpen
+      ? true  // ditutup eksplisit
+      : isDailyLocked(day, now)  // kunci jam bawaan/kustom
+
   const reports = await db.dailyProjectReport.findMany({
     where: { projectId: { in: projectIds }, reportDate: day },
   })
@@ -148,14 +158,6 @@ export async function GET(req: NextRequest) {
     : []
   const untilById = new Map(otherActive.map((u) => [u.targetId, u.unlockUntil]))
 
-  // Aturan pelaporan: baca settings entity (24/7 = null cutoff → tidak terkunci).
-  const settingsEntityId = projects[0]?.entityId ?? user.scopeEntityId
-  const rptSettings = await getReportSettings(settingsEntityId)
-  const timeLocked = rptSettings.dailyCutoffHour === null
-    ? false  // 24/7: tanpa kunci waktu
-    : !rptSettings.dailyOpen
-      ? true  // ditutup eksplisit
-      : isDailyLocked(day, now)  // kunci jam bawaan/kustom
 
   return NextResponse.json({
     reportDate: day.toISOString(),
