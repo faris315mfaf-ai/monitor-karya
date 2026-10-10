@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -5,6 +6,7 @@ import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
+  WEEKLY_CUTOFF_HOUR,
   dayInPeriod,
   daysOfWeek,
   isoWeekOf,
@@ -18,6 +20,7 @@ import {
   weeklyWriteBlock,
   type Period,
 } from '@/lib/lock'
+import { getReportSettings } from '@/lib/report-settings'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 import { activeUnlockFor } from '@/lib/unlock-requests'
 
@@ -123,7 +126,9 @@ async function openReport(
     where: { divisionId_isoYear_isoWeek: { divisionId: division.id, isoYear, isoWeek } },
   })
   const unlocked = existing ? Boolean(await activeUnlockFor('WEEKLY_REPORT', existing.id, now)) : false
-  const block = weeklyWriteBlock({ period, report: existing, unlocked, now })
+  // Aturan mingguan mengikuti entitas divisi (jam kunci, buka/tutup sementara).
+  const settings = await getReportSettings(division.entityId)
+  const block = weeklyWriteBlock({ period, report: existing, unlocked, now, settings })
   if (block) {
     return {
       error: NextResponse.json(
@@ -155,13 +160,16 @@ export async function GET(req: NextRequest) {
   if (!period) return NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 })
 
   const { isoYear, isoWeek } = isoWeekOf(period.start)
-  const deadlines = weeklyDeadlines(period.start)
 
   const entities = await reportableEntities(user)
   const requested = sp.get('entityId')
   // Peran berlingkup terpaku pada entitasnya; TI memilih dari daftar.
   const entity =
     isMasterRole(user.role) ? (entities.find((e) => e.id === requested) ?? entities[0] ?? null) : (entities[0] ?? null)
+  // Aturan mingguan entitas yang dipilih: jam kunci dan buka/tutup ikut ke
+  // penegakan (isWeeklyLocked/weeklyWriteBlock) maupun tenggat yang ditampilkan.
+  const rptSettings = await getReportSettings(entity?.id ?? null)
+  const deadlines = weeklyDeadlines(period.start, rptSettings.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
   const divisions = await visibleDivisions(user, entity?.id ?? null)
 
   const reports = await db.weeklyDivisionReport.findMany({
@@ -235,7 +243,7 @@ export async function GET(req: NextRequest) {
     periodEnd: period.end.toISOString(),
     handoverBy: deadlines.handoverBy.toISOString(),
     lockAt: deadlines.lockAt.toISOString(),
-    locked: isWeeklyLocked(period.start),
+    locked: isWeeklyLocked(period.start, now, rptSettings),
     days: daysOfWeek(period).map((d) => d.toISOString()),
     weeks,
     entities,
@@ -248,7 +256,7 @@ export async function GET(req: NextRequest) {
     divisions: divisions.map((d) => {
       const report = byDivision.get(d.id) ?? null
       const unlockUntil = report ? (unlockOf.get(report.id) ?? null) : null
-      const block = weeklyWriteBlock({ period, report, unlocked: Boolean(unlockUntil), now })
+      const block = weeklyWriteBlock({ period, report, unlocked: Boolean(unlockUntil), now, settings: rptSettings })
       return {
         id: d.id,
         name: d.name,
@@ -463,7 +471,7 @@ export async function PUT(req: NextRequest) {
         workDate: item.workDate,
         ...(week.unlocked ? { unlocked: true, week: week.period.key } : {}),
       }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent') || null,
     },
   })
@@ -543,7 +551,7 @@ export async function PATCH(req: NextRequest) {
       targetType: 'WEEKLY_REPORT',
       targetId: report.id,
       afterData: JSON.stringify({ week: week.period.key, moves: updates.length }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -573,7 +581,8 @@ export async function DELETE(req: NextRequest) {
 
   const report = existing.weeklyReport
   const unlocked = Boolean(await activeUnlockFor('WEEKLY_REPORT', report.id))
-  const block = weeklyWriteBlock({ period: weekPeriodOf(report.periodStart), report, unlocked })
+  const delSettings = await getReportSettings(guard.division!.entityId)
+  const block = weeklyWriteBlock({ period: weekPeriodOf(report.periodStart), report, unlocked, settings: delSettings })
   if (block) {
     return NextResponse.json(
       { error: block.message, locked: true, frozen: block.reason === 'FORWARDED', reason: block.reason },
@@ -609,7 +618,7 @@ export async function DELETE(req: NextRequest) {
       targetType: 'WEEKLY_ITEM',
       targetId: itemId,
       beforeData: JSON.stringify({ workItem: existing.workItem, status: existing.status, workDate: existing.workDate }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -744,7 +753,7 @@ export async function POST(req: NextRequest) {
         week: week.period.key,
         ...(week.unlocked ? { unlocked: true } : {}),
       }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent') || null,
     },
   })

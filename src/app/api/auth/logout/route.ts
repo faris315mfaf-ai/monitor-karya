@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { clearSessionCookie, readSessionToken, SESSION_COOKIE } from '@/lib/auth'
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
         action: 'LOGOUT',
         targetType: 'USER',
         targetId: payload.sub,
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
         userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
       },
     }).catch(() => { console.error('[auth] audit keluar gagal') })

@@ -6,7 +6,7 @@ import { auditScopeWhere } from '@/lib/audit-scope'
 import { AUDIT_TARGET_LABELS, auditLabel } from '@/lib/audit-labels'
 import { csvRow } from '@/lib/admin-compliance'
 import { ROLE_LABELS } from '@/lib/constants'
-import { hit, tooManyRequests } from '@/lib/security'
+import { clientIp, hit, tooManyRequests } from '@/lib/security'
 
 /**
  * "Unduh log" [F2-ADMIN] (04-admin-pt.md §8): log aktivitas sebagai CSV.
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
         targetType: 'AUDIT_LOG',
         targetId: user.scopeEntityId ?? 'GRUP',
         afterData: JSON.stringify({ from: from.toISOString(), to: to.toISOString(), action: action || null, rows: rows.length, total }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
         userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
       },
     })

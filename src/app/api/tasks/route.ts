@@ -1,18 +1,18 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
-  DAILY_CUTOFF_LABEL,
+  DAILY_CUTOFF_HOUR,
   TASK_STATUSES,
   TASK_URGENCIES,
   WEEKLY_LOCK_LABEL,
   dayInPeriod,
   daysOfWeek,
-  isDailyLocked,
+  hourLabel,
   isWeeklyLocked,
-  isWorkingDay,
   parseWeekKey,
   parseWibDateKey,
   startOfWibDay,
@@ -23,6 +23,7 @@ import {
   type TaskScope,
 } from '@/lib/lock'
 import { dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
+import { guardProjectAccess, READ_RELATIONS } from '@/lib/pic-access'
 import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { activeUnlockFor } from '@/lib/unlock-requests'
 
@@ -100,7 +101,9 @@ async function lockCheck(context: Context, projectId: string, workDate: Date, sc
   await lockDailyReport(client, projectId, day)
   const gate = await dailyGate(projectId, day, new Date(), client)
   if (scope === 'HARIAN') {
-    const taskSettings = await getReportSettings(null) // TODO: entityId dari project
+    // [T10-FIX2, S-1] dailyGate membaca settings dari entityId PROYEK (bukan
+    // hanya baris laporan yang bisa belum ada) dan mengembalikannya di gate.
+    const taskSettings = gate.settings
     if (!isWorkingDayWith(taskSettings.workingDays, day) || day > startOfWibDay(new Date())) return NextResponse.json({ error: 'Tanggal task harian harus hari pelaporan yang sudah tiba.' }, { status: 422 })
     const frozen = frozenMessage(gate)
     if (frozen) {
@@ -114,7 +117,7 @@ async function lockCheck(context: Context, projectId: string, workDate: Date, sc
     return NextResponse.json(
       {
         error: isToday
-          ? `Hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`
+          ? `Hari ini sudah dikunci pukul ${hourLabel(gate.settings.dailyCutoffHour ?? DAILY_CUTOFF_HOUR)}.`
           : 'Hari itu tidak sedang dibuka. Ajukan buka kunci untuk mengubahnya.',
         locked: true,
         reportId: gate.report?.id ?? null,
@@ -258,7 +261,10 @@ export async function GET(req: NextRequest) {
   if (user instanceof NextResponse) return user
 
   const projectId = req.nextUrl.searchParams.get('projectId') || ''
-  const guard = await guardProject(user, projectId)
+  // [T10-FIX2, T-2] Baca memakai relasi penuh (guardProjectAccess): kepala
+  // divisi hanya proyek divisinya, bukan semua proyek PT-nya; PIC tetap proyek
+  // miliknya sendiri, pemantau cakupan entitasnya.
+  const guard = await guardProjectAccess(user, projectId, READ_RELATIONS)
   if (!guard.ok) return guard.res
 
   // Papan mingguan: seluruh task minggu itu, kedua cakupan, urut per hari lalu urutan kartu.
@@ -360,9 +366,10 @@ async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionC
     if (requested.getTime() > today.getTime()) {
       return NextResponse.json({ error: 'Task tidak bisa dicatat untuk tanggal yang belum tiba.' }, { status: 422 })
     }
-    const postSettings = await getReportSettings(null)
+    // [T10-FIX2, S-1] Hari kerja mengikuti aturan entitas proyek, bukan bawaan.
+    const postSettings = await getReportSettings(guard.project.entityId)
     if (!isWorkingDayWith(postSettings.workingDays, requested)) {
-      return NextResponse.json({ error: 'Task harian hanya untuk hari kerja (Senin–Jumat).' }, { status: 422 })
+      return NextResponse.json({ error: 'Task harian hanya untuk hari pelaporan entitas ini.' }, { status: 422 })
     }
     workDate = requested
   }
@@ -396,7 +403,7 @@ async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionC
       targetType: 'TASK',
       targetId: task.id,
       afterData: JSON.stringify({ title: task.title, status: task.status, urgency: task.urgency, scope, context, subtasks: subtasks.length, workDate: wibDateKey(workDate) }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -492,7 +499,7 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
       targetId: id,
       beforeData: JSON.stringify({ status: existing.status, progressPct: existing.progressPct, workDate: existing.workDate, scope: existing.scope }),
       afterData: JSON.stringify({ status: task.status, progressPct: task.progressPct, workDate, scope, context }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -601,7 +608,7 @@ async function patch(req: NextRequest, user: SessionUser, db: Prisma.Transaction
       targetType: 'PROJECT',
       targetId: projectId,
       afterData: JSON.stringify({ week: period.key, moves: updates.length }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -646,7 +653,7 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
       targetType: 'TASK',
       targetId: id,
       beforeData: JSON.stringify({ title: existing.title, status: existing.status, workDate: existing.workDate, scope: existing.scope }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 

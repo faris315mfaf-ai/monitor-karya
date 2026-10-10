@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
-import { limitReminders } from '@/lib/security'
+import { clientIp, limitReminders } from '@/lib/security'
 import { can, canSignSlot, pendingSlot } from '@/lib/rbac'
 import { monthKeyNow } from '@/lib/wib'
 import { countDailyIntake } from '@/lib/daily-intake'
@@ -414,7 +414,7 @@ export async function POST(req: NextRequest) {
 
   const actor: RemindActor = { kind: 'user', id: user.id, name: user.name, role: user.role, scopeEntityId: user.scopeEntityId }
   const meta = {
-    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+    ip: clientIp(req),
     userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
   }
 

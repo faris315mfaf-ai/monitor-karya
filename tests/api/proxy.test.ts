@@ -36,11 +36,14 @@ describe('proxy — API', () => {
     expect(isPassThrough(proxy(req('/api/tasks', { method: 'DELETE' })))).toBe(true)
   })
 
-  it('badan JSON > 1 MB ditolak 413; unggah bukti boleh sampai 21 MB', () => {
+  it('badan JSON > 1 MB ditolak 413; unggah bukti & berkas persetujuan boleh sampai 21 MB', () => {
     const big = String(2 * 1024 * 1024)
     expect(proxy(req('/api/tasks', { method: 'POST', headers: { 'content-length': big } })).status).toBe(413)
-    expect(isPassThrough(proxy(req('/api/evidence/upload', { method: 'POST', headers: { 'content-length': big } })))).toBe(true)
-    expect(proxy(req('/api/evidence/upload', { method: 'POST', headers: { 'content-length': String(30 * 1024 * 1024) } })).status).toBe(413)
+    for (const p of ['/api/evidence/upload', '/api/approval-requests/berkas']) {
+      expect(isPassThrough(proxy(req(p, { method: 'POST', headers: { 'content-length': big } })))).toBe(true)
+      expect(isPassThrough(proxy(req(p, { method: 'POST', headers: { 'content-length': String(20 * 1024 * 1024 + 512 * 1024) } })))).toBe(true)
+      expect(proxy(req(p, { method: 'POST', headers: { 'content-length': String(30 * 1024 * 1024) } })).status).toBe(413)
+    }
   })
 })
 

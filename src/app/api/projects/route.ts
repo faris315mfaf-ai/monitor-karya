@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
@@ -376,7 +377,7 @@ export async function POST(req: NextRequest) {
       targetType: 'PROJECT',
       targetId: project.id,
       afterData: JSON.stringify({ code, name: project.name, phase: project.phase, chain, skipApproval, divisionId: project.divisionId, related: related ?? [] }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent') || null,
     },
   })
@@ -435,7 +436,7 @@ export async function PATCH(req: NextRequest) {
         targetType: 'PROJECT',
         targetId: id,
         afterData: JSON.stringify({ lifecycle: updated.lifecycle }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
     // [F2-URUNGKAN]
@@ -496,7 +497,7 @@ export async function PATCH(req: NextRequest) {
       targetId: id,
       beforeData: JSON.stringify({ name: existing.name, phase: existing.phase, lifecycle: existing.lifecycle, picUserId: existing.picUserId, divisionId: existing.divisionId }),
       afterData: JSON.stringify({ name: updated.name, phase: updated.phase, lifecycle: updated.lifecycle, picUserId: updated.picUserId, divisionId: updated.divisionId, related: related ?? undefined }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -564,7 +565,7 @@ export async function DELETE(req: NextRequest) {
       targetType: 'PROJECT',
       targetId: id,
       beforeData: JSON.stringify({ code: existing.code, name: existing.name, lifecycle: existing.lifecycle }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 

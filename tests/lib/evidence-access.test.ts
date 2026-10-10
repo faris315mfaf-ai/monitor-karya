@@ -31,6 +31,9 @@ vi.mock('@/lib/db', () => ({
     dailyProjectReport: {
       findUnique: vi.fn(async () => mocks.daily.value),
     },
+    // dailyGate membaca entityId dari project saat baris laporan belum ada
+    // (atau baris lama tanpa entityId).
+    project: { findUnique: vi.fn(async () => ({ entityId: 'pt-a' })) },
     weeklyReportItem: { findUnique: vi.fn(async () => mocks.weekly.value) },
     task: { findUnique: vi.fn(async () => mocks.task.value) },
     unlockRequest: {

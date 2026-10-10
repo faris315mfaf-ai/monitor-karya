@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -27,7 +28,7 @@ import { READ_ONLY_MESSAGE, isReadOnlyRole } from '@/lib/group-panel' // [F2-GRU
 export const dynamic = 'force-dynamic'
 
 const MAX_PENDING_PER_USER = 20
-const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+const ipOf = (req: NextRequest) => clientIp(req)
 
 const include = {
   requestedBy: { select: { id: true, name: true } },

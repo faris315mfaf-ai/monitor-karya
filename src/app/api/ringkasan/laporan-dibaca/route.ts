@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
@@ -41,7 +42,7 @@ async function target(req: NextRequest) {
 
 function meta(req: NextRequest) {
   return {
-    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+    ip: clientIp(req),
     userAgent: req.headers.get('user-agent') || null,
   }
 }

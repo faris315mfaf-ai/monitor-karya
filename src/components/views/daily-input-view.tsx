@@ -66,7 +66,8 @@ type Data = {
   lockAt: string
   /** Lewat tenggat 17.00 tanggal itu. */
   locked: boolean
-  countdown: { hours: number; minutes: number; passed: boolean }
+  /** null bila aturan entitas 24/7 (tanpa jam batas) — jangan dereference tanpa cek. */
+  countdown: { hours: number; minutes: number; passed: boolean } | null
   todayKey?: string
   canRequestUnlock?: boolean
   /** Laporan tanggal lain yang sedang dibuka lewat buka kunci. */
@@ -133,6 +134,14 @@ function isLockedFor(p: ProjectItem, dayLocked: boolean): boolean {
 }
 
 const isUnlocked = (p: ProjectItem) => p.unlock?.status === 'DIEKSEKUSI'
+
+/**
+ * Label jam tenggat untuk hero/kartu. Mode 24/7 (countdown null) tidak punya
+ * tenggat jam, jadi jangan menampilkan jam env dari lockAt.
+ */
+function cutoffText(data: Pick<Data, 'lockAt' | 'countdown'>): string {
+  return data.countdown === null ? 'Mode 24/7' : `Tenggat ${formatTime(data.lockAt)}`
+}
 
 /** Warna batang progres entri: aksen untuk yang berjalan, warna status untuk sisanya. */
 function barTone(s: Status): Status | 'accent' {
@@ -322,12 +331,16 @@ export function DailyInputView() {
       : single?.report?.forwardedAt
         ? 'Laporan yang sudah diteruskan dibekukan. Ajukan buka kunci bila perlu mengubahnya.'
         : data.locked
-          ? outstanding > 0
-            ? `Tenggat ${formatTime(data.lockAt)} WIB sudah lewat, jadi laporan ${dayWord} terkunci. Ajukan buka kunci bila perlu mengubahnya.`
-            : `Tenggat ${formatTime(data.lockAt)} WIB sudah lewat; laporan ${dayWord} terkunci.`
-          : `Tenggat ${formatTime(data.lockAt)} WIB · ${data.countdown.hours} jam ${data.countdown.minutes} menit lagi.${
-              outstanding > 0 ? ' Catat entri, lampirkan bukti, lalu kirim.' : ''
-            }`
+          ? data.countdown === null
+            ? `Pengisian laporan ${dayWord} sedang ditutup. Ajukan buka kunci bila perlu mengubahnya.`
+            : outstanding > 0
+              ? `Tenggat ${formatTime(data.lockAt)} WIB sudah lewat, jadi laporan ${dayWord} terkunci. Ajukan buka kunci bila perlu mengubahnya.`
+              : `Tenggat ${formatTime(data.lockAt)} WIB sudah lewat; laporan ${dayWord} terkunci.`
+          : data.countdown === null
+            ? `Tersedia 24/7 · kirim kapan saja.${outstanding > 0 ? ' Catat entri, lampirkan bukti, lalu kirim.' : ''}`
+            : `Tenggat ${formatTime(data.lockAt)} WIB · ${data.countdown.hours} jam ${data.countdown.minutes} menit lagi.${
+                outstanding > 0 ? ' Catat entri, lampirkan bukti, lalu kirim.' : ''
+              }`
 
   const ringValue = single ? (single.report?.progressPct ?? 0) : data.projects.length ? (submitted / data.projects.length) * 100 : 0
   const ringStatus: Status | 'accent' = single
@@ -420,8 +433,8 @@ export function DailyInputView() {
                 single.report?.submittedAt
                   ? `Terkirim ke Admin PT pukul ${formatTime(single.report.submittedAt)}`
                   : singleLocked
-                    ? `Tenggat ${formatTime(data.lockAt)} · terkunci`
-                    : `Tenggat ${formatTime(data.lockAt)} · catat entri lalu kirim`
+                    ? `${cutoffText(data)} · terkunci`
+                    : `${cutoffText(data)} · catat entri lalu kirim`
               }
               action={<StatusBadge status={reportState(single, singleLocked).status}>{reportState(single, singleLocked).label}</StatusBadge>}
             >
@@ -581,8 +594,8 @@ export function DailyReportCard({
           : r?.submittedAt
             ? `Terkirim ke Admin PT pukul ${formatTime(r.submittedAt)}`
             : locked
-              ? `Tenggat ${formatTime(data.lockAt)} · terkunci`
-              : `Tenggat ${formatTime(data.lockAt)} · catat entri lalu kirim`
+              ? `${cutoffText(data)} · terkunci`
+              : `${cutoffText(data)} · catat entri lalu kirim`
       }
       action={<StatusBadge status={st.status}>{st.label}</StatusBadge>}
     >

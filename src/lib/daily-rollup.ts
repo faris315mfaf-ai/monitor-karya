@@ -2,9 +2,8 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
-import { isDailyLocked, isWorkingDay, startOfWibDay, dailyLockAtWith } from '@/lib/lock'
-import { getReportSettings } from '@/lib/report-settings'
-import { wibIsoDay } from '@/lib/lock'
+import { startOfWibDay } from '@/lib/lock'
+import { getReportSettings, isDailyLockedWith, isWorkingDayWith, type ReportSettingsData } from '@/lib/report-settings'
 
 /**
  * Rolls a project's tasks up into its daily report.
@@ -129,9 +128,9 @@ export async function rollupDailyReport(projectId: string, workDate: Date, clien
   const rollup = await computeRollup(projectId, workDate, client)
   const gate = await dailyGate(projectId, workDate, new Date(), client)
   if (gate.frozen || gate.timeLocked || workDate > startOfWibDay(new Date())) return rollup
-  // isWorkingDay kini dicek via settings (workingDays kosong = setiap hari)
-  const rollupSettings = await getReportSettings(null)
-  if (rollupSettings.workingDays.length > 0 && !rollupSettings.workingDays.includes(wibIsoDay(workDate))) return rollup
+  // Aturan per entitas proyek (bukan null): workingDays kosong = setiap hari,
+  // jadi rollup juga terjadi di hari yang dilaporkan entitas 6/7 hari.
+  if (!isWorkingDayWith(gate.settings.workingDays, workDate)) return rollup
 
   const existing = await client.dailyProjectReport.findUnique({
     where: { projectId_reportDate: { projectId, reportDate: workDate } },
@@ -232,8 +231,10 @@ export type DailyGate = {
   unlock: { id: string; unlockUntil: Date | null } | null
   /** Alasan laporan dibekukan (diteruskan/terkunci) tanpa buka kunci aktif; null bila tidak. */
   frozen: 'FORWARDED' | 'LOCKED' | null
-  /** Lewat tenggat 17.00 hari itu dan tidak sedang dibuka. */
+  /** Lewat tenggat (jam kunci entitas, bawaan 17.00 WIB) hari itu dan tidak sedang dibuka. */
   timeLocked: boolean
+  /** Aturan entitas yang dipakai menghitung kunci — pemanggil tak perlu membaca ulang. */
+  settings: ReportSettingsData
 }
 
 /**
@@ -242,7 +243,7 @@ export type DailyGate = {
  *
  *   - laporan yang sudah diteruskan ke holding (`forwardedAt`) atau dikunci
  *     (`isLocked`) dibekukan;
- *   - hari yang lewat tenggat 17.00 WIB terkunci;
+ *   - hari yang lewat tenggat jam entitas (bawaan 17.00 WIB) terkunci;
  *   - keduanya hanya bisa ditembus oleh buka kunci yang sedang berlaku
  *     (`activeUnlockFor`), yang selalu menunjuk satu laporan.
  */
@@ -251,15 +252,16 @@ export async function dailyGate(projectId: string, day: Date, now: Date = new Da
     where: { projectId_reportDate: { projectId, reportDate: day } },
     select: { id: true, forwardedAt: true, isLocked: true, entityId: true },
   })
-  // Aturan pelaporan per entitas (10 Okt 2026): bawaan = perilaku lama (17:00).
-  // Settings hanya meng-override bila eksplisit: null cutoff = 24/7, false = tutup.
-  const settings = await getReportSettings(report?.entityId ?? null)
-  const oldPastCutoff = isDailyLocked(day, now)
-  const pastCutoff = settings.dailyCutoffHour === null
-    ? false  // 24/7: tanpa batas
-    : !settings.dailyOpen
-      ? true  // ditutup eksplisit
-      : oldPastCutoff  // pakai perilaku lama
+  // Aturan pelaporan per entitas (10 Okt 2026). entityId diambil dari PROJECT,
+  // bukan hanya dari baris laporan: hari tanpa laporan (belum ada baris) pun
+  // mengikuti aturan entitasnya, bukan bawaan 17.00/Senin–Jumat.
+  const entityId = report?.entityId
+    ?? (await client.project.findUnique({ where: { id: projectId }, select: { entityId: true } }))?.entityId
+    ?? null
+  const settings = await getReportSettings(entityId)
+  // Jam kustom benar-benar dipakai: null = 24/7 (tak pernah terkunci),
+  // dailyOpen = false = ditutup, selain itu jam batas entitas berlaku.
+  const pastCutoff = isDailyLockedWith(settings.dailyCutoffHour, settings.dailyOpen, day, now)
   const blocked = Boolean(report?.forwardedAt) || Boolean(report?.isLocked) || pastCutoff
   const unlock = report && blocked ? await client.unlockRequest.findFirst({
     where: { targetType: 'DAILY_REPORT', targetId: report.id, status: 'DIEKSEKUSI', reLockedAt: null, unlockUntil: { gt: now } },
@@ -270,6 +272,7 @@ export async function dailyGate(projectId: string, day: Date, now: Date = new Da
     unlock,
     frozen: unlock ? null : report?.forwardedAt ? 'FORWARDED' : report?.isLocked ? 'LOCKED' : null,
     timeLocked: pastCutoff && !unlock,
+    settings,
   }
 }
 

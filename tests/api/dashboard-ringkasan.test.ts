@@ -264,3 +264,48 @@ describe('GET /api/ringkasan (eskalasi per proyek, T3-A1)', () => {
     expect(body.escalations).toEqual([])
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* Irisan peran pelaksana (T10-FIX2, temuan T-1)                       */
+/* ------------------------------------------------------------------ */
+
+describe('GET /api/ringkasan & /api/dashboard — peran pelaksana (T10-FIX2)', () => {
+  it('ringkasan PIC: hanya proyeknya sendiri, tanpa email/telepon kepala divisi, tanpa eskalasi rekan', async () => {
+    signIn('u-pic-a')
+    const res = await ringkasanGET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.projects.map((p: { id: string }) => p.id)).toEqual(['prj-a'])
+    // Eskalasi rekan (esc-1 bersumber laporan tanpa pemetaan proyek miliknya) tidak tampil.
+    expect(body.escalations).toEqual([])
+    // Kontak kepala divisi tidak ikut: PIC hanya menerima nama.
+    expect(body.divisions).toEqual([
+      expect.objectContaining({
+        id: 'div-a1',
+        head: { id: 'u-kadiv-a', name: 'Kirana Kadiv A', email: null, phone: null },
+      }),
+    ])
+    // Aktivitas hanya tentang dirinya.
+    expect(body.activity.every((a: { who: string }) => a.who === 'Putra PIC A')).toBe(true)
+  })
+
+  it('ringkasan kepala divisi: hanya proyek & divisi yang dipimpinnya, kontak dirinya tetap utuh', async () => {
+    signIn('u-kadiv-a')
+    const res = await ringkasanGET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.projects.map((p: { id: string }) => p.id)).toEqual(['prj-a'])
+    expect(body.divisions.map((d: { id: string }) => d.id)).toEqual(['div-a1'])
+    expect(body.divisions[0].head).toMatchObject({ id: 'u-kadiv-a', name: 'Kirana Kadiv A' })
+    expect(body.divisions[0].head.email).not.toBeNull()
+  })
+
+  it('dasbor agregat grup menolak PIC dan kepala divisi (403), pemantau tetap lolos', async () => {
+    signIn('u-pic-a')
+    expect((await dashboardGET(get('/api/dashboard'))).status).toBe(403)
+    signIn('u-kadiv-a')
+    expect((await dashboardGET(get('/api/dashboard'))).status).toBe(403)
+    signIn('u-admin-a')
+    expect((await dashboardGET(get('/api/dashboard'))).status).toBe(200)
+  })
+})

@@ -10,6 +10,10 @@
  *   basis data lokal (localhost / 127.0.0.1 / ::1 / host.docker.internal) DAN
  *   flag --izinkan-lemah diberikan. Super Admin melihat dan mengubah semua data,
  *   jadi kata sandi lemah di server sungguhan sama dengan membuka pintu.
+ * - Basis data non-lokal ditolak kecuali flag --saya-yakin diberikan (guard
+ *   T10-FIX3, selaras dengan set-passwords/demo-accounts): host tujuan
+ *   dicetak lebih dulu supaya penulisan akun SUPERADMIN ke produksi tidak
+ *   terjadi diam-diam.
  * - Akun sudah ada (username sama): peran dijadikan SUPERADMIN, diaktifkan,
  *   kata sandinya diganti.
  *
@@ -33,6 +37,7 @@ function dbHost(): string {
 async function main() {
   const args = process.argv.slice(2)
   const allowWeak = args.includes('--izinkan-lemah')
+  const yakin = args.includes('--saya-yakin')
   const username = (args.find((a) => !a.startsWith('--')) ?? 'admin').trim().toLowerCase()
   const password = process.env.SUPERADMIN_PASSWORD ?? ''
 
@@ -43,6 +48,20 @@ async function main() {
 
   const host = dbHost()
   const local = LOCAL_HOSTS.has(host)
+
+  // Guard T10-FIX3: tulisan akun SUPERADMIN ke basis data non-lokal harus
+  // disengaja. Tanpa --saya-yakin skrip berhenti sebelum menyentuh apa pun.
+  if (!local) {
+    if (!yakin) {
+      throw new Error(
+        `DATABASE_URL menunjuk basis data NON-LOKAL: ${host || 'tidak dikenal'}. ` +
+          'Skrip ini membuat/menaikkan akun SUPERADMIN pada basis data itu. ' +
+          'Pastikan itu memang dituju, lalu jalankan ulang dengan --saya-yakin.'
+      )
+    }
+    console.warn(`⚠ Menulis akun SUPERADMIN ke basis data non-lokal (${host || 'tidak dikenal'}) atas --saya-yakin.`)
+  }
+
   const problem = passwordProblem(password)
   if (problem) {
     if (!(allowWeak && local)) {

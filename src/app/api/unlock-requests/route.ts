@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, scopeUserIds } from '@/lib/auth'
@@ -20,7 +21,7 @@ import { serverError } from '@/lib/api-error'
  * Tidak ada yang memutuskan pengajuannya sendiri; setiap langkah tercatat di AuditLog.
  */
 
-const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+const ipOf = (req: NextRequest) => clientIp(req)
 
 // GET /api/unlock-requests - list unlock requests
 export async function GET(req: NextRequest) {

@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import type { NextRequest } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -298,7 +299,7 @@ export async function applyUndo(user: SessionUser, tokenId: string, req?: NextRe
           targetId: token.targetId,
           beforeData: JSON.stringify(current),
           afterData: JSON.stringify({ restored: snapshot, undoTokenId: token.id }),
-          ip: req?.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          ip: req ? clientIp(req) : null,
           userAgent: req?.headers.get('user-agent') || null,
         },
       })

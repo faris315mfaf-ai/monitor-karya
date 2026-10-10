@@ -4,6 +4,7 @@ import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { ageDays } from '@/lib/wib'
 import { Prisma } from '@prisma/client'
 import { serverError } from '@/lib/api-error' // [F3-D]
+import { performerDivisionScope, performerProjectScope } from '@/lib/pic-access'
 
 // GET /api/escalations - list escalations with filters
 export async function GET(req: NextRequest) {
@@ -21,11 +22,44 @@ export async function GET(req: NextRequest) {
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)
 
+    // [T10-FIX2, T-1] Peran pelaksana hanya melihat eskalasi dari cakupannya:
+    // laporan harian/task proyeknya (PIC) atau proyek divisinya (kepala divisi),
+    // plus butir mingguan divisinya — bukan seluruh PT. Eskalasi hanya menyimpan
+    // sumber (sourceType/sourceId), jadi id sumber dalam cakupan dikumpulkan
+    // dulu agar saringan tetap bekerja di tingkat kueri (paginasi/total benar).
+    const projectScope = await performerProjectScope(user)
+    let performerWhere: Prisma.EscalationWhereInput | null = null
+    if (projectScope) {
+      const divisionScope = await performerDivisionScope(user)
+      const [reportIds, itemIds, taskEscalationIds] = await Promise.all([
+        db.dailyProjectReport.findMany({ where: { project: projectScope }, select: { id: true } }),
+        db.weeklyReportItem.findMany({
+          where: { weeklyReport: { division: divisionScope ?? { id: '__none__' } } },
+          select: { id: true },
+        }),
+        db.task.findMany({ where: { project: projectScope, escalationId: { not: null } }, select: { escalationId: true } }),
+      ])
+      performerWhere = {
+        OR: [
+          { sourceType: 'DAILY_REPORT', sourceId: { in: reportIds.map((r) => r.id) } },
+          { sourceType: 'WEEKLY_ITEM', sourceId: { in: itemIds.map((i) => i.id) } },
+          { id: { in: taskEscalationIds.map((t) => t.escalationId).filter((x): x is string => Boolean(x)) } },
+        ],
+      }
+    }
+
     const where: Prisma.EscalationWhereInput = {
       ...(status ? { status } : {}),
       ...(needed ? { needed } : {}),
       ...(entityId ? { entityId } : {}),
-      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
+      ...(scopeIds || performerWhere
+        ? {
+            AND: [
+              ...(scopeIds ? [{ entityId: { in: scopeIds } }] : []),
+              ...(performerWhere ? [performerWhere] : []),
+            ],
+          }
+        : {}),
     }
 
     const [rows, total] = await Promise.all([

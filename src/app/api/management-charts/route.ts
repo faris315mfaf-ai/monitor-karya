@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isGlobalRole, requireApiUser, scopeEntityIds } from '@/lib/auth'
+import { refusePerformer } from '@/lib/pic-access'
 import { isoWeekOf, startOfWibDay } from '@/lib/lock'
 import { lastNMonthKeys, monthKeyNow } from '@/lib/wib'
 import { serverError } from '@/lib/api-error' // [F3-D]
@@ -42,6 +43,10 @@ const WEEKLY_STATUS_LABEL: Record<string, string> = {
 export async function GET() {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  // [T10-FIX2, T-1] Enam grafik kepatuhan grup ini milik peran pengawas; PIC
+  // dan kepala divisi tidak punya tab Statistik/grafik manajemen.
+  const forbidden = refusePerformer(user)
+  if (forbidden) return forbidden
 
   try {
     const monthKeys = lastNMonthKeys(6)

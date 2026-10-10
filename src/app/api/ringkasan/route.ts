@@ -4,7 +4,7 @@ import { compareProgress } from '@/lib/kpi-math'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, scopeUserIds } from '@/lib/auth'
 import { can, canSignSlot, pendingSlot } from '@/lib/rbac'
-import { canDecideDeadline } from '@/lib/pic-access'
+import { canDecideDeadline, performerDivisionScope, performerProjectScope } from '@/lib/pic-access'
 import { isoWeekOf, isoWeekStart, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
 import { deriveProjectStatus, STATUS_ORDER, type LatestReport } from '@/lib/project-status'
 // [F2-DIREKTUR] tanggapan, tinjauan proyek, persetujuan materi/anggaran/cuti, kontak kadiv, kehadiran terlambat
@@ -124,6 +124,12 @@ export async function GET() {
     const today = startOfWibDay(now)
     const scopeIds = await scopeEntityIds(user)
     const inScope = scopeIds ? { entityId: { in: scopeIds } } : {}
+    // [T10-FIX2, T-1] Irisan peran pelaksana: PIC hanya proyeknya sendiri (dan
+    // divisi keanggotaannya), kepala divisi hanya proyek/divisi yang dipimpinnya
+    // — bukan seluruh PT. Peran pemantau tidak mendapat irisan tambahan.
+    const performer = user.role === 'PIC_PROYEK' || user.role === 'KEPALA_DIVISI'
+    const projectScope = await performerProjectScope(user)
+    const divisionScope = await performerDivisionScope(user)
     const weekStart = isoWeekStart(now)
     const trendFrom = new Date(weekStart.getTime() - (WEEKS - 1) * 7 * DAY)
     const since30 = new Date(today.getTime() - 30 * DAY)
@@ -131,7 +137,7 @@ export async function GET() {
 
     const [projects, recentReports, entities, divisions, weekly, escalations, proposals, userIds] = await Promise.all([
       db.project.findMany({
-        where: { ...inScope, lifecycle: 'AKTIF' },
+        where: { ...inScope, lifecycle: 'AKTIF', ...(projectScope ?? {}) },
         select: {
           id: true, code: true, name: true, phase: true, lifecycle: true, startDate: true, targetEndDate: true,
           picName: true, picUserId: true, picUser: { select: { name: true } },
@@ -144,7 +150,11 @@ export async function GET() {
         },
       }),
       db.dailyProjectReport.findMany({
-        where: { ...inScope, reportDate: { gte: trendFrom < since30 ? trendFrom : since30 } },
+        where: {
+          ...inScope,
+          reportDate: { gte: trendFrom < since30 ? trendFrom : since30 },
+          ...(projectScope ? { project: projectScope } : {}),
+        },
         select: { reportDate: true, submittedAt: true, isLate: true, entityId: true },
       }),
       db.entity.findMany({
@@ -152,9 +162,9 @@ export async function GET() {
         select: { id: true, name: true, code: true },
         orderBy: { name: 'asc' },
       }),
-      db.division.count({ where: { ...inScope, isActive: true } }),
+      db.division.count({ where: { ...inScope, isActive: true, ...(divisionScope ?? {}) } }),
       db.weeklyDivisionReport.findMany({
-        where: { ...inScope, isoYear, isoWeek },
+        where: { ...inScope, isoYear, isoWeek, ...(divisionScope ? { division: divisionScope } : {}) },
         select: { statusHeader: true, submittedAt: true },
       }),
       db.escalation.findMany({
@@ -171,7 +181,7 @@ export async function GET() {
         orderBy: { raisedAt: 'asc' },
       }),
       db.project.findMany({
-        where: { ...inScope, lifecycle: 'DIUSULKAN' },
+        where: { ...inScope, lifecycle: 'DIUSULKAN', ...(projectScope ?? {}) },
         select: {
           id: true, name: true, entityId: true, approvalChain: true, proposedAt: true, createdAt: true,
           entity: { select: { name: true } },
@@ -180,7 +190,9 @@ export async function GET() {
         },
         orderBy: { createdAt: 'asc' },
       }),
-      scopeUserIds(user),
+      // [T10-FIX2] Aktivitas & kehadiran peran pelaksana hanya tentang dirinya;
+      // peran pemantau tetap seluruh akun dalam cakupannya.
+      performer ? Promise.resolve([user.id]) : scopeUserIds(user),
     ])
 
     const activity = await db.auditLog.findMany({
@@ -214,7 +226,7 @@ export async function GET() {
 
     const [divisionRows, reportWeekly, projectDivs, outputs, deadline] = await Promise.all([
       db.division.findMany({
-        where: { ...inScope, isActive: true },
+        where: { ...inScope, isActive: true, ...(divisionScope ?? {}) },
         select: {
           id: true, name: true, entityId: true,
           entity: { select: { name: true, code: true } },
@@ -224,7 +236,7 @@ export async function GET() {
         orderBy: [{ entityId: 'asc' }, { name: 'asc' }],
       }),
       db.weeklyDivisionReport.findMany({
-        where: { ...inScope, isoYear: reportWk.isoYear, isoWeek: reportWk.isoWeek },
+        where: { ...inScope, isoYear: reportWk.isoYear, isoWeek: reportWk.isoWeek, ...(divisionScope ? { division: divisionScope } : {}) },
         select: {
           id: true, divisionId: true, statusHeader: true, submittedAt: true, isLate: true,
           submittedBy: { select: { name: true } },
@@ -258,7 +270,7 @@ export async function GET() {
         : Promise.resolve([]),
       optional(
         db.deadlineProposal.findMany({
-          where: { status: 'DIAJUKAN', project: { ...inScope } },
+          where: { status: 'DIAJUKAN', project: { ...inScope, ...(projectScope ?? {}) } },
           select: {
             id: true, projectId: true, previousDate: true, proposedDate: true, reason: true, createdAt: true, proposedById: true,
             project: { select: { name: true, entityId: true, entity: { select: { name: true } } } },
@@ -448,21 +460,49 @@ export async function GET() {
     // Divisi asal eskalasi: laporan harian → proyek → divisi; butir mingguan → laporan divisi.
     const dailySrc = escalations.filter((e) => e.sourceType === 'DAILY_REPORT').map((e) => e.sourceId)
     const weeklySrc = escalations.filter((e) => e.sourceType === 'WEEKLY_ITEM').map((e) => e.sourceId)
-    const [srcDaily, srcWeekly] = await Promise.all([
+    const taskSrc = escalations.filter((e) => e.sourceType === 'TASK').map((e) => e.sourceId)
+    const [srcDaily, srcWeekly, srcTask] = await Promise.all([
       dailySrc.length
         ? db.dailyProjectReport.findMany({ where: { id: { in: dailySrc } }, select: { id: true, projectId: true } })
         : Promise.resolve([]),
       weeklySrc.length
         ? db.weeklyReportItem.findMany({ where: { id: { in: weeklySrc } }, select: { id: true, weeklyReport: { select: { divisionId: true } } } })
         : Promise.resolve([]),
+      taskSrc.length
+        ? db.task.findMany({ where: { id: { in: taskSrc } }, select: { id: true, projectId: true } })
+        : Promise.resolve([]),
     ])
+    // [T10-FIX2, T-1] Eskalasi peran pelaksana diiris pasca-ambil: hanya yang
+    // bersumber dari proyek dalam cakupannya (laporan harian/task) atau divisi
+    // dalam cakupannya (butir mingguan). Ringkasan/keputusan yang diminta
+    // eskalasi rekan di luar cakupan tidak ikut terbaca.
+    const scopedProjectIds = new Set(projectIds)
+    const scopedDivisionIds = new Set(divisionRows.map((d) => d.id))
+    const escProjectOfTask = new Map(srcTask.map((t) => [t.id, t.projectId] as const))
+    const visibleEscalations = performer
+      ? escalations.filter((e) => {
+          if (e.sourceType === 'DAILY_REPORT') {
+            const pid = srcDaily.find((d) => d.id === e.sourceId)?.projectId
+            return pid !== undefined && scopedProjectIds.has(pid)
+          }
+          if (e.sourceType === 'WEEKLY_ITEM') {
+            const w = srcWeekly.find((s) => s.id === e.sourceId)
+            return Boolean(w && scopedDivisionIds.has(w.weeklyReport.divisionId))
+          }
+          if (e.sourceType === 'TASK') {
+            const pid = escProjectOfTask.get(e.sourceId)
+            return pid !== undefined && scopedProjectIds.has(pid)
+          }
+          return false
+        })
+      : escalations
     const rowDivision = new Map(rows.map((r) => [r.id, r.divisionId]))
     const escDivision = new Map<string, string | null>([
       ...srcDaily.map((d) => [d.id, rowDivision.get(d.projectId) ?? null] as const),
       ...srcWeekly.map((w) => [w.id, w.weeklyReport.divisionId] as const),
     ])
 
-    const esc = escalations.map((e) => {
+    const esc = visibleEscalations.map((e) => {
       const age = Math.floor((now.getTime() - e.raisedAt.getTime()) / DAY)
       return {
         divisionId: escDivision.get(e.sourceId) ?? null,
@@ -487,7 +527,7 @@ export async function GET() {
     // dipetakan ke proyek.
     const escProjectOf = new Map<string, string>(srcDaily.map((d) => [d.id, d.projectId] as const))
     const escByProject = new Map<string, ProjectEscalation[]>()
-    for (const e of escalations) {
+    for (const e of visibleEscalations) {
       if (e.sourceType !== 'DAILY_REPORT') continue
       const projectId = escProjectOf.get(e.sourceId)
       if (!projectId) continue
@@ -601,7 +641,16 @@ export async function GET() {
         entityId: d.entityId,
         entityName: d.entity.name,
         entityCode: d.entity.code,
-        head: d.headUser ? { id: d.headUser.id, name: d.headUser.name, email: d.headUser.email, phone: d.headUser.phone } : null,
+        // [T10-FIX2, T-1] Kontak kepala divisi hanya untuk peran pengawas/
+        // Admin PT yang memang menghubunginya; PIC tidak diberi email/telepon.
+        head: d.headUser
+          ? {
+              id: d.headUser.id,
+              name: d.headUser.name,
+              email: user.role === 'PIC_PROYEK' ? null : d.headUser.email,
+              phone: user.role === 'PIC_PROYEK' ? null : d.headUser.phone,
+            }
+          : null,
         projects: rows.filter((r) => r.divisionId === d.id).length,
         weekly: {
           id: w?.id ?? null,

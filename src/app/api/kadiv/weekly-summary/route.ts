@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
@@ -71,7 +72,7 @@ async function auditSummary(client: Prisma.TransactionClient, req: Request, user
     actorId: user.id, action, targetType, targetId,
     beforeData: before === undefined ? null : JSON.stringify(before),
     afterData: after === undefined ? null : JSON.stringify(after),
-    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+    ip: clientIp(req),
     userAgent: req.headers.get('user-agent') || null,
   } })
 }

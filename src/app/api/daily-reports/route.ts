@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { serverError } from '@/lib/api-error' // [F3-D]
+import { performerProjectScope } from '@/lib/pic-access'
 
 // GET /api/daily-reports - paginated daily reports with filters
 export async function GET(req: NextRequest) {
@@ -39,6 +40,10 @@ export async function GET(req: NextRequest) {
 
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)
+    // [T10-FIX2, T-1] Peran pelaksana (PIC/kepala divisi) diiris ke proyek
+    // masing-masing: isi laporan harian rekan satu PT di luar cakupannya
+    // (capaian, kendala, tindak lanjut, nama pengirim) tidak ikut terbaca.
+    const projectScope = await performerProjectScope(user)
 
     const where: Prisma.DailyProjectReportWhereInput = {
       ...(entityId ? { entityId } : {}),
@@ -48,7 +53,14 @@ export async function GET(req: NextRequest) {
       ...(search
         ? { project: { name: { contains: search } } }
         : {}),
-      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
+      ...(scopeIds || projectScope
+        ? {
+            AND: [
+              ...(scopeIds ? [{ entityId: { in: scopeIds } }] : []),
+              ...(projectScope ? [{ project: projectScope }] : []),
+            ],
+          }
+        : {}),
     }
 
     const [items, total] = await Promise.all([

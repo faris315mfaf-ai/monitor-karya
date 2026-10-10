@@ -1,22 +1,22 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
-  DAILY_CUTOFF_LABEL,
+  DAILY_CUTOFF_HOUR,
   DAILY_STATUSES,
   dailyCountdown,
   dailyLockAt,
-  isDailyLocked,
-  isWorkingDay,
+  hourLabel,
   parseWibDateKey,
   startOfWibDay,
   validateDailyReport,
   wibDateKey,
 } from '@/lib/lock'
 import { computeRollup, dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
-import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
+import { getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
@@ -38,7 +38,7 @@ import { removeEvidence, storageConfigured } from '@/lib/storage'
  * laporannya sedang dibuka.
  */
 
-const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+const ipOf = (req: NextRequest) => clientIp(req)
 
 /**
  * Tanggal laporan yang diminta (kunci "YYYY-MM-DD" WIB) atau hari ini. Menolak
@@ -89,21 +89,20 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date()
-  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), now, user.scopeEntityId)
-  if (!resolved.ok) return resolved.res
-  const day = resolved.day
   const projects = await visibleProjects(user)
   const projectIds = projects.map((p) => p.id)
 
+  // Aturan entitas untuk resolveDay dan kunci: PIC terpaku ke proyek, bukan ke
+  // entitas (scopeEntityId null), jadi entityId diambil dari proyek pertamanya.
+  const settingsEntityId = projects[0]?.entityId ?? user.scopeEntityId ?? null
+  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), now, settingsEntityId)
+  if (!resolved.ok) return resolved.res
+  const day = resolved.day
+
   // Aturan pelaporan: baca settings entity (24/7 = null cutoff → tidak terkunci).
   // Dihitung sebelum projects.map karena lockReason tiap proyek memakainya.
-  const settingsEntityId = projects[0]?.entityId ?? user.scopeEntityId
   const rptSettings = await getReportSettings(settingsEntityId)
-  const timeLocked = rptSettings.dailyCutoffHour === null
-    ? false  // 24/7: tanpa kunci waktu
-    : !rptSettings.dailyOpen
-      ? true  // ditutup eksplisit
-      : isDailyLocked(day, now)  // kunci jam bawaan/kustom
+  const timeLocked = isDailyLockedWith(rptSettings.dailyCutoffHour, rptSettings.dailyOpen, day, now)
 
   const reports = await db.dailyProjectReport.findMany({
     where: { projectId: { in: projectIds }, reportDate: day },
@@ -259,17 +258,18 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
 
   const projectId = (req.nextUrl.searchParams.get('projectId') || '').slice(0, 64)
   if (!projectId) return NextResponse.json({ error: 'Proyek wajib dipilih' }, { status: 400 })
-  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), new Date(), user.scopeEntityId)
-  if (!resolved.ok) return resolved.res
-  const day = resolved.day
 
   await lockDailyProject(db, projectId)
-  await lockDailyReport(db, projectId, day)
   const project = await db.project.findUnique({ where: { id: projectId } })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (!ownsProject(user, project)) {
     return NextResponse.json({ error: 'Proyek ini bukan tanggung jawab Anda' }, { status: 403 })
   }
+  // Tanggal laporan mengikuti aturan entitas proyek ini (workingDays per entitas).
+  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), new Date(), project.entityId)
+  if (!resolved.ok) return resolved.res
+  const day = resolved.day
+  await lockDailyReport(db, projectId, day)
 
   const existing = await db.dailyProjectReport.findUnique({
     where: { projectId_reportDate: { projectId, reportDate: day } },
@@ -289,7 +289,7 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
   if (frozen) return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: existing.id }, { status: 409 })
   if (gate.timeLocked) {
     return NextResponse.json(
-      { error: `Laporan ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}. Ajukan buka kunci untuk mengubahnya.`, locked: true, reportId: existing.id },
+      { error: `Laporan ini sudah dikunci pukul ${hourLabel(gate.settings.dailyCutoffHour ?? DAILY_CUTOFF_HOUR)}. Ajukan buka kunci untuk mengubahnya.`, locked: true, reportId: existing.id },
       { status: 409 }
     )
   }
@@ -366,20 +366,21 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     return NextResponse.json({ error: 'Status laporan tidak dikenali.' }, { status: 422 })
   }
 
-  const resolved = await resolveDay(body.reportDate, new Date(), user.scopeEntityId)
-  if (!resolved.ok) return resolved.res
-  const day = resolved.day
-
   await lockDailyProject(db, projectId)
-  await lockDailyReport(db, projectId, day)
   const project = await db.project.findUnique({ where: { id: projectId } })
   if (!project) return NextResponse.json({ error: 'Proyek tidak ditemukan' }, { status: 404 })
   if (!ownsProject(user, project)) {
     return NextResponse.json({ error: 'Proyek ini bukan tanggung jawab Anda' }, { status: 403 })
   }
+  // Tanggal laporan mengikuti aturan entitas proyek ini (workingDays per entitas,
+  // termasuk untuk PIC yang tidak punya scopeEntityId).
+  const resolved = await resolveDay(body.reportDate, new Date(), project.entityId)
+  if (!resolved.ok) return resolved.res
+  const day = resolved.day
+  await lockDailyReport(db, projectId, day)
 
   // Satu aturan untuk semua jalur tulis: dibekukan setelah diteruskan atau
-  // dikunci, terkunci setelah 17.00 — kecuali buka kunci sedang berlaku.
+  // dikunci, terkunci setelah tenggat entitas — kecuali buka kunci sedang berlaku.
   const gate = await dailyGate(projectId, day, new Date(), db)
   const frozen = frozenMessage(gate)
   if (frozen) {
@@ -389,7 +390,7 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     return NextResponse.json(
       {
         error: resolved.isToday
-          ? `Laporan hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}. Ajukan buka kunci untuk mengubahnya.`
+          ? `Laporan hari ini sudah dikunci pukul ${hourLabel(gate.settings.dailyCutoffHour ?? DAILY_CUTOFF_HOUR)}. Ajukan buka kunci untuk mengubahnya.`
           : 'Laporan tanggal ini tidak sedang dibuka. Ajukan buka kunci untuk mengubahnya.',
         locked: true,
         reportId: gate.report?.id ?? null,
@@ -444,8 +445,16 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     decisionRequestedFrom,
     needsEscalation,
     evidenceCount: effectiveEvidence,
-    // Laporan yang dikirim setelah tenggat lewat buka kunci tercatat terlambat.
-    ...(action === 'submit' ? { submittedById: user.id, submittedAt: new Date(), ...(gate.unlock && isDailyLocked(day) && !existing?.submittedAt ? { isLate: true } : {}) } : {}),
+    // Laporan yang dikirim setelah tenggat (jam entitas) lewat buka kunci tercatat terlambat.
+    ...(action === 'submit'
+      ? {
+          submittedById: user.id,
+          submittedAt: new Date(),
+          ...(gate.unlock && isDailyLockedWith(gate.settings.dailyCutoffHour, gate.settings.dailyOpen, day, new Date()) && !existing?.submittedAt
+            ? { isLate: true }
+            : {}),
+        }
+      : {}),
   }
 
   const report = existing

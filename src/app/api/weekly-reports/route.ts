@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
+import { performerDivisionScope } from '@/lib/pic-access'
 
 // GET /api/weekly-reports - paginated weekly division reports
 export async function GET(req: NextRequest) {
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
 
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)
+    // [T10-FIX2, T-1] Peran pelaksana diiris ke divisinya: kepala divisi hanya
+    // laporan divisi yang dipimpinnya, PIC divisi keanggotaannya — bukan semua
+    // divisi di PT-nya.
+    const divisionScope = await performerDivisionScope(user)
 
     const where: Prisma.WeeklyDivisionReportWhereInput = {
       ...(entityId ? { entityId } : {}),
@@ -33,7 +38,14 @@ export async function GET(req: NextRequest) {
       ] } : {}),
       ...(isoYear ? { isoYear } : {}),
       ...(isoWeek ? { isoWeek } : {}),
-      ...(scopeIds ? { AND: [{ entityId: { in: scopeIds } }] } : {}),
+      ...(scopeIds || divisionScope
+        ? {
+            AND: [
+              ...(scopeIds ? [{ entityId: { in: scopeIds } }] : []),
+              ...(divisionScope ? [{ division: divisionScope }] : []),
+            ],
+          }
+        : {}),
     }
 
     const [items, total, waiting, late] = await Promise.all([

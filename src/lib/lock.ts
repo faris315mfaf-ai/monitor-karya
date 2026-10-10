@@ -132,8 +132,19 @@ export function isoWeekOf(date: Date = new Date()): { isoYear: number; isoWeek: 
   return { isoYear: d.getUTCFullYear(), isoWeek }
 }
 
+/**
+ * Aturan mingguan per entitas (subset ReportSettings). `weeklyCutoffHour` null
+ * = tanpa batas jam (minggu tidak pernah terkunci waktunya); `weeklyOpen` false
+ * = capaian mingguan ditutup sementara. Tanpa settings, env global berlaku
+ * (perilaku lama) — pemanggil lama tidak perlu berubah.
+ */
+export type WeeklyLockSettings = {
+  weeklyCutoffHour: number | null
+  weeklyOpen: boolean
+}
+
 /** Handover (Thursday) and lock (Friday) instants for the week containing `date`. */
-export function weeklyDeadlines(date: Date = new Date()): {
+export function weeklyDeadlines(date: Date = new Date(), cutoffHour: number = WEEKLY_CUTOFF_HOUR): {
   periodStart: Date
   periodEnd: Date
   handoverBy: Date
@@ -144,13 +155,20 @@ export function weeklyDeadlines(date: Date = new Date()): {
   return {
     periodStart: start,
     periodEnd: new Date(start.getTime() + 6 * dayMs),
-    handoverBy: wibHourOn(new Date(start.getTime() + (WEEKLY_HANDOVER_DAY - 1) * dayMs), WEEKLY_CUTOFF_HOUR),
-    lockAt: wibHourOn(new Date(start.getTime() + (WEEKLY_LOCK_DAY - 1) * dayMs), WEEKLY_CUTOFF_HOUR),
+    handoverBy: wibHourOn(new Date(start.getTime() + (WEEKLY_HANDOVER_DAY - 1) * dayMs), cutoffHour),
+    lockAt: wibHourOn(new Date(start.getTime() + (WEEKLY_LOCK_DAY - 1) * dayMs), cutoffHour),
   }
 }
 
-export function isWeeklyLocked(periodStart: Date, now: Date = new Date()): boolean {
-  return now >= weeklyDeadlines(periodStart).lockAt
+/**
+ * Apakah minggu sudah terkunci. Settings opsional (jam kunci entitas dan
+ * buka/tutup); tanpa settings, kunci Jumat 17.00 env berlaku seperti sebelumnya.
+ */
+export function isWeeklyLocked(periodStart: Date, now: Date = new Date(), settings?: WeeklyLockSettings | null): boolean {
+  if (settings && !settings.weeklyOpen) return true // ditutup sementara → selalu terkunci
+  const cutoffHour = settings?.weeklyCutoffHour
+  if (cutoffHour === null) return false // tanpa batas jam → tidak pernah terkunci waktu
+  return now >= weeklyDeadlines(periodStart, cutoffHour ?? WEEKLY_CUTOFF_HOUR).lockAt
 }
 
 /** Laporan mingguan yang sudah diteruskan Admin PT ke holding dibekukan (6 Okt 2026). */
@@ -158,7 +176,7 @@ export const WEEKLY_FROZEN_MESSAGE =
   'Laporan minggu ini sudah diteruskan ke holding dan dibekukan. Perubahan hanya lewat permohonan buka kunci yang disetujui.'
 
 export type WeeklyWriteBlock = {
-  reason: 'FUTURE_WEEK' | 'FORWARDED' | 'PAST_WEEK' | 'TIME_LOCKED' | 'REPORT_LOCKED'
+  reason: 'FUTURE_WEEK' | 'FORWARDED' | 'PAST_WEEK' | 'TIME_LOCKED' | 'REPORT_LOCKED' | 'CLOSED'
   message: string
 }
 
@@ -169,20 +187,31 @@ export type WeeklyWriteBlock = {
  *   1. Buka kunci yang sedang berlaku (UnlockRequest DIEKSEKUSI, belum lewat
  *      `unlockUntil`) mengangkat semua kunci — kunci jam, kunci baris, dan
  *      pembekuan setelah diteruskan. Buka kunci selalu menunjuk satu laporan.
- *   2. Minggu yang belum berjalan tidak bisa diisi.
- *   3. Laporan yang sudah diteruskan ke holding dibekukan.
- *   4. Minggu yang sudah lewat hanya dibaca.
- *   5. Minggu berjalan terkunci sejak Jumat 17.00 WIB (WEEKLY_LOCK_LABEL).
- *   6. Baris yang dikunci (isLocked / TERKUNCI) tetap terkunci.
+ *   2. Capaian mingguan yang ditutup sementara lewat aturan entitas
+ *      (`weeklyOpen: false`) menolak semua tulis.
+ *   3. Minggu yang belum berjalan tidak bisa diisi.
+ *   4. Laporan yang sudah diteruskan ke holding dibekukan.
+ *   5. Minggu yang sudah lewat hanya dibaca.
+ *   6. Minggu berjalan terkunci sejak jam kunci mingguan entitas
+ *      (bawaan Jumat 17.00 WIB, WEEKLY_LOCK_LABEL).
+ *   7. Baris yang dikunci (isLocked / TERKUNCI) tetap terkunci.
  */
 export function weeklyWriteBlock(input: {
   period: { key: string; start: Date }
   report: { isLocked: boolean; statusHeader: string; forwardedAt: Date | null } | null
   unlocked: boolean
   now?: Date
+  /** Aturan mingguan entitas (ReportSettings); tanpa ini env global berlaku. */
+  settings?: WeeklyLockSettings | null
 }): WeeklyWriteBlock | null {
   const now = input.now ?? new Date()
   if (input.unlocked && input.report) return null
+  if (input.settings && !input.settings.weeklyOpen) {
+    return {
+      reason: 'CLOSED',
+      message: 'Capaian mingguan sedang ditutup sementara melalui aturan pelaporan perusahaan. Buka kunci yang disetujui tetap bisa dipakai untuk koreksi.',
+    }
+  }
   const current = isoWeekStart(now).getTime()
   const start = input.period.start.getTime()
   if (start > current) {
@@ -195,10 +224,12 @@ export function weeklyWriteBlock(input: {
       message: 'Hanya minggu berjalan yang bisa diisi. Minggu lain hanya dibaca; ajukan permohonan buka kunci untuk mengubahnya.',
     }
   }
-  if (isWeeklyLocked(input.period.start, now)) {
+  if (isWeeklyLocked(input.period.start, now, input.settings)) {
+    const cutoff = input.settings?.weeklyCutoffHour
+    const label = typeof cutoff === 'number' ? `${DAY_NAMES_ID[WEEKLY_LOCK_DAY]} ${hourLabel(cutoff)}` : WEEKLY_LOCK_LABEL
     return {
       reason: 'TIME_LOCKED',
-      message: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}). Ajukan permohonan buka kunci.`,
+      message: `Minggu ini sudah dikunci (${label}). Ajukan permohonan buka kunci.`,
     }
   }
   if (input.report && (input.report.isLocked || input.report.statusHeader === 'TERKUNCI')) {

@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
@@ -76,7 +77,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Tidak ada yang diubah.' }, { status: 422 })
 
   try {
-    const r = await setRule(entityId, kind, patch, { id: user.id, name: user.name }, req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null)
+    const r = await setRule(entityId, kind, patch, { id: user.id, name: user.name }, clientIp(req))
     return NextResponse.json({ ok: true, ...r })
   } catch (err) {
     return serverError(err, 'Gagal menyimpan pengingat. Coba lagi.', 'admin/reminder-rules PATCH')

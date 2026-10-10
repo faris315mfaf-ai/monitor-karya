@@ -21,9 +21,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /** Badan JSON biasa: logo perusahaan (maks 400 rb karakter) adalah yang terbesar. */
 const JSON_MAX_BYTES = 1024 * 1024
-/** Unggah bukti: 20 MB berkas + kelonggaran pembungkus multipart. */
+/** Unggah berkas: 20 MB berkas + kelonggaran pembungkus multipart. */
 const UPLOAD_MAX_BYTES = 21 * 1024 * 1024
-const UPLOAD_PATH = '/api/evidence/upload'
+/** Jalur unggah multipart — batas rute masing-masing 20 MB (MAX_EVIDENCE_BYTES). */
+const UPLOAD_PATHS = new Set(['/api/evidence/upload', '/api/approval-requests/berkas'])
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ error }, { status })
@@ -77,7 +78,7 @@ function guardApi(req: NextRequest): NextResponse | null {
     return jsonError(403, 'Permintaan lintas situs ditolak.')
   }
 
-  const max = req.nextUrl.pathname === UPLOAD_PATH ? UPLOAD_MAX_BYTES : JSON_MAX_BYTES
+  const max = UPLOAD_PATHS.has(req.nextUrl.pathname) ? UPLOAD_MAX_BYTES : JSON_MAX_BYTES
   const raw = req.headers.get('content-length')
   if (raw !== null) {
     const len = Number(raw)

@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
 import { serverError } from '@/lib/api-error'
-import { limitReminders } from '@/lib/security'
+import { clientIp, limitReminders } from '@/lib/security'
 import { DAILY_CUTOFF_LABEL, isDailyLocked, startOfWibDay } from '@/lib/lock'
 import { DAILY_PIC_TEMPLATE, remindPicsDaily, type RemindActor } from '@/lib/reminders-pic'
 import { groupProjectsByDivision, scopeDivisions, scopeProjects } from '@/lib/admin-compliance-server'
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
     const actor: RemindActor = { kind: 'user', id: user.id, name: user.name, role: user.role, scopeEntityId: user.scopeEntityId }
     const meta = {
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
     }
     const { sent, skipped } = await remindPicsDaily(actor, targets, today, meta)

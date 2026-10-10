@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { isMasterRole } from '@/lib/rbac'
+import { clientIp } from '@/lib/security'
 
 /**
  * Hubungan akun dengan satu proyek, untuk fitur PIC (6 Okt 2026): output,
@@ -158,6 +159,43 @@ export async function projectScopeWhere(user: SessionUser): Promise<Record<strin
 }
 
 /**
+ * Irisan tambahan endpoint pemantauan untuk peran pelaksana (T10-FIX2, temuan
+ * T-1): PIC hanya baris yang lewat proyeknya sendiri, kepala divisi hanya
+ * proyek divisi yang dipimpinnya. null untuk peran pemantau — cakupan entitas/
+ * grup tetap ditangani `scopeEntityIds` di tiap route, seperti sebelumnya.
+ * Dipakai sebagai `{ project: await performerProjectScope(user) }`.
+ */
+export async function performerProjectScope(user: SessionUser): Promise<Record<string, unknown> | null> {
+  if (user.role !== 'PIC_PROYEK' && user.role !== 'KEPALA_DIVISI') return null
+  return projectScopeWhere(user)
+}
+
+/**
+ * Saringan Division sepola `performerProjectScope` untuk baris berelasi divisi
+ * (laporan mingguan, ringkasan divisi): kepala divisi hanya divisi yang
+ * dipimpinnya; PIC divisi keanggotaannya. null untuk peran pemantau.
+ */
+export async function performerDivisionScope(user: SessionUser): Promise<Record<string, unknown> | null> {
+  if (user.role === 'KEPALA_DIVISI') return { headUserId: user.id, isActive: true }
+  if (user.role === 'PIC_PROYEK') {
+    const row = await db.user.findUnique({ where: { id: user.id }, select: { divisionId: true } })
+    return { id: row?.divisionId ?? '__none__' }
+  }
+  return null
+}
+
+/**
+ * 403 untuk endpoint pemantauan agregat (dasbor grup/PT, insiden keterlambatan,
+ * grafik manajemen): hanya peran pengawas — termasuk Admin PT dan Direktur
+ * Entitas untuk PT-nya — yang boleh; PIC dan kepala divisi memakai dasbor
+ * masing-masing. (T10-FIX2, temuan T-1.)
+ */
+export function refusePerformer(user: SessionUser, message?: string): NextResponse | null {
+  if (user.role !== 'PIC_PROYEK' && user.role !== 'KEPALA_DIVISI') return null
+  return NextResponse.json({ error: message ?? 'Modul ini hanya untuk peran pemantau.' }, { status: 403 })
+}
+
+/**
  * Saringan proyek kepala divisi [F1-D], cermin dari projectDivisionIds: proyek
  * divisinya, proyek tanpa divisi yang PIC-nya anggota divisinya, dan proyek
  * tanpa divisi yang PIC-nya ia sendiri (tanpa divisi anggota) di PT yang ia
@@ -243,7 +281,9 @@ export async function auditPic(
       targetId,
       beforeData: before === undefined ? null : JSON.stringify(before),
       afterData: after === undefined ? null : JSON.stringify(after),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      // [T10-FIX2] clientIp memakai entri TERAKHIR x-forwarded-for — entri
+      // pertama bisa diisi klien untuk memalsukan jejak audit.
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent') || null,
     },
   })

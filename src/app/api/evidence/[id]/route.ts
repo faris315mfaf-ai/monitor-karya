@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
@@ -78,7 +79,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       targetType: evidence.targetType,
       targetId: evidence.targetId,
       beforeData: JSON.stringify({ fileName: evidence.fileName, storageKey: evidence.storageKey }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 

@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest) {
           targetType: 'DAILY_REPORT',
           targetId: id,
           afterData: JSON.stringify({ forwardedAt: now.toISOString(), locked: true }),
-          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          ip: clientIp(req),
         },
       })
       // [F2-URUNGKAN] Urungkan penerusan memulihkan forwardedAt/isLocked/lockedAt persis sebelumnya.
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
         targetType: 'WEEKLY_REPORT',
         targetId: id,
         afterData: JSON.stringify({ forwardedAt: new Date().toISOString() }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
     // [F2-URUNGKAN]

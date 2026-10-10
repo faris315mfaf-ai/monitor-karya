@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
+import { refusePerformer } from '@/lib/pic-access'
 import { Prisma } from '@prisma/client'
 import { serverError } from '@/lib/api-error' // [F3-D]
 
@@ -11,6 +12,10 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
+    // [T10-FIX2, T-1] Insiden keterlambatan berulang adalah data kepatuhan
+    // tingkat PT — bukan muatan peran pelaksana.
+    const forbidden = refusePerformer(user)
+    if (forbidden) return forbidden
     const sp = req.nextUrl.searchParams
     const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
     const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))

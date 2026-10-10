@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
@@ -121,7 +122,7 @@ export async function POST(req: NextRequest) {
         targetType: 'PROJECT',
         targetId: projectId,
         afterData: JSON.stringify({ slot, signerRole: user.role, decision, note, lifecycle }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
         userAgent: req.headers.get('user-agent') || null,
       },
     })

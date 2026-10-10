@@ -1,28 +1,28 @@
 /* Monitor Karya — service worker "daring-duluan, singgah saat luring".
  *
- * Tujuan (keputusan pemilik 8 Okt 2026): aplikasi tetap TERBUKA dan data yang
- * terakhir dimuat tetap TERBACA saat koneksi putus sesaat. Tulis (POST/PUT/
- * PATCH/DELETE) selalu ke jaringan — tanpa antrean, karena tenggat 17.00 WIB,
- * pembekuan laporan, dan konflik 409 wajib divalidasi server saat kirim.
+ * Tujuan (keputusan pemilik 8 Okt 2026; penyempurnaan privasi 10 Okt 2026,
+ * temuan T10-AUD4): aplikasi tetap TERBUKA dan halaman yang terakhir dibuka
+ * tetap TERBACA saat koneksi putus sesaat. Tulis (POST/PUT/PATCH/DELETE)
+ * selalu ke jaringan — tanpa antrean, karena tenggat 17.00 WIB, pembekuan
+ * laporan, dan konflik 409 wajib divalidasi server saat kirim.
  *
  * Strategi:
  *  - Navigasi: daring-duluan (timeout 5 dtk) → cache halaman → /luring.html.
- *  - GET /api/*: daring-duluan, simpan salinan 200 (maks 80 entri, buang
- *    tertua); saat luring sajikan salinan terakhir (data bisa lama — halaman
- *    menandainya lewat toast luring).
  *  - Aset statis (_next/static, ikon, logo): stale-while-revalidate.
- *  - Jangan pernah menyentuh /api/auth/*, /api/cron/*, /api/health*.
+ *  - Respons API TIDAK PERNAH di-cache dan tidak disajikan dari simpanan:
+ *    /api/* membawa data pengguna (PII) yang tidak boleh menetap di
+ *    CacheStorage lintas sesi/pengguna. Versi mk-sw-v1 pernah meng-cache
+ *    respons API; rotasi nama versi ke v2 membuat cache lama itu terhapus
+ *    otomatis saat SW baru aktif.
+ *  - Pesan { type: 'CLEAR_CACHES' } dari klien (dikirim saat logout) menghapus
+ *    semua cache SW di perangkat.
  */
-const VERSI = 'mk-sw-v1'
+const VERSI = 'mk-sw-v2'
 const CACHE_STATIS = `${VERSI}-statis`
 const CACHE_API = `${VERSI}-api`
-const BATAS_API = 80
 const TIMEOUT_DARING = 5000
 
 const PRA_CACHE = ['/luring.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/logo.svg']
-
-const JANGAN_CACHE_API = (path) =>
-  path.startsWith('/api/auth/') || path.startsWith('/api/cron/') || path.startsWith('/api/health')
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -38,20 +38,25 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+/* Logout: klien meminta semua simpanan dihapus agar tidak ada sisa data
+ * pengguna di perangkat bersama (respons API memang sudah tidak di-cache;
+ * ini membersihkan sisa versi lama dan cache statis halaman). */
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'CLEAR_CACHES') return
+  event.waitUntil(
+    (async () => {
+      await caches.delete(CACHE_API)
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    })()
+  )
+})
+
 function daringDenganTimeout(request, ms) {
   return Promise.race([
     fetch(request),
     new Promise((_, tolak) => setTimeout(() => tolak(new Error('timeout-daring')), ms)),
   ])
-}
-
-async function cacheApiPut(request, response) {
-  const cache = await caches.open(CACHE_API)
-  await cache.put(request, response.clone())
-  const keys = await cache.keys()
-  if (keys.length > BATAS_API) {
-    for (const k of keys.slice(0, keys.length - BATAS_API)) await cache.delete(k)
-  }
 }
 
 async function navHandler(event) {
@@ -63,28 +68,6 @@ async function navHandler(event) {
     if (tersimpan) return tersimpan
     const luring = await caches.match('/luring.html')
     return luring || Response.error()
-  }
-}
-
-async function apiHandler(event) {
-  try {
-    const res = await daringDenganTimeout(event.request, TIMEOUT_DARING)
-    if (res && res.status === 200) event.waitUntil(cacheApiPut(event.request, res.clone()))
-    return res
-  } catch {
-    const tersimpan = await caches.match(event.request, { ignoreVary: true })
-    if (tersimpan) {
-      // Tandai basi agar UI tahu data ini dari simpanan luring.
-      const badan = await tersimpan.clone().json().catch(() => null)
-      return new Response(JSON.stringify(badan ?? {}), {
-        status: tersimpan.status,
-        headers: { ...Object.fromEntries(tersimpan.headers.entries()), 'x-mk-dari-luring': '1', 'content-type': 'application/json' },
-      })
-    }
-    return new Response(JSON.stringify({ error: 'Anda sedang luring dan data ini belum pernah dimuat.' }), {
-      status: 503,
-      headers: { 'content-type': 'application/json', 'x-mk-dari-luring': '1' },
-    })
   }
 }
 
@@ -105,16 +88,15 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
-  if (JANGAN_CACHE_API(url.pathname)) return
 
   if (req.mode === 'navigate') {
     event.respondWith(navHandler(event))
     return
   }
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(apiHandler(event))
-    return
-  }
+  // Semua /api/* dibiarkan langsung ke jaringan: responsnya berisi data
+  // pengguna dan tidak boleh disimpan atau disajikan ulang lintas sesi.
+  if (url.pathname.startsWith('/api/')) return
+
   if (url.pathname.startsWith('/_next/') || PRA_CACHE.includes(url.pathname)) {
     event.respondWith(statisHandler(event))
   }

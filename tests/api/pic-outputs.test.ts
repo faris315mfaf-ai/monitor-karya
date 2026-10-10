@@ -169,7 +169,10 @@ describe('POST /api/outputs — buat output', () => {
     const [a] = auditsOf('CREATE_OUTPUT')
     expect(a.actorId).toBe('pic-1')
     expect(a.after).toEqual({ title: 'Desain halaman', projectId: 'p-1' })
-    expect(a.ip).toBe('10.0.0.9')
+    // [T10-FIX2, S-4] Header tes: "10.0.0.9, 10.0.0.1" — entri TERAKHIR yang
+    // ditambahkan proxy tepercaya yang dicatat jejak audit (clientIp), bukan
+    // entri pertama yang bisa diisi klien untuk memalsukan IP.
+    expect(a.ip).toBe('10.0.0.1')
     expect(a.userAgent).toBe('vitest')
   })
 

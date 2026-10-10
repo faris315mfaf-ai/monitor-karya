@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Icon, LogoMark } from '@/components/mk'
+import { hapusCacheServiceWorker } from '@/components/sw-provider'
 import { Input } from '@/components/mk/forms'
 import { Label } from '@/components/mk/forms'
 
@@ -51,6 +52,7 @@ export function ForcedPasswordForm({ name, minLength }: { name: string; minLengt
   async function signOut() {
     setLeaving(true)
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null)
+    hapusCacheServiceWorker()
     window.location.replace('/login')
   }
 

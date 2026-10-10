@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, resolveScopeEntityId, scopeUserIds } from '@/lib/auth'
+import { refusePerformer } from '@/lib/pic-access'
 import { startOfTodayWIB, endOfTodayWIB, monthKeyNow, ageDays } from '@/lib/wib'
 
 // GET /api/dashboard - aggregated root dashboard for management/holding view
 export async function GET(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+  // [T10-FIX2, T-1] Dasbor agregat hanya untuk peran pengawas (termasuk Admin
+  // PT & Direktur Entitas untuk PT-nya); PIC dan kepala divisi memakai dasbor
+  // masing-masing (/api/my-dashboard), bukan seluruh data PT.
+  const forbidden = refusePerformer(user)
+  if (forbidden) return forbidden
   const unscoped = refuseUnscoped(user)
   if (unscoped) return unscoped
   // A scoped role is pinned to its own subtree; the query parameter can only

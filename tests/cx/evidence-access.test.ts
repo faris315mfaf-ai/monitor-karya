@@ -1,14 +1,9 @@
 vi.mock('@/lib/report-settings', () => ({
   getReportSettings: async () => ({ dailyCutoffHour: 17, workingDays: [1,2,3,4,5], dailyOpen: true, weeklyCutoffHour: 17, weeklyOpen: true }),
   isWorkingDayWith: (wd: number[], d: Date) => wd.length === 0 || wd.includes(d.getUTCDay() === 0 ? 7 : d.getUTCDay()),
-  isDailyLockedWith: (c: number|null, o: boolean, r: Date, n: Date) => {
-    if (!o) return true
-    if (c === null) return false
-    const WIB = 7 * 3600000
-    const wib = new Date(r.getTime() + WIB)
-    const lock = new Date(Date.UTC(wib.getUTCFullYear(), wib.getUTCMonth(), wib.getUTCDate(), c, 0, 0) - WIB)
-    return n >= lock
-  },
+  // dailyGate kini memakai isDailyLockedWith (settings), bukan isDailyLocked
+  // (env) — satu jahitan mock yang sama mengendalikan keduanya.
+  isDailyLockedWith: () => mocks.dailyLocked(),
 }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth'
@@ -25,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({ db: {
   dailyProjectReport: { findUnique: mocks.daily },
+  // dailyGate membaca entityId dari project saat laporan belum ada.
+  project: { findUnique: vi.fn(async () => ({ entityId: 'entity' })) },
   weeklyReportItem: { findUnique: mocks.weeklyItem },
   task: { findUnique: mocks.task },
   unlockRequest: { findFirst: mocks.unlock },

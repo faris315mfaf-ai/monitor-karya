@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
@@ -211,7 +212,7 @@ export async function POST(req: NextRequest) {
           targetType: 'ENTITY',
           targetId: entity.id,
           afterData: JSON.stringify({ code, name, type: isHolding ? 'HOLDING' : 'PT', accounts: accounts.map((a) => a.username) }),
-          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          ip: clientIp(req),
         },
       })
       return { entity, accounts }
@@ -267,7 +268,7 @@ export async function PATCH(req: NextRequest) {
       targetId: id,
       beforeData: JSON.stringify({ name: existing.name, isActive: existing.isActive }),
       afterData: JSON.stringify({ ...data, logoData: data.logoData === undefined ? undefined : data.logoData ? '(logo)' : null }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 
@@ -322,7 +323,7 @@ export async function DELETE(req: NextRequest) {
         targetType: 'ENTITY',
         targetId: id,
         beforeData: JSON.stringify({ code: existing.code, name: existing.name }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
   })

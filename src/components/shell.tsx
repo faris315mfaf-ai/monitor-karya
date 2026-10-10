@@ -14,6 +14,7 @@ import { useTheme } from 'next-themes'
 import * as Popover from '@radix-ui/react-popover'
 import { useApp } from '@/components/app-provider'
 import { SettingsDialog } from '@/components/settings-dialog'
+import { hapusCacheServiceWorker } from '@/components/sw-provider'
 import { Dock, type DockItem, type DockLayout } from '@/components/dock'
 import { switchNav } from '@/lib/nav-transition'
 import { Switch } from '@/components/mk/forms'
@@ -305,6 +306,7 @@ function useSignOut() {
       setBusy(false)
       return
     }
+    hapusCacheServiceWorker()
     router.replace('/login')
     router.refresh()
   }

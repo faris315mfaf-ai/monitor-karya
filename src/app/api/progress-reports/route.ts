@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
@@ -13,6 +14,7 @@ import {
   type ProgressCadence,
 } from '@/lib/lock'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
+import { guardProjectAccess, READ_RELATIONS } from '@/lib/pic-access'
 
 /**
  * Laporan kemajuan proyek per MINGGU dan per BULAN (7 Sep 2026) — pelengkap
@@ -83,7 +85,9 @@ export async function GET(req: NextRequest) {
   const cadence = parseCadence(req.nextUrl.searchParams.get('cadence'))
   if (!cadence) return NextResponse.json({ error: 'Kadens tidak dikenali' }, { status: 400 })
 
-  const guard = await guardProject(user, projectId, false)
+  // [T10-FIX2, T-2] Baca memakai relasi penuh (guardProjectAccess) agar kepala
+  // divisi hanya membaca laporan kemajuan proyek divisinya, bukan se-PT.
+  const guard = await guardProjectAccess(user, projectId, READ_RELATIONS)
   if (!guard.ok) return guard.res
 
   const periods = Array.from({ length: PERIODS_SHOWN[cadence] }, (_, i) => periodOf(cadence, i))
@@ -218,7 +222,7 @@ export async function PUT(req: NextRequest) {
       targetId: report.id,
       beforeData: existing ? JSON.stringify({ status: existing.status, progressPct: existing.progressPct }) : null,
       afterData: JSON.stringify({ cadence, periodKey: period.key, status, progressPct }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
       userAgent: req.headers.get('user-agent') || null,
     },
   })
@@ -270,7 +274,7 @@ export async function DELETE(req: NextRequest) {
       targetType: 'PROGRESS_REPORT',
       targetId: id,
       beforeData: JSON.stringify({ cadence: existing.cadence, periodKey: existing.periodKey, status: existing.status }),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 

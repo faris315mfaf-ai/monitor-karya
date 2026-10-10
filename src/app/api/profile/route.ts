@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
@@ -116,7 +117,7 @@ export async function PATCH(req: NextRequest) {
       targetId: user.id,
       beforeData: JSON.stringify({ name: user.name }),
       afterData: JSON.stringify(data),
-      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip: clientIp(req),
     },
   })
 

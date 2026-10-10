@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
         targetType: 'ESCALATION',
         targetId: escalation.id,
         afterData: JSON.stringify({ sourceType, sourceId, needed, summary }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
 
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
         targetId: id,
         beforeData: JSON.stringify({ status: escalation.status }),
         afterData: JSON.stringify({ status: updated.status, decisionText }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
     const undoToken = await undoFor('DECIDE_ESCALATION', user.id, escalation, updated)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, scopeEntityIds } from '@/lib/auth'
+import { performerDivisionScope, performerProjectScope } from '@/lib/pic-access'
 import { isoWeekOf, monthPeriodOf, parseWibDateKey, startOfWibDay, weekPeriodOf, wibDateKey } from '@/lib/lock'
 
 /**
@@ -56,6 +57,11 @@ export async function GET(req: NextRequest) {
   const week = isoWeekOf(cadence === 'HARIAN' ? anchor : period.start)
 
   const scopeIds = await scopeEntityIds(user)
+  // [T10-FIX2, T-1] Peran pelaksana diiris: task/laporan proyek mengikuti
+  // proyeknya (PIC) atau proyek divisinya (kepala divisi); item mingguan
+  // mengikuti divisinya. Peran pemantau tetap seluruh PT dalam cakupannya.
+  const projectScope = await performerProjectScope(user)
+  const divisionScope = await performerDivisionScope(user)
   const entities = await db.entity.findMany({
     where: { type: 'PT', isActive: true, ...(scopeIds ? { id: { in: scopeIds } } : {}) },
     select: { id: true, code: true, name: true, region: true },
@@ -71,12 +77,12 @@ export async function GET(req: NextRequest) {
 
   const [projects, divisions, tasks, dailyReports, weeklyReports, progressReports] = await Promise.all([
     db.project.findMany({
-      where: { ...inScope, lifecycle: 'AKTIF' },
+      where: { ...inScope, lifecycle: 'AKTIF', ...(projectScope ?? {}) },
       select: { id: true, entityId: true, code: true, name: true, phase: true, picName: true, picUser: { select: { name: true } } },
       orderBy: { code: 'asc' },
     }),
     db.division.findMany({
-      where: { ...inScope, isActive: true },
+      where: { ...inScope, isActive: true, ...(divisionScope ?? {}) },
       select: { id: true, entityId: true, name: true, headUser: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
@@ -86,6 +92,7 @@ export async function GET(req: NextRequest) {
         workDate: range,
         ...(cadence === 'HARIAN' ? { scope: 'HARIAN' } : {}),
         ...taskPriority,
+        ...(projectScope ? { project: projectScope } : {}),
       },
       select: {
         id: true,
@@ -107,7 +114,7 @@ export async function GET(req: NextRequest) {
       orderBy: [{ workDate: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
     }),
     db.dailyProjectReport.findMany({
-      where: { ...inScope, reportDate: range },
+      where: { ...inScope, reportDate: range, ...(projectScope ? { project: projectScope } : {}) },
       select: {
         id: true,
         entityId: true,
@@ -128,6 +135,7 @@ export async function GET(req: NextRequest) {
       where: {
         ...inScope,
         ...(cadence === 'BULANAN' ? { periodStart: range } : { isoYear: week.isoYear, isoWeek: week.isoWeek }),
+        ...(divisionScope ? { division: divisionScope } : {}),
       },
       select: {
         id: true,
@@ -167,7 +175,7 @@ export async function GET(req: NextRequest) {
     cadence === 'HARIAN'
       ? Promise.resolve([])
       : db.projectProgressReport.findMany({
-          where: { ...inScope, cadence, periodKey: period.key },
+          where: { ...inScope, cadence, periodKey: period.key, ...(projectScope ? { project: projectScope } : {}) },
           select: {
             id: true,
             projectId: true,

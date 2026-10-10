@@ -1,3 +1,4 @@
+import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
           targetType: 'USER',
           targetId: created.id,
           afterData: JSON.stringify({ username: created.username, role: created.role, entity: entity?.code ?? null, ...(typeof member === 'string' ? { memberDivisionId: member } : {}) }),
-          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          ip: clientIp(req),
         },
       })
       return created
@@ -259,7 +260,7 @@ export async function PATCH(req: NextRequest) {
           targetId: id,
           beforeData: JSON.stringify({ name: existing.name, username: existing.username, role: existing.role, isActive: existing.isActive, memberDivisionId: existing.divisionId }),
           afterData: JSON.stringify(audit),
-          ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          ip: clientIp(req),
         },
       })
       return { ...updated, ...link }
@@ -304,7 +305,7 @@ export async function DELETE(req: NextRequest) {
         targetType: 'USER',
         targetId: id,
         beforeData: JSON.stringify({ username: existing.username, name: existing.name, role: existing.role }),
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip: clientIp(req),
       },
     })
   })
