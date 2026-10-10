@@ -16,6 +16,7 @@ import {
   wibDateKey,
 } from '@/lib/lock'
 import { computeRollup, dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
+import { getReportSettings } from '@/lib/report-settings'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
@@ -145,7 +146,14 @@ export async function GET(req: NextRequest) {
     : []
   const untilById = new Map(otherActive.map((u) => [u.targetId, u.unlockUntil]))
 
-  const timeLocked = isDailyLocked(day, now)
+  // Aturan pelaporan: baca settings entity (24/7 = null cutoff → tidak terkunci).
+  const settingsEntityId = projects[0]?.entityId ?? user.scopeEntityId
+  const rptSettings = await getReportSettings(settingsEntityId)
+  const timeLocked = rptSettings.dailyCutoffHour === null
+    ? false  // 24/7: tanpa kunci waktu
+    : !rptSettings.dailyOpen
+      ? true  // ditutup eksplisit
+      : isDailyLocked(day, now)  // kunci jam bawaan/kustom
 
   return NextResponse.json({
     reportDate: day.toISOString(),
@@ -154,7 +162,7 @@ export async function GET(req: NextRequest) {
     todayKey: wibDateKey(now),
     lockAt: dailyLockAt(day).toISOString(),
     locked: timeLocked,
-    countdown: dailyCountdown(now),
+    countdown: rptSettings.dailyCutoffHour === null ? null : dailyCountdown(now),
     canRequestUnlock: can(user.role, 'unlock:request'),
     openDays: openReports.map((r) => ({
       reportId: r.id,
