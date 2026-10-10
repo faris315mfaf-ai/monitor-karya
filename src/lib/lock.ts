@@ -83,6 +83,12 @@ export function dailyLockAt(reportDate: Date): Date {
   return wibHourOn(reportDate, DAILY_CUTOFF_HOUR)
 }
 
+/** Jam batas dengan settings entity: null = tanpa batas (24/7). */
+export function dailyLockAtWith(reportDate: Date, cutoffHour: number | null): Date | null {
+  if (cutoffHour === null) return null
+  return wibHourOn(reportDate, cutoffHour)
+}
+
 export function isDailyLocked(reportDate: Date, now: Date = new Date()): boolean {
   return now >= dailyLockAt(reportDate)
 }

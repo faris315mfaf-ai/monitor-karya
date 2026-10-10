@@ -47,6 +47,7 @@ model Entity {
   tasks          Task[]
   progressReports ProjectProgressReport[]
   relatedProjects ProjectEntity[]
+  reportSettings ReportSettings?
 
   // Indeks FK hasil migrasi 0003–0012; dideklarasikan agar prisma migrate
   // tidak mengusulkan penghapusannya (drift lama 0001–0012, tuntas 8 Okt 2026).
@@ -1127,4 +1128,26 @@ model UndoToken {
 
   @@index([actorId, createdAt])
   @@index([targetType, targetId])
+}
+
+/// Pengaturan aturan pelaporan per entitas (keputusan pemilik 10 Okt 2026).
+/// Satu baris per entitas; baris pertama dibuat otomatis dengan bawaan 24/7.
+model ReportSettings {
+  id        String   @id @default(cuid())
+  entityId  String   @unique
+  entity    Entity   @relation(fields: [entityId], references: [id])
+  /// Jam batas pengumpulan harian WIB (0-23); null = tanpa batas (24/7).
+  dailyCutoffHour Int?
+  /// Hari kerja yang wajib lapor (1=Senin..7=Minggu); kosong = setiap hari.
+  workingDays     Int[]   @default([])
+  /// false = pengisian dan pengiriman laporan harian ditutup sementara.
+  dailyOpen       Boolean @default(true)
+  /// Jam batas serah mingguan WIB; null = tanpa batas.
+  weeklyCutoffHour Int?
+  /// false = capaian mingguan ditutup sementara.
+  weeklyOpen      Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId])
 }

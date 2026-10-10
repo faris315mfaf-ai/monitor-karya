@@ -10,6 +10,7 @@
 import { PageHeader, Skeleton } from '@/components/mk'
 import { formatDateLong } from '@/lib/format'
 import { ComplianceCard, ComplianceHeatmapCard, useCompliance } from '@/components/admin/compliance'
+import { ReportSettingsCard } from '@/components/admin/report-settings-card'
 
 export function StatistikView() {
   const compliance = useCompliance()
@@ -31,6 +32,7 @@ export function StatistikView() {
       {answer ? <p className="t-title-3 text-ink">{answer}</p> : compliance.loading ? <Skeleton h={26} w="60%" /> : null}
       <ComplianceCard state={compliance} />
       <ComplianceHeatmapCard state={compliance} />
+      <ReportSettingsCard entityId={null} />
     </>
   )
 }
