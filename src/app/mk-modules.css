@@ -643,3 +643,13 @@ button.mk-card--inset:active { transform: scale(0.99); }
   .mk-bars__col:active, button.mk-card--inset:active { transform: none; }
   button.mk-card--inset:hover { transform: none; }
 }
+
+/* Banner mode pratinjau peran (Beralih Akun). */
+.mk-pratinjau-banner {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent-soft); color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.mk-pratinjau-banner .t-footnote { flex: 1 1 200px; }
