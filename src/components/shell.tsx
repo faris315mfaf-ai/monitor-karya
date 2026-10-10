@@ -43,7 +43,6 @@ const TAB_ICONS: Record<NavTabId, IconName> = {
   entities: 'gedung',
   audit: 'aktivitas',
   system: 'kunci',
-  beralih: 'tukar',
 }
 
 /** Label nav per peran; PIC membuka harinya dengan "Hari ini". */
@@ -431,9 +430,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const dockMode = prefs.nav === 'dock'
   const notes = useNotifications()
   // Badge nav per tab, mis. "Laporan harian 1" untuk PIC (hilang setelah terkirim).
-  const { viewAsRole, setViewAsRole, effectiveUser } = useApp()
-  const effectiveRole = viewAsRole ?? user.role
-  const navBadges = useNavBadges(effectiveRole, activeTab)
+  const navBadges = useNavBadges(user.role, activeTab)
 
   // Tata letak mengikuti breakpoint panduan (12 · Perangkat & navigasi).
   // Range syntax yang sama dengan CSS (globals.css: `width < 1024px`, `width < 600px`),
@@ -446,7 +443,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const barLabel = layout === 'desktop' ? 'Sidebar' : 'Tab bar'
 
   const tabs = useMemo(() => {
-    const allowed = tabsForRole(effectiveRole)
+    const allowed = tabsForRole(user.role)
     return NAV_TABS.filter((t) => allowed.includes(t.id)).map((t) => ({
       value: t.id as NavTabId,
       label: tabLabel(user.role, t.id),

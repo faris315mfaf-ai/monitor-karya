@@ -24,8 +24,6 @@ const ALLOWED: Record<string, string> = {
   'health/backup:POST': 'pelapor cadangan memakai BACKUP_REPORT_SECRET, bukan peran; diuji operational-health.test.ts',
   'auth/login:POST': 'masuk (sebelum ada sesi)',
   'auth/logout:POST': 'keluar dari sesi sendiri',
-  'admin/beralih:POST': 'modul pengujian Super Admin — diuji beralih.test.ts; guard SUPERADMIN ditolak untuk auditor di dalam tes ini',
-  'admin/beralih:DELETE': 'kembalikan sesi Super Admin — hanya dengan cookie mk_asli sah',
   'profile:PATCH': 'mengubah profil sendiri',
   'profile/password:POST': 'mengganti kata sandi sendiri',
   'notifications:PATCH': 'menandai notifikasi sendiri sudah dibaca',

@@ -29,11 +29,6 @@ type AppState = UiState & {
   branding: Branding
   setActiveTab: (t: NavTabId) => void
   setSelectedEntityId: (id: string | null) => void
-  /** [BERALIH] Peran yang sedang dipratinjau (null = peran asli). Murni klien. */
-  viewAsRole: string | null
-  setViewAsRole: (role: string | null) => void
-  /** user dengan peran pratinjau bila aktif — untuk views yang membaca user.role. */
-  effectiveUser: SessionUser
 }
 
 const AppContext = createContext<AppState | undefined>(undefined)
@@ -91,16 +86,14 @@ export function AppProvider({
 
   // Changes made during this session win over whatever was restored.
   const [overrides, setOverrides] = useState<Partial<UiState>>({})
-  const [viewAsRole, setViewAsRole] = useState<string | null>(null)
 
   const ui = useMemo<UiState>(() => {
     const merged = { ...restored, ...overrides }
     // A tab remembered from another account may not be open to this role.
-    const r = viewAsRole ?? user.role
-    return canSeeTab(r, merged.activeTab)
+    return canSeeTab(user.role, merged.activeTab)
       ? merged
-      : { ...merged, activeTab: defaultTabForRole(r) }
-  }, [restored, overrides, user.role, viewAsRole])
+      : { ...merged, activeTab: defaultTabForRole(user.role) }
+  }, [restored, overrides, user.role])
 
   // Persist, but never before the restore has happened — otherwise the first
   // commit would overwrite the saved state with the defaults.
@@ -111,12 +104,6 @@ export function AppProvider({
     } catch {}
   }, [hydrated, ui])
 
-  const effectiveRole = viewAsRole ?? user.role
-  const effectiveUser = useMemo(
-    () => (viewAsRole ? { ...user, role: viewAsRole } : user),
-    [user, viewAsRole]
-  )
-
   const value = useMemo<AppState>(
     () => ({
       ...ui,
@@ -125,11 +112,8 @@ export function AppProvider({
       setActiveTab: (t: NavTabId) => setOverrides((o) => ({ ...o, activeTab: t })),
       setSelectedEntityId: (id: string | null) =>
         setOverrides((o) => ({ ...o, selectedEntityId: id })),
-      viewAsRole,
-      setViewAsRole,
-      effectiveUser,
     }),
-    [ui, user, branding, viewAsRole, effectiveUser]
+    [ui, user, branding]
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

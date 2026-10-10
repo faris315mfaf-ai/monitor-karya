@@ -214,7 +214,6 @@ export const NAV_TABS = [
   { id: 'audit', label: 'Log aktivitas', short: 'Log' },
   { id: 'system', label: 'Sistem & akses', short: 'Sistem' },
   // [BERALIH] pengujian Super Admin (10 Okt 2026)
-  { id: 'beralih', label: 'Beralih akun', short: 'Beralih' },
 ] as const
 
 export type NavTabId = typeof NAV_TABS[number]['id']

@@ -156,7 +156,6 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   SUPERADMIN: [
     'dashboard',
     'companies',
-    'beralih',
     'projects',
     'divisions',
     'escalations',
