@@ -16,7 +16,7 @@ import {
   wibDateKey,
 } from '@/lib/lock'
 import { computeRollup, dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
-import { getReportSettings } from '@/lib/report-settings'
+import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
@@ -44,7 +44,7 @@ const ipOf = (req: NextRequest) => req.headers.get('x-forwarded-for')?.split(','
  * Tanggal laporan yang diminta (kunci "YYYY-MM-DD" WIB) atau hari ini. Menolak
  * tanggal mustahil, akhir pekan, dan masa depan.
  */
-function resolveDay(raw: unknown, now: Date = new Date()): { ok: true; day: Date; isToday: boolean } | { ok: false; res: NextResponse } {
+async function resolveDay(raw: unknown, now: Date = new Date(), entityId?: string | null): Promise<{ ok: true; day: Date; isToday: boolean } | { ok: false; res: NextResponse }> {
   const today = startOfWibDay(now)
   if (raw === undefined || raw === null || raw === '') raw = wibDateKey(today)
   const day = parseWibDateKey(raw)
@@ -52,8 +52,10 @@ function resolveDay(raw: unknown, now: Date = new Date()): { ok: true; day: Date
   if (day.getTime() > today.getTime()) {
     return { ok: false, res: NextResponse.json({ error: 'Laporan tidak bisa diisi untuk tanggal yang belum tiba.' }, { status: 422 }) }
   }
-  if (!isWorkingDay(day)) {
-    return { ok: false, res: NextResponse.json({ error: 'Laporan harian hanya untuk hari kerja (Senin–Jumat).' }, { status: 422 }) }
+  // Aturan per entitas: workingDays kosong = setiap hari (10 Okt 2026).
+  const settings = await getReportSettings(entityId ?? null)
+  if (!isWorkingDayWith(settings.workingDays, day)) {
+    return { ok: false, res: NextResponse.json({ error: 'Hari ini bukan hari pelaporan sesuai aturan perusahaan.' }, { status: 422 }) }
   }
   return { ok: true, day, isToday: day.getTime() === today.getTime() }
 }
@@ -87,7 +89,7 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date()
-  const resolved = resolveDay(req.nextUrl.searchParams.get('date'), now)
+  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), now, user.scopeEntityId)
   if (!resolved.ok) return resolved.res
   const day = resolved.day
   const projects = await visibleProjects(user)
@@ -255,7 +257,7 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
 
   const projectId = (req.nextUrl.searchParams.get('projectId') || '').slice(0, 64)
   if (!projectId) return NextResponse.json({ error: 'Proyek wajib dipilih' }, { status: 400 })
-  const resolved = resolveDay(req.nextUrl.searchParams.get('date'))
+  const resolved = await resolveDay(req.nextUrl.searchParams.get('date'), new Date(), user.scopeEntityId)
   if (!resolved.ok) return resolved.res
   const day = resolved.day
 
@@ -362,7 +364,7 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     return NextResponse.json({ error: 'Status laporan tidak dikenali.' }, { status: 422 })
   }
 
-  const resolved = resolveDay(body.reportDate)
+  const resolved = await resolveDay(body.reportDate, new Date(), user.scopeEntityId)
   if (!resolved.ok) return resolved.res
   const day = resolved.day
 

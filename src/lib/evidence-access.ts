@@ -12,6 +12,7 @@ import {
   type ProgressCadence,
 } from '@/lib/lock'
 import { dailyGate, frozenMessage, FORWARDED_FROZEN_MESSAGE } from '@/lib/daily-rollup'
+import { getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
@@ -107,7 +108,8 @@ async function targetEntity(
     // Task HARIAN ikut laporan hariannya (beku/buka kunci); task MINGGUAN
     // tetap memakai kunci 17.00 hari kerjanya seperti sebelumnya.
     if (t.scope === 'MINGGUAN') {
-      return { entityId: t.entityId, picUserId: t.project.picUserId, locked: isDailyLocked(t.workDate) }
+      const taskSettings = await getReportSettings(t.entityId)
+      return { entityId: t.entityId, picUserId: t.project.picUserId, locked: isDailyLockedWith(taskSettings.dailyCutoffHour, taskSettings.dailyOpen, t.workDate, new Date()) }
     }
     const gate = await dailyGate(t.projectId, startOfWibDay(t.workDate))
     return {

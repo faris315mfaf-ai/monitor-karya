@@ -23,6 +23,7 @@ import {
   type TaskScope,
 } from '@/lib/lock'
 import { dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
+import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { activeUnlockFor } from '@/lib/unlock-requests'
 
 /**
@@ -99,7 +100,8 @@ async function lockCheck(context: Context, projectId: string, workDate: Date, sc
   await lockDailyReport(client, projectId, day)
   const gate = await dailyGate(projectId, day, new Date(), client)
   if (scope === 'HARIAN') {
-    if (!isWorkingDay(day) || day > startOfWibDay(new Date())) return NextResponse.json({ error: 'Tanggal task harian harus hari kerja yang sudah tiba.' }, { status: 422 })
+    const taskSettings = await getReportSettings(null) // TODO: entityId dari project
+    if (!isWorkingDayWith(taskSettings.workingDays, day) || day > startOfWibDay(new Date())) return NextResponse.json({ error: 'Tanggal task harian harus hari pelaporan yang sudah tiba.' }, { status: 422 })
     const frozen = frozenMessage(gate)
     if (frozen) {
       return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
@@ -353,7 +355,8 @@ async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionC
     if (requested.getTime() > today.getTime()) {
       return NextResponse.json({ error: 'Task tidak bisa dicatat untuk tanggal yang belum tiba.' }, { status: 422 })
     }
-    if (!isWorkingDay(requested)) {
+    const postSettings = await getReportSettings(null)
+    if (!isWorkingDayWith(postSettings.workingDays, requested)) {
       return NextResponse.json({ error: 'Task harian hanya untuk hari kerja (Senin–Jumat).' }, { status: 422 })
     }
     workDate = requested

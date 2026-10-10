@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { isDailyLocked, isWorkingDay, startOfWibDay, dailyLockAtWith } from '@/lib/lock'
 import { getReportSettings } from '@/lib/report-settings'
+import { wibIsoDay } from '@/lib/lock'
 
 /**
  * Rolls a project's tasks up into its daily report.
@@ -113,7 +114,10 @@ export async function rollupDailyReport(projectId: string, workDate: Date, clien
   await lockDailyReport(client, projectId, workDate)
   const rollup = await computeRollup(projectId, workDate, client)
   const gate = await dailyGate(projectId, workDate, new Date(), client)
-  if (gate.frozen || gate.timeLocked || !isWorkingDay(workDate) || workDate > startOfWibDay(new Date())) return rollup
+  if (gate.frozen || gate.timeLocked || workDate > startOfWibDay(new Date())) return rollup
+  // isWorkingDay kini dicek via settings (workingDays kosong = setiap hari)
+  const rollupSettings = await getReportSettings(null)
+  if (rollupSettings.workingDays.length > 0 && !rollupSettings.workingDays.includes(wibIsoDay(workDate))) return rollup
 
   const existing = await client.dailyProjectReport.findUnique({
     where: { projectId_reportDate: { projectId, reportDate: workDate } },
