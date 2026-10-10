@@ -24,6 +24,8 @@ const ALLOWED: Record<string, string> = {
   'health/backup:POST': 'pelapor cadangan memakai BACKUP_REPORT_SECRET, bukan peran; diuji operational-health.test.ts',
   'auth/login:POST': 'masuk (sebelum ada sesi)',
   'auth/logout:POST': 'keluar dari sesi sendiri',
+  'admin/beralih:POST': 'modul pengujian Super Admin — diuji beralih.test.ts; guard SUPERADMIN ditolak untuk auditor di dalam tes ini',
+  'admin/beralih:DELETE': 'kembalikan sesi Super Admin — hanya dengan cookie mk_asli sah',
   'profile:PATCH': 'mengubah profil sendiri',
   'profile/password:POST': 'mengganti kata sandi sendiri',
   'notifications:PATCH': 'menandai notifikasi sendiri sudah dibaca',
@@ -274,13 +276,13 @@ describe('AUDITOR hanya-baca di semua route tulis', () => {
           })
           const handler = mod[method] as (r: NextRequest, ctx: unknown) => Promise<Response>
           // Exception gagal langsung; jangan menyulap crash menjadi penolakan akses.
-          const expected = ['undo', 'approval-requests/berkas', 'weekly-comments', 'project-reviews'].includes(key) &&
+          const expected = ['undo', 'approval-requests/berkas', 'weekly-comments', 'project-reviews', 'admin/beralih'].includes(key) &&
             (key === 'undo' || key === 'approval-requests/berkas' || method === 'DELETE' || key === 'weekly-comments') ? 404 : 403
           await checkHandler(() => handler(req, { params: Promise.resolve({ id: 'row-1' }) }), expected)
           if (expected === 404) {
             // Bukan objek hilang: fixture ada dan query pencarian benar-benar tercapai.
             const modelName = key === 'undo' ? 'undoToken' : key === 'approval-requests/berkas' ? 'approvalRequest' :
-              key === 'project-reviews' ? 'projectReview' : method === 'DELETE' ? 'weeklyReportComment' : 'weeklyDivisionReport'
+              key === 'project-reviews' ? 'projectReview' : key === 'admin/beralih' ? 'authSession' : method === 'DELETE' ? 'weeklyReportComment' : 'weeklyDivisionReport'
             expect(reads).toContain(`${modelName}.findUnique`)
           }
         }

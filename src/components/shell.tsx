@@ -43,6 +43,7 @@ const TAB_ICONS: Record<NavTabId, IconName> = {
   entities: 'gedung',
   audit: 'aktivitas',
   system: 'kunci',
+  beralih: 'tukar',
 }
 
 /** Label nav per peran; PIC membuka harinya dengan "Hari ini". */

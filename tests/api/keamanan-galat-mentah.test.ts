@@ -22,7 +22,7 @@ const SECRET = 'database RahasiaInternal passwordHash connection unexpectedly lo
 const MARK = 'RahasiaInternal'
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 // Tidak ada bisnis DB di dua handler ini setelah auth di-mock.
-const NO_BUSINESS_DB = { 'auth/me': ['GET'], 'auth/logout': ['POST'], 'health': ['GET'] }
+const NO_BUSINESS_DB = { 'auth/me': ['GET'], 'auth/logout': ['POST'], 'health': ['GET'], 'admin/beralih': ['GET', 'POST', 'DELETE'] }
 
 const mocks = vi.hoisted(() => ({ user: { value: null as unknown }, calls: [] as string[], failures: [] as Error[] }))
 
