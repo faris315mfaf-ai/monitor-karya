@@ -417,6 +417,10 @@ export type TaskRow = {
   urgency: string
   obstacle: string | null
   decisionNeeded: string | null
+  /** Entri laporan multi-item (10 Okt 2026, D1): narasi hasil, rencana besok, tanda eskalasi. */
+  achievementToday?: string | null
+  followUp?: string | null
+  needsEscalation?: boolean
   escalationId: string | null
   escalation?: { id: string; status: string; needed: string; decisionText: string | null } | null
   subtasks: Sub[]
@@ -444,7 +448,8 @@ function mkTask(projectId: string, title: string, status: string, workDate: stri
   return {
     id: uid('t'), projectId, title, description: null, tags: [], picName: null, picUserId: null, startAt: null, endAt: null,
     durationMin: null, status, progressPct: status === 'SELESAI' ? 100 : status === 'BELUM_MULAI' ? 0 : 50, urgency: 'SEDANG',
-    obstacle: null, decisionNeeded: null, escalationId: null, escalation: null, subtasks: [], workDate, scope: 'HARIAN', sortOrder: 0, ...o,
+    obstacle: null, decisionNeeded: null, achievementToday: null, followUp: null, needsEscalation: false,
+    escalationId: null, escalation: null, subtasks: [], workDate, scope: 'HARIAN', sortOrder: 0, ...o,
   }
 }
 
@@ -639,6 +644,10 @@ function readTask(b: Record<string, unknown>, dayIso: string) {
     urgency: (TASK_URGENCIES as readonly string[]).includes(str(b.urgency)) ? str(b.urgency) : 'SEDANG',
     obstacle: str(b.obstacle) || null,
     decisionNeeded: str(b.decisionNeeded) || null,
+    // Entri laporan multi-item (10 Okt 2026, D1): narasi per entri + tanda eskalasi.
+    achievementToday: str(b.achievementToday, 4000) || null,
+    followUp: str(b.followUp, 2000) || null,
+    needsEscalation: b.needsEscalation === true,
     startAt,
     endAt,
     durationMin: startAt && endAt ? Math.max(0, Math.round((Date.parse(endAt) - Date.parse(startAt)) / 60000)) : null,

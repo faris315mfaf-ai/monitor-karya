@@ -137,3 +137,47 @@ textarea.mk-lap-input { border-radius: var(--radius-md); resize: vertical; min-h
 .mk-lap-chev.is-open { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .mk-lap-chev, .mk-lap-input, .mk-lap-check__box, .mk-lap-row, .mk-lap-drop { transition: none; } }
 .mk-lap-check--flat { margin: 0; }
+
+/* ============================================================
+   Entri laporan multi-item (10 Okt 2026): kartu entri (siapa,
+   hasil, rencana besok, bukti kecil) dan footer kirim yang
+   menempel di bawah daftar. Semua nilai dari token.
+   ============================================================ */
+
+/* Kartu entri: pelaksana, narasi hasil, rencana besok. */
+.mk-lap-entry__who { display: flex; align-items: center; gap: 6px; font: var(--text-footnote); color: var(--ink-2); }
+.mk-lap-entry__text { margin: 0; font: var(--text-body); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.mk-lap-entry__fu { margin: 0; font: var(--text-footnote); font-style: italic; color: var(--ink-2); overflow-wrap: anywhere; }
+.mk-lap-entry__fu > strong { font-style: normal; font-weight: 600; }
+
+/* Tanda eskalasi di baris lencana kartu entri. */
+.mk-lap-esc { display: inline-flex; align-items: center; gap: 4px; font: var(--text-caption); color: var(--waspada); white-space: nowrap; }
+
+/* Bukti entri: thumbnail lebih kecil daripada galeri laporan. */
+.mk-lap-thumbs--sm { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+
+/* Baris teks bukti (tautan/berkas) di kartu entri. */
+.mk-lap-entry__link {
+  border: 0; padding: 0; background: none; cursor: pointer; text-align: left;
+  font: var(--text-footnote); color: var(--accent); text-decoration: underline; overflow-wrap: anywhere;
+}
+.mk-lap-entry__link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Footer kirim laporan: menempel di bawah saat daftar entri bergulir. */
+.mk-lap-send {
+  position: sticky; bottom: 0; z-index: 1;
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding-top: var(--space-3);
+  background: linear-gradient(180deg, transparent, var(--surface) 28%);
+}
+.mk-lap-send__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.mk-lap-send__sum { font: var(--text-footnote); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+/* Di dalam Sheet: menempel ke tepi bawah sheet (pola mk-sheetactions). */
+.mk-sheet .mk-lap-send { margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6) var(--space-6); bottom: calc(-1 * var(--space-6)); }
+@media (max-width: 599px) {
+  /* Ponsel: hindari tab bar bawah yang mengambang tetap. */
+  .mk-lap-send { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); }
+  .mk-lap-send__sum { flex: 1 1 100%; }
+  .mk-lap-send__bar > .mk-btn--primary { flex: 1 1 100%; }
+  .mk-sheet .mk-lap-send { bottom: calc(-1 * var(--space-6)); }
+}

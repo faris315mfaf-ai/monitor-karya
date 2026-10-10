@@ -52,6 +52,8 @@ export type Rollup = {
   achievement: string
   /** Blocking notes gathered from the tasks, for the report-level summary. */
   obstacle: string | null
+  /** Tomorrow's plans gathered from the tasks, for the report-level summary. */
+  followUp: string | null
 }
 
 /** Computes the derived values without writing anything. */
@@ -60,7 +62,7 @@ export async function computeRollup(projectId: string, workDate: Date, client: P
   // MINGGUAN adalah capaian minggu dan hidup di papan mingguan.
   const tasks = await client.task.findMany({
     where: { projectId, workDate, scope: 'HARIAN' },
-    select: { id: true, title: true, status: true, progressPct: true, obstacle: true, decisionNeeded: true },
+    select: { id: true, title: true, status: true, progressPct: true, obstacle: true, decisionNeeded: true, achievementToday: true, followUp: true, needsEscalation: true },
   })
   if (tasks.length === 0) return null
 
@@ -77,14 +79,26 @@ export async function computeRollup(projectId: string, workDate: Date, client: P
     .filter((t) => t.note)
     .map((t) => `${t.title}: ${t.note}`)
 
+  // Entri laporan multi-item (10 Okt 2026): narasi hasil dan rencana besok
+  // ditulis per entri; laporan harian membawa semuanya, dipisah pemisah yang
+  // sama dengan kendala. Tanpa narasi entri, kapasitas ringkas lama dipakai.
+  const joinEntries = (values: (string | null | undefined)[]) => {
+    const merged = values.map((v) => v?.trim() || '').filter(Boolean)
+    return merged.length ? merged.join(' | ') : null
+  }
+
   return {
     taskCount: tasks.length,
     status,
     progressPct: Math.round(tasks.reduce((s, t) => s + t.progressPct, 0) / tasks.length),
     evidenceCount: taskEvidence,
-    needsEscalation: status === 'TERKENDALA' || status === 'MENUNGGU_KEPUTUSAN',
-    achievement: composeAchievement(tasks),
+    needsEscalation:
+      status === 'TERKENDALA' ||
+      status === 'MENUNGGU_KEPUTUSAN' ||
+      tasks.some((t) => t.needsEscalation),
+    achievement: joinEntries(tasks.map((t) => t.achievementToday)) ?? composeAchievement(tasks),
     obstacle: blockingNotes.length ? blockingNotes.join(' | ') : null,
+    followUp: joinEntries(tasks.map((t) => t.followUp)),
   }
 }
 
@@ -149,6 +163,7 @@ export async function rollupDailyReport(projectId: string, workDate: Date, clien
     // Only fill the narrative when the PIC has not written their own.
     achievementToday: existing?.achievementToday?.trim() ? existing.achievementToday : rollup.achievement,
     obstacle: existing?.obstacle?.trim() ? existing.obstacle : rollup.obstacle,
+    followUp: existing?.followUp?.trim() ? existing.followUp : rollup.followUp,
   }
 
   if (existing) {

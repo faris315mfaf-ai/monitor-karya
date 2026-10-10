@@ -30,6 +30,10 @@ import { CommandPalette, openSearch } from '@/components/search/command-palette'
 
 const TAB_ICONS: Record<NavTabId, IconName> = {
   dashboard: 'ringkasan',
+  // Kotak masuk (10 Okt 2026). 'surat' belum ada di daftar ikon (07 · Ikon);
+  // 'kirim' dipakai karena maknanya mencakup "pesan", dan beda dari lonceng
+  // notifikasi agar dua ikon di Dock tidak kembar.
+  pesan: 'kirim',
   companies: 'gedung',
   'work-desk': 'catatan',
   statistik: 'naik', // tren naik: statistik kepatuhan Admin PT (9 Okt 2026)
@@ -163,6 +167,11 @@ function TampilanPopover({ trigger, barLabel, onNav }: { trigger: React.ReactNod
 type Note = { id: string; title: string; body: string; tab: string | null; createdAt: string; readAt: string | null }
 
 const NOTES_CHANGED = 'mk:notifikasi-berubah'
+
+/** Kabari lonceng & lencana nav bahwa status baca pesan berubah (mis. dari Kotak masuk). */
+export function refreshNotes() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(NOTES_CHANGED))
+}
 
 function useNotifications() {
   const [data, setData] = useState<{ unread: number; items: Note[] } | null>(null)
@@ -431,6 +440,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const notes = useNotifications()
   // Badge nav per tab, mis. "Laporan harian 1" untuk PIC (hilang setelah terkirim).
   const navBadges = useNavBadges(user.role, activeTab)
+  // Kotak masuk (10 Okt 2026): lencana = pesan belum dibaca. Lonceng shell sudah
+  // memuat sumber yang sama (/api/notifications?inbox=1), jadi tanpa fetch tambahan;
+  // berubah seketika lewat event NOTES_CHANGED saat Kotak masuk menandai dibaca.
+  const badges = useMemo(() => {
+    const unread = notes.data?.unread ?? 0
+    return unread > 0 ? { ...navBadges, pesan: unread } : navBadges
+  }, [navBadges, notes.data])
 
   // Tata letak mengikuti breakpoint panduan (12 · Perangkat & navigasi).
   // Range syntax yang sama dengan CSS (globals.css: `width < 1024px`, `width < 600px`),
@@ -538,7 +554,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       id: t.value,
       label: layout === 'desktop' ? t.label : t.short,
       icon: t.icon,
-      badge: navBadges[t.value],
+      badge: badges[t.value],
       active: activeTab === t.value,
       onSelect: () => go(t.value),
     })),
@@ -616,7 +632,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               label={t.label}
               href={`#${t.value}`}
               active={activeTab === t.value}
-              count={navBadges[t.value]}
+              count={badges[t.value]}
               countTone="accent"
               vtName={`nav-${t.value}`}
               onClick={(e) => {
@@ -650,7 +666,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           value={tabletMore.some((t) => t.value === activeTab) ? 'lainnya' : activeTab}
           onChange={go}
           items={[
-            ...tabletTabs.map((t) => ({ value: t.value, label: t.short, icon: t.icon, badge: navBadges[t.value] })),
+            ...tabletTabs.map((t) => ({ value: t.value, label: t.short, icon: t.icon, badge: badges[t.value] })),
             ...(tabletMore.length ? [{ value: 'lainnya', label: 'Lainnya', icon: 'lainnya' as IconName }] : []),
           ]}
         />
@@ -674,7 +690,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           value={(!dockMode && overflowActive) || moreOpen ? 'lainnya' : activeTab}
           onChange={go}
           items={[
-            ...phoneTabs.map((t) => ({ value: t.value, label: t.short, icon: t.icon, badge: navBadges[t.value] })),
+            ...phoneTabs.map((t) => ({ value: t.value, label: t.short, icon: t.icon, badge: badges[t.value] })),
             { value: 'lainnya', label: moreTabs.length ? 'Lainnya' : 'Tampilan', icon: (moreTabs.length ? 'lainnya' : 'pengaturan') as IconName },
           ]}
         />

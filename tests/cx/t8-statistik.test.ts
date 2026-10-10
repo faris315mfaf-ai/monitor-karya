@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
  *    dipindah dari Ringkasan.
  * Otorisasi tidak melemah: hanya Admin PT yang mendapat tab Statistik, dan
  * tab Penerimaan tidak lagi terlihat Admin PT (TI & Super Admin tetap).
+ * Diperbarui 10 Okt 2026 (T9-D3): keputusan pemilik menambah 'pesan'
+ * (Kotak masuk) ke semua peran, tepat setelah 'dashboard'.
  */
 
 import { ROLE_TABS, canSeeTab, tabsForRole } from '@/lib/rbac'
@@ -15,7 +17,7 @@ import { NAV_TABS } from '@/lib/constants'
 
 describe('T8-W3 tab Admin PT: statistik masuk, penerimaan keluar', () => {
   it('urutan tab Admin PT: statistik tepat setelah meja kerja, tanpa inbox', () => {
-    expect(tabsForRole('ADMIN_PT')).toEqual(['dashboard', 'work-desk', 'statistik', 'daily-input', 'projects', 'divisions', 'escalations'])
+    expect(tabsForRole('ADMIN_PT')).toEqual(['dashboard', 'pesan', 'work-desk', 'statistik', 'daily-input', 'projects', 'divisions', 'escalations'])
     expect(canSeeTab('ADMIN_PT', 'inbox')).toBe(false)
     expect(canSeeTab('ADMIN_PT', 'statistik')).toBe(true)
   })

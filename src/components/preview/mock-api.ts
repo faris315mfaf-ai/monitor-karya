@@ -50,7 +50,24 @@ export function handlePreview(path: string, url: string, init: RequestInit | und
     }
     return json({ kind: 'OVERSIGHT' })
   }
-  if (path === '/api/notifications') return json(init?.method === 'PATCH' ? { ok: true } : mock.notifications)
+  if (path === '/api/notifications') {
+    if (init?.method === 'PATCH') {
+      // Kotak masuk (10 Okt 2026): tandai dibaca langsung di data contoh supaya
+      // daftar, lencana nav, dan lonceng pratinjau ikut berubah (pola workDesk).
+      const b = JSON.parse(String(init.body ?? '{}')) as { ids?: string[]; all?: boolean }
+      let marked = 0
+      for (const it of mock.notifications.items) {
+        if (it.readAt) continue
+        if (b.all || (b.ids ?? []).includes(it.id)) {
+          it.readAt = new Date().toISOString()
+          marked += 1
+        }
+      }
+      mock.notifications.unread = mock.notifications.items.filter((i) => !i.readAt).length
+      return json({ ok: true, marked })
+    }
+    return json(mock.notifications)
+  }
   if (path === '/api/entity-activity') return json(mock.entityActivity)
   if (path === '/api/companies' || path === '/api/companies/users') {
     return json(!init?.method || init.method === 'GET' ? companiesFor(role) : { ok: true, entity: { id: 'e1' } })

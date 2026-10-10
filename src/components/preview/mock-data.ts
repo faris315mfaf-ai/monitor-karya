@@ -53,11 +53,22 @@ export const pic = {
   ],
 }
 
+/**
+ * Kotak masuk contoh (/api/notifications?inbox=1): 7 pesan beragam — pengingat,
+ * persetujuan, komentar, ringkasan — 3 di antaranya belum dibaca. Template dan
+ * tab mengikuti penulis notifikasi sungguhan (reminders*.ts, reminder-rules.ts,
+ * API keputusan akses/buka kunci); patch di mock-api.ts menandai dibaca di sini.
+ */
 export const notifications = {
-  unread: 2,
+  unread: 3,
   items: [
-    { id: 'n1', template: 'X', title: 'Laporan mingguan Divisi Operasional belum diserahkan', body: 'Tenggat Kamis pukul 17.00.', tab: 'divisions', createdAt: iso(-0.1), readAt: null },
-    { id: 'n2', template: 'X', title: 'Pengajuan proyek baru menunggu persetujuan', body: 'Sistem Antrean Klinik · PT Ratu Karya', tab: 'projects', createdAt: iso(-1), readAt: null },
+    { id: 'n1', template: 'PENGINGAT_MINGGUAN_DIVISI', title: 'Laporan mingguan Divisi Operasional belum diserahkan', body: 'Minggu 41/2026 untuk PT Ratu Karya masih berupa draf. Serahkan paling lambat Kamis 17.00 WIB.', tab: 'weekly-input', createdAt: iso(-0.1), readAt: null },
+    { id: 'n2', template: 'PENGINGAT_HARIAN_PIC', title: 'Laporan harian Aplikasi Absensi belum dikirim', body: 'Tenggat pukul 17.00 WIB. Diingatkan oleh Maya Lestari.', tab: 'work-desk', createdAt: iso(-0.2), readAt: null },
+    { id: 'n3', template: 'X', title: 'Pengajuan proyek baru menunggu persetujuan', body: 'Sistem Antrean Klinik · PT Ratu Karya, diajukan Rina Kartika.', tab: 'projects', createdAt: iso(-0.5), readAt: null },
+    { id: 'n4', template: 'REVIEW_OUTPUT', title: 'Komentar baru di output Materi video kampanye', body: 'Andi Wijaya: Revisi takarir menit 1.20–2.05, sisanya sudah sesuai.', tab: 'divisions', createdAt: iso(-1), readAt: iso(-0.8) },
+    { id: 'n5', template: 'KEPUTUSAN_BUKA_KUNCI', title: 'Pengajuan buka kunci laporan harian disetujui', body: 'Diputuskan oleh Hadi Santoso. Laporan terbuka sampai Jumat 17.00 WIB.', tab: 'daily-input', createdAt: iso(-2), readAt: iso(-1.9) },
+    { id: 'n6', template: 'RINGKASAN_MINGGUAN_DIVISI', title: 'Ringkasan mingguan Divisi Teknologi sudah dibaca Direktur', body: 'Laporan minggu 40/2026 telah ditinjau Hadi Santoso.', tab: 'divisions', createdAt: iso(-4), readAt: iso(-3) },
+    { id: 'n7', template: 'KEPUTUSAN_AKSES', title: 'Permintaan akses sementara ditolak', body: 'Diputuskan oleh Tim TI. Catatan: gunakan akun PIC Anda yang aktif.', tab: null, createdAt: iso(-6), readAt: iso(-5.5) },
   ],
 }
 
@@ -121,16 +132,37 @@ const T = (id: string, title: string, s: [number, number] | null, e: [number, nu
   startAt: s ? at(...s) : null, endAt: e ? at(...e) : null, durationMin: null, status, progressPct: status === 'SELESAI' ? 100 : 40,
   urgency: 'SEDANG', obstacle: null, decisionNeeded: null, escalationId: null, subtasks: [], evidence: [], ...o,
 })
+// Entri laporan multi-item (10 Okt 2026): tiap task contoh membawa narasi
+// achievementToday/followUp dan tanda needsEscalation seperti kolom D1.
 export const deskTasks: Record<string, ReturnType<typeof T>[]> = {
   p2: [
-    T('t1', 'Rapat harian tim pengembang', [8, 30], [9, 0], 'SELESAI'),
-    T('t2', 'Perbaiki sinkronisasi data cuti', [9, 30], [12, 0], 'SELESAI', { subtasks: [{ title: 'Uji izin setengah hari', isDone: true }, { title: 'Uji cuti bersama', isDone: true }] }),
-    T('t3', 'Uji coba gelombang 2', [13, 0], [15, 30], 'TERKENDALA', { obstacle: 'Perangkat uji belum tiba dari vendor' }),
-    T('t4', 'Susun panduan pengguna versi iPhone', [15, 30], [16, 45], 'BERJALAN'),
+    T('t1', 'Rapat harian tim pengembang', [8, 30], [9, 0], 'SELESAI', {
+      achievementToday: 'Agenda uji gelombang 2 disepakati dan risiko perangkat dibahas bersama tim.',
+      followUp: 'Kirim notulen rapat ke seluruh tim pengembang.',
+    }),
+    T('t2', 'Perbaiki sinkronisasi data cuti', [9, 30], [12, 0], 'SELESAI', {
+      subtasks: [{ title: 'Uji izin setengah hari', isDone: true }, { title: 'Uji cuti bersama', isDone: true }],
+      achievementToday: 'Sinkronisasi cuti dan izin tuntas; dua skenario uji lulus semua.',
+    }),
+    T('t3', 'Uji coba gelombang 2', [13, 0], [15, 30], 'TERKENDALA', {
+      obstacle: 'Perangkat uji belum tiba dari vendor',
+      needsEscalation: true,
+      decisionNeeded: 'Keputusan geser jadwal uji gelombang 2 ke 14 Oktober.',
+      achievementToday: 'Persiapan skenario uji selesai; pelaksanaan uji tertahan menunggu perangkat.',
+      followUp: 'Konfirmasi tanggal pengiriman perangkat kepada vendor.',
+    }),
+    T('t4', 'Susun panduan pengguna versi iPhone', [15, 30], [16, 45], 'BERJALAN', {
+      achievementToday: 'Bab pemasangan dan absen selesai ditulis (40% dari panduan).',
+      followUp: 'Lanjutkan bab izin dan cuti besok pagi.',
+    }),
   ],
   p4: [
-    T('t5', 'Wawancara kebutuhan tim layanan', [10, 0], [11, 0], 'SELESAI', { projectId: 'p4' }),
-    T('t6', 'Sketsa alur pendaftaran', null, null, 'SELESAI', { projectId: 'p4' }),
+    T('t5', 'Wawancara kebutuhan tim layanan', [10, 0], [11, 0], 'SELESAI', {
+      projectId: 'p4',
+      achievementToday: 'Empat kebutuhan utama portal terdokumentasi dari sesi wawancara.',
+      followUp: 'Rangkum hasil wawancara menjadi daftar kebutuhan.',
+    }),
+    T('t6', 'Sketsa alur pendaftaran', null, null, 'SELESAI', { projectId: 'p4', achievementToday: 'Alur pendaftaran tiga langkah selesai disketsa dan dikirim ke tim.' }),
   ],
 }
 

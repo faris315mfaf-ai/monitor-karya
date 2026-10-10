@@ -687,6 +687,14 @@ model Task {
   obstacle       String? // required when TERKENDALA
   decisionNeeded String? // required when MENUNGGU_KEPUTUSAN
 
+  /// Entri laporan multi-item (10 Okt 2026): bagaimana pengerjaannya — narasi
+  /// hasil entri ini. Digabung roll-up ke DailyProjectReport.achievementToday.
+  achievementToday String?
+  /// Rencana besok untuk entri ini; dirangkum ke laporan harian.
+  followUp        String?
+  /// Apakah entri ini butuh eskalasi/keputusan, di luar status task sendiri.
+  needsEscalation Boolean  @default(false)
+
   escalationId String?     // set once raised, so it is not raised twice
   escalation   Escalation? @relation("TaskEscalation", fields: [escalationId], references: [id])
 

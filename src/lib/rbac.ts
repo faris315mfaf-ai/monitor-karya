@@ -123,25 +123,28 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
 /**
  * Tabs each role sees, in order. The first entry is that role's landing tab.
+ * Keputusan pemilik 10 Okt 2026: 'pesan' (Kotak masuk) ada di semua peran,
+ * tepat setelah Ringkasan — pesan adalah hal kedua yang dilihat.
  */
 export const ROLE_TABS: Record<string, NavTabId[]> = {
   // Meja kerja (5 Okt 2026): tempat mengerjakan hari ini — tugas & laporan (PIC),
   // capaian minggu berjalan & serah terima (Kepala Divisi).
-  PIC_PROYEK: ['dashboard', 'work-desk', 'daily-input', 'projects'],
+  PIC_PROYEK: ['dashboard', 'pesan', 'work-desk', 'daily-input', 'projects'],
   // Tab Proyek untuk kepala divisi menyertakan tombol "Ajukan proyek"
   // (keputusan pemilik 9 Okt 2026: semua peran boleh mengajukan).
-  KEPALA_DIVISI: ['dashboard', 'work-desk', 'weekly-input', 'divisions', 'projects'],
+  KEPALA_DIVISI: ['dashboard', 'pesan', 'work-desk', 'weekly-input', 'divisions', 'projects'],
   // Sejak 8 Sep 2026 isian mingguan divisi untuk Admin PT ada di Modul Divisi
   // (pilih entitas & divisi), jadi tab Capaian Mingguan tidak lagi dobel.
   // Keputusan pemilik 9 Okt 2026: tab Penerimaan dihapus — penerusan laporan
   // diserap Meja Kerja + tombol di Ringkasan; tab Statistik (kepatuhan per
   // divisi + peta panas 10 hari) dipisah dari Ringkasan agar ringkas.
-  ADMIN_PT: ['dashboard', 'work-desk', 'statistik', 'daily-input', 'projects', 'divisions', 'escalations'],
+  ADMIN_PT: ['dashboard', 'pesan', 'work-desk', 'statistik', 'daily-input', 'projects', 'divisions', 'escalations'],
   // [F2-DIREKTUR] + Persetujuan (materi/anggaran/cuti, usulan tenggat, pengajuan proyek).
-  DIREKTUR_ENTITAS: ['dashboard', 'projects', 'divisions', 'escalations', 'approvals', 'entities'],
-  DIREKTUR_SDM_GA: ['dashboard', 'projects', 'divisions', 'escalations', 'entities', 'audit'],
+  DIREKTUR_ENTITAS: ['dashboard', 'pesan', 'projects', 'divisions', 'escalations', 'approvals', 'entities'],
+  DIREKTUR_SDM_GA: ['dashboard', 'pesan', 'projects', 'divisions', 'escalations', 'entities', 'audit'],
   TI: [
     'dashboard',
+    'pesan',
     'work-desk',
     'inbox',
     'daily-input',
@@ -155,6 +158,7 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   ],
   SUPERADMIN: [
     'dashboard',
+    'pesan',
     'companies',
     'projects',
     'divisions',
@@ -167,8 +171,8 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
     'audit',
     'system',
   ],
-  MANAJEMEN: ['dashboard', 'escalations', 'projects', 'divisions', 'approvals', 'entities', 'audit'], // [F2-DIREKTUR] + Persetujuan
-  AUDITOR: ['dashboard', 'projects', 'divisions', 'entities', 'audit'],
+  MANAJEMEN: ['dashboard', 'pesan', 'escalations', 'projects', 'divisions', 'approvals', 'entities', 'audit'], // [F2-DIREKTUR] + Persetujuan
+  AUDITOR: ['dashboard', 'pesan', 'projects', 'divisions', 'entities', 'audit'],
 }
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']

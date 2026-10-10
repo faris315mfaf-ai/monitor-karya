@@ -14,6 +14,7 @@ import { AuditView } from '@/components/views/audit-view'
 import { DailyInputView } from '@/components/views/daily-input-view'
 import { WeeklyInputView } from '@/components/views/weekly-input-view'
 import { InboxView } from '@/components/views/inbox-view'
+import { PesanView } from '@/components/views/pesan-view' // Kotak masuk (10 Okt 2026)
 import { StatistikView } from '@/components/views/statistik-view'
 import { SystemView } from '@/components/views/system-view'
 import { CompaniesView } from '@/components/views/companies-view'
@@ -32,6 +33,7 @@ function MainContent() {
   return (
     <div className="mk-app__inner" key={activeTab}>
       {activeTab === 'dashboard' && <DashboardView />}
+      {activeTab === 'pesan' && <PesanView />}
       {activeTab === 'companies' && <CompaniesView />}
       {activeTab === 'work-desk' && <WorkDeskView />}
       {activeTab === 'daily-input' && <DailyInputView />}

@@ -197,6 +197,10 @@ export function complianceColor(score: number): { bg: string; text: string; ring
 
 export const NAV_TABS = [
   { id: 'dashboard', label: 'Ringkasan', short: 'Ringkasan' },
+  // Keputusan pemilik 10 Okt 2026: kotak pesan untuk semua peran — satu tempat
+  // membaca seluruh pesan (pengingat, persetujuan, komentar). Diletakkan kedua
+  // karena sidebar/dock/tab bar mengikuti urutan daftar ini (shell.tsx).
+  { id: 'pesan', label: 'Kotak masuk', short: 'Pesan' },
   { id: 'companies', label: 'Perusahaan & akun', short: 'Perusahaan' },
   { id: 'work-desk', label: 'Meja kerja', short: 'Kerja' },
   // Keputusan pemilik 9 Okt 2026: statistik kepatuhan Admin PT (per divisi +

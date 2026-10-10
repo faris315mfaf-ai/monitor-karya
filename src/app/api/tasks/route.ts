@@ -176,6 +176,11 @@ function readBody(body: Record<string, unknown>, day: Date) {
       : 'SEDANG',
     obstacle: str('obstacle') || null,
     decisionNeeded: str('decisionNeeded') || null,
+    // Entri laporan multi-item (10 Okt 2026): narasi hasil, rencana besok, dan
+    // tanda eskalasi per entri — dirangkum roll-up ke laporan harian.
+    achievementToday: str('achievementToday', 4000) || null,
+    followUp: str('followUp', 2000) || null,
+    needsEscalation: body.needsEscalation === true,
     startAt,
     endAt,
     durationMin: startAt && endAt ? Math.max(0, Math.round((endAt.getTime() - startAt.getTime()) / 60000)) : null,
@@ -460,6 +465,12 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
   // Form tugas (TaskDialog) tidak mengirim picUserId; tanpa kunci itu akun PIC
   // tugas dipertahankan, bukan dikosongkan. Mengirim null tetap melepasnya.
   if (!('picUserId' in body)) fields.picUserId = existing.picUserId
+  // Kolom entri laporan (10 Okt 2026) mengikuti aturan yang sama: dialog yang
+  // belum mengirimnya mempertahankan narasi entri; kirim nilai kosong/false
+  // untuk membersihkannya.
+  if (!('achievementToday' in body)) fields.achievementToday = existing.achievementToday
+  if (!('followUp' in body)) fields.followUp = existing.followUp
+  if (!('needsEscalation' in body)) fields.needsEscalation = existing.needsEscalation
   const movedLane = workDate.getTime() !== existing.workDate.getTime() || scope !== existing.scope
   const sortOrder = movedLane
     ? await nextSortOrder(laneWhere(existing.projectId, scope, workDate, period), db)
