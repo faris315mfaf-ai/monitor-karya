@@ -1,3 +1,4 @@
+vi.mock('@/lib/report-settings', () => ({ getReportSettings: async () => ({ dailyCutoffHour: 17, workingDays: [1,2,3,4,5], dailyOpen: true, weeklyCutoffHour: 17, weeklyOpen: true }) }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth'
 

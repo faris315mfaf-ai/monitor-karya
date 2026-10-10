@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Card, Chip, Skeleton, StatusBadge } from '@/components/mk'
+import { useApp } from '@/components/app-provider'
 
 type Settings = {
   dailyCutoffHour: number | null
@@ -20,7 +21,24 @@ type Settings = {
 const HARI = [1, 2, 3, 4, 5, 6, 7] as const
 const NAMA_HARI: Record<number, string> = { 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 7: 'Minggu' }
 
-export function ReportSettingsCard({ entityId, className }: { entityId: string | null; className?: string }) {
+export function ReportSettingsCard({ className }: { className?: string }) {
+  const { user } = useApp()
+  // entityId = PT milik admin; TI/Super Admin pakai PT pertama (bisa disaring nanti)
+  const [entityId, setEntityId] = useState<string | null>(user?.scopeEntityId ?? null)
+  const [entities, setEntities] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    if (entityId) return
+    // Ambil daftar PT untuk dipilih bila user tidak terpaku satu PT
+    fetch('/api/entities?type=PT')
+      .then(r => r.json())
+      .then(j => {
+        const list = Array.isArray(j) ? j : j.entities ?? []
+        setEntities(list.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name })))
+        if (list.length === 1) setEntityId(list[0].id)
+      })
+      .catch(() => {})
+  }, [entityId])
   const [settings, setSettings] = useState<Settings>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

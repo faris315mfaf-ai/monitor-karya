@@ -2,7 +2,8 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
-import { isDailyLocked, isWorkingDay, startOfWibDay } from '@/lib/lock'
+import { isDailyLocked, isWorkingDay, startOfWibDay, dailyLockAtWith } from '@/lib/lock'
+import { getReportSettings } from '@/lib/report-settings'
 
 /**
  * Rolls a project's tasks up into its daily report.
@@ -229,9 +230,17 @@ export type DailyGate = {
 export async function dailyGate(projectId: string, day: Date, now: Date = new Date(), client: Prisma.TransactionClient = db): Promise<DailyGate> {
   const report = await client.dailyProjectReport.findUnique({
     where: { projectId_reportDate: { projectId, reportDate: day } },
-    select: { id: true, forwardedAt: true, isLocked: true },
+    select: { id: true, forwardedAt: true, isLocked: true, entityId: true },
   })
-  const pastCutoff = isDailyLocked(day, now)
+  // Aturan pelaporan per entitas (10 Okt 2026): bawaan = perilaku lama (17:00).
+  // Settings hanya meng-override bila eksplisit: null cutoff = 24/7, false = tutup.
+  const settings = await getReportSettings(report?.entityId ?? null)
+  const oldPastCutoff = isDailyLocked(day, now)
+  const pastCutoff = settings.dailyCutoffHour === null
+    ? false  // 24/7: tanpa batas
+    : !settings.dailyOpen
+      ? true  // ditutup eksplisit
+      : oldPastCutoff  // pakai perilaku lama
   const blocked = Boolean(report?.forwardedAt) || Boolean(report?.isLocked) || pastCutoff
   const unlock = report && blocked ? await client.unlockRequest.findFirst({
     where: { targetType: 'DAILY_REPORT', targetId: report.id, status: 'DIEKSEKUSI', reLockedAt: null, unlockUntil: { gt: now } },

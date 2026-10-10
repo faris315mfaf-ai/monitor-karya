@@ -32,7 +32,7 @@ export function StatistikView() {
       {answer ? <p className="t-title-3 text-ink">{answer}</p> : compliance.loading ? <Skeleton h={26} w="60%" /> : null}
       <ComplianceCard state={compliance} />
       <ComplianceHeatmapCard state={compliance} />
-      <ReportSettingsCard entityId={null} />
+      <ReportSettingsCard />
     </>
   )
 }
