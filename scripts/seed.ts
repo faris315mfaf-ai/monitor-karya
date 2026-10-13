@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { requireLocalDatabase } from './guard-db-lokal'
 import { hashPassword } from '../src/lib/password'
+import { isoWeekOf, weekPeriodOf, weeklyDeadlines } from '../src/lib/lock'
 import { resolveSeedPassword } from '../src/lib/password-policy'
 
 let db: PrismaClient | undefined
@@ -495,12 +496,12 @@ async function main() {
 
   let weeklyCount = 0
   for (let weekOffset = 3; weekOffset >= 0; weekOffset--) {
-    const periodEnd = new Date()
-    periodEnd.setHours(0, 0, 0, 0)
-    periodEnd.setDate(periodEnd.getDate() - weekOffset * 7)
-    const periodStart = new Date(periodEnd)
-    periodStart.setDate(periodStart.getDate() - 6)
-    const { year: isoYear, week: isoWeekNum } = isoWeek(periodEnd)
+    // Selaras dengan rute weekly-input produksi: minggu ISO Senin–Minggu WIB
+    // (weekPeriodOf + weeklyDeadlines), bukan jendela 7 hari yang berakhir hari
+    // ini — agar gerbang "minggu berjalan" (lock.ts) mengenali laporan seed.
+    const period = weekPeriodOf(new Date(Date.now() - weekOffset * 7 * 86400000))
+    const { periodStart, periodEnd } = weeklyDeadlines(period.start)
+    const { isoYear, isoWeek: isoWeekNum } = isoWeekOf(period.start)
     const isCurrentWeek = weekOffset === 0
 
     for (const div of allDivisions) {

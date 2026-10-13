@@ -481,7 +481,7 @@ model WeeklyReportItem {
 
 model Evidence {
   id          String   @id @default(cuid())
-  targetType  String   // DAILY_REPORT | WEEKLY_ITEM | PROJECT_CLOSING
+  targetType  String   // DAILY_REPORT | TASK | WEEKLY_ITEM | OUTPUT | PROGRESS_REPORT | PROJECT_CLOSING (tanpa CHECK di DB; sumber kebenaran: EVIDENCE_TARGETS di src/lib/evidence-access.ts)
   targetId    String
   storageKey  String
   fileName    String
@@ -490,6 +490,9 @@ model Evidence {
   url         String?
   uploadedById String?
   createdAt   DateTime @default(now())
+
+  /// [T11-DB] Semua pembacaan bukti per target (count/findMany) memakai pasangan ini.
+  @@index([targetType, targetId])
 }
 
 model Note {
@@ -556,6 +559,8 @@ model UnlockRequest {
   @@index([requestedById])
   @@index([approvedById])
   @@index([executedById])
+  /// [T11-DB] dailyGate memeriksa permintaan buka kunci per target di setiap tulisan harian.
+  @@index([targetType, targetId])
 }
 
 model AuditLog {
@@ -1156,6 +1161,30 @@ model ReportSettings {
   weeklyOpen      Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Pencarian per entityId sudah dilayani indeks unik; @@index ganda dihapus (migrasi 0032).
+}
 
-  @@index([entityId])
+/// Kunci idempotensi tulis dari klien yang mengulang permintaan (outbox Android,
+/// 13 Okt 2026). Satu baris per (pengguna, kunci): ulangan dengan kunci sama
+/// dibalas respons pertama tanpa membuat objek baru. Lingkup per userId sehingga
+/// kunci pengguna lain tidak pernah bentrok atau membocorkan respons. Disapu
+/// setelah 7 hari oleh cron harian (indeks createdAt). Tanpa FK ke User: akun
+/// tidak dihapus keras, dan baris yatim ikut tersapu.
+model IdempotencyKey {
+  id             String   @id @default(cuid())
+  userId         String
+  /// Nilai header Idempotency-Key (8–64 karakter, disarankan UUID v4).
+  key            String
+  /// "METODE /jalur", mis. "POST /api/tasks"; kunci yang sama di rute lain ditolak 422.
+  route          String
+  /// Status HTTP respons pertama (hanya 2xx yang disimpan).
+  responseStatus Int?
+  /// Badan JSON respons pertama, dibatasi 64 KiB (lebih besar: ringkasan + resourceId).
+  responseBody   Json?
+  /// Id objek yang dibuat/diubah (task/bukti/laporan) bila ada.
+  resourceId     String?
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
 }
