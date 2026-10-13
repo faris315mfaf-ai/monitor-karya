@@ -265,7 +265,7 @@ export function SdmPanel({ panel, ringkasan }: { panel: SdmData; ringkasan: Ring
           setActiveTab('entities')
         }}
       />
-      <WeeklyReportSheet division={report} weekLabel={weekLabel} viewer={viewer} actions={weekly} onClose={() => setReport(null)} />
+      <WeeklyReportSheet division={report} weekLabel={weekLabel} handoverBy={ringkasan.reportWeek?.handoverBy ?? panel.week.handoverBy} viewer={viewer} actions={weekly} onClose={() => setReport(null)} />
     </>
   )
 }

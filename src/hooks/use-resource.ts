@@ -39,6 +39,8 @@ export function useResource<T>(url: string | null) {
     fetch(url)
       .then(async (r) => {
         if (r.status === 401) {
+          // Selesaikan state agar tidak menggantung "memuat" bila pengalihan tidak berjalan.
+          if (!cancelled) setState({ data: null, loading: false, error: 'Sesi Anda berakhir. Masuk kembali.', key })
           router.replace('/login')
           router.refresh()
           return

@@ -3,6 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { Button, Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { useConfirm } from '@/components/companies/parts'
+import { formatFileSize } from '@/lib/format'
 
 export type EvidenceItem = {
   id: string
@@ -15,9 +16,7 @@ export type EvidenceItem = {
 
 function humanSize(bytes?: number | null) {
   if (!bytes) return null
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return formatFileSize(bytes)
 }
 
 /** Pegangan untuk tombol di luar panel, mis. "Lampirkan foto" di formulir laporan. */
@@ -303,15 +302,16 @@ export function EvidencePanel({
           <div
             className={cx('mk-lap-drop', over && canAdd && 'is-over')}
             onDragOver={(ev) => {
-              if (!canAdd) return
+              // Selalu cegah bawaan peramban: berkas yang dijatuhkan saat unggahan berjalan
+              // tidak boleh membuka berkas itu dan meninggalkan halaman.
               ev.preventDefault()
-              setOver(true)
+              if (canAdd) setOver(true)
             }}
             onDragLeave={() => setOver(false)}
             onDrop={(ev) => {
-              if (!canAdd) return
               ev.preventDefault()
               setOver(false)
+              if (!canAdd) return
               const f = ev.dataTransfer.files?.[0]
               if (f) upload(f)
             }}

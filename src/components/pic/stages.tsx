@@ -238,6 +238,7 @@ function ProposalSheet({
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    if (saving) return // Enter di kolom tanggal bisa mengirim ganda
     const next: typeof err = {}
     if (!date) next.date = 'Pilih tanggal tenggat baru'
     else if (date < tomorrow) next.date = 'Tenggat baru harus setelah hari ini'
@@ -323,6 +324,7 @@ function StagesSheet({
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    if (busy) return // Enter di kolom isian bisa mengirim ganda
     if (draft.name.trim().length < 2) return setErr('Nama tahap minimal 2 huruf')
     if (draft.startDate && draft.dueDate && draft.dueDate < draft.startDate) return setErr('Tanggal selesai tidak boleh sebelum tanggal mulai')
     if (draft.status === 'TERTAHAN' && !draft.note.trim()) return setErr('Tulis alasan tahap tertahan')

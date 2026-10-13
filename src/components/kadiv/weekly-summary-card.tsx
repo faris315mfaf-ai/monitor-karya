@@ -42,7 +42,9 @@ async function send(url: string, body: unknown, method = 'POST') {
 }
 
 export function useWeeklySummary(divisionId: string | null | undefined) {
-  const [view, setView] = useState<WeeklySummaryView | null>(null)
+  // Ringkasan diberi kunci divisi: saat divisi berganti, poin divisi lama tidak boleh tampil
+  // (apalagi terkirim) atas nama divisi yang baru.
+  const [box, setBox] = useState<{ divisionId: string; view: WeeklySummaryView } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)
   const load = useCallback(async () => {
@@ -53,7 +55,7 @@ export function useWeeklySummary(divisionId: string | null | undefined) {
       const j = (await res.json().catch(() => ({}))) as WeeklySummaryView & { error?: string }
       if (!res.ok) throw new Error(j.error || 'Ringkasan mingguan belum termuat')
       if (n !== seq.current) return
-      setView(j)
+      setBox({ divisionId, view: j })
       setError(null)
     } catch (e) {
       if (n === seq.current) setError(e instanceof Error ? e.message : 'Ringkasan mingguan belum termuat')
@@ -63,6 +65,7 @@ export function useWeeklySummary(divisionId: string | null | undefined) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
+  const view = box && box.divisionId === divisionId ? box.view : null
   return { view, error, reload: load }
 }
 

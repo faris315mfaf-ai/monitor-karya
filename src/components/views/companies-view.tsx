@@ -225,7 +225,7 @@ export function CompaniesView() {
       />
       <AccountSheet
         target={account}
-        companies={full ? companies : companies}
+        companies={companies}
         me={data.me}
         lockCompany={!full}
         allowedRoles={data.manageableRoles}

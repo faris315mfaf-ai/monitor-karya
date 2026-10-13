@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 type FetchState<T> = {
   data: T | null
@@ -49,6 +49,8 @@ export function useFetch<T>(url: string | null) {
   })
   // Muat ulang diam-diam (tanpa kerangka memuat) setelah sebuah tindakan.
   const [tick, setTick] = useState(0)
+  // Identitas stabil agar aman dipakai di deps effect pemanggil.
+  const reload = useCallback(() => setTick((t) => t + 1), [])
 
   useEffect(() => {
     if (!url) return
@@ -57,7 +59,9 @@ export function useFetch<T>(url: string | null) {
     fetch(url)
       .then(async (r) => {
         if (r.status === 401) {
-          // Session expired, or signed out in another tab.
+          // Session expired, or signed out in another tab. Selesaikan state agar
+          // tidak menggantung "memuat" bila pengalihan tidak berjalan.
+          if (!cancelled) setState({ data: null, loading: false, error: 'Sesi Anda berakhir. Masuk kembali.', url })
           router.replace('/login')
           router.refresh()
           return
@@ -83,5 +87,5 @@ export function useFetch<T>(url: string | null) {
   // we are effectively loading (waiting for the new fetch to resolve).
   const isLoading = url !== state.url ? !!url : state.loading
 
-  return { data: state.data, loading: isLoading, error: state.error, reload: () => setTick((t) => t + 1) }
+  return { data: state.data, loading: isLoading, error: state.error, reload }
 }

@@ -336,7 +336,8 @@ export function WeeklyTaskBoard({
           projectId={projectId}
           projectName={projectName}
           projects={projects}
-          task={dialog.task}
+          // Task hidup dari data terbaru: bukti yang baru diunggah/dihapus ikut tampil saat dialog dipasang ulang.
+          task={dialog.task ? (data.tasks.find((t) => t.id === dialog.task!.id) ?? dialog.task) : null}
           locked={data.locked}
           onSaved={reload}
           weekly={{ week: data.period.key, days: editableDays, lane: dialog.lane }}

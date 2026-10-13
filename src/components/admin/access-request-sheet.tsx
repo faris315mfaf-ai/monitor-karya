@@ -132,7 +132,12 @@ export function AccessRequestSheet({
 
         {companies.length > 1 ? (
           <Field label="Perusahaan" htmlFor="ar-company">
-            <select id="ar-company" className={selectCls} value={company?.id ?? ''} onChange={(e) => setCompanyId(e.target.value)}>
+            <select id="ar-company" className={selectCls} value={company?.id ?? ''} onChange={(e) => {
+              // Akun dan divisi milik perusahaan sebelumnya tidak berlaku di perusahaan baru.
+              setCompanyId(e.target.value)
+              setUserId('')
+              setDivisionId('')
+            }}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

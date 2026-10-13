@@ -14,6 +14,7 @@ import {
   StatusBadge, type ChartTone, type Status,
 } from '@/components/mk'
 import { formatNumber } from '@/lib/format'
+import { COMPLIANCE_ATTENTION_MIN, COMPLIANCE_GOOD_MIN, complianceBand } from '@/lib/compliance-band'
 
 type Data = {
   periode: { bulanIni: string; isoWeek: number; isoYear: number }
@@ -32,8 +33,8 @@ type Data = {
   lowestPt: { name: string; code: string; region: string; skor: number }[]
 }
 
-/** Skor kepatuhan di bawah angka ini berarti entitas perlu perhatian. */
-const TARGET = 75
+/** Target kepatuhan = ambang "Baik" (≥ 90); di bawah 75 "Kritis". Ambang tunggal: @/lib/compliance-band. */
+const TARGET = COMPLIANCE_GOOD_MIN
 
 const TREND_METRICS = [
   { value: 'kepatuhan', label: 'Kepatuhan' },
@@ -57,9 +58,6 @@ const WEEKLY_COLUMNS: { key: string; status: Status }[] = [
   { key: 'Terkunci', status: 'done' },
 ]
 
-const scoreStatus = (s: number): Status => (s < TARGET ? 'late' : s < 85 ? 'risk' : 'on')
-const SCORE_LABEL: Partial<Record<Status, string>> = { late: 'Di bawah target', risk: 'Perlu perhatian', on: 'Sesuai target' }
-const scoreTone = (s: number): ChartTone => (s < TARGET ? 'late' : s < 85 ? 'risk' : 'data-1')
 
 /** Bingkai kartu: judul, pertanyaan yang dijawab, dan tombol beralih ke tabel. */
 function ChartCard({
@@ -156,8 +154,8 @@ export function ManagementCharts() {
   return (
     <div className="flex flex-col gap-6">
       <p className="mk-inset t-footnote text-ink-2">
-        Semua skor memakai skala 0–100. Target kepatuhan {TARGET}; di bawah itu entitas perlu perhatian. Setiap grafik
-        menjawab satu pertanyaan dan bisa dibaca sebagai tabel.
+        {`Semua skor memakai skala 0–100. Skor kepatuhan ${COMPLIANCE_GOOD_MIN} ke atas baik, ${COMPLIANCE_ATTENTION_MIN}–${COMPLIANCE_GOOD_MIN - 1} perlu perhatian, di bawah ${COMPLIANCE_ATTENTION_MIN} kritis. `}
+        Setiap grafik menjawab satu pertanyaan dan bisa dibaca sebagai tabel.
       </p>
 
       <ChartCard
@@ -217,9 +215,9 @@ export function ManagementCharts() {
                   key={b.name}
                   name={b.name}
                   value={b.skor}
-                  tone={scoreTone(b.skor)}
+                  tone={complianceBand(b.skor).tone}
                   target={TARGET}
-                  meta={`${formatNumber(b.jumlahPt)} PT${b.skor < TARGET ? ' · di bawah target' : ''}`}
+                  meta={`${formatNumber(b.jumlahPt)} PT · ${complianceBand(b.skor).label.toLowerCase()}`}
                 />
               ))}
             </div>
@@ -326,12 +324,12 @@ export function ManagementCharts() {
                   key={p.code}
                   name={p.name}
                   value={p.skor}
-                  tone={scoreTone(p.skor)}
+                  tone={complianceBand(p.skor).tone}
                   target={TARGET}
                   meta={
                     <span className="flex items-center gap-2">
-                      <StatusBadge status={scoreStatus(p.skor)} size="sm">
-                        {SCORE_LABEL[scoreStatus(p.skor)]}
+                      <StatusBadge status={complianceBand(p.skor).tone} size="sm">
+                        {complianceBand(p.skor).label}
                       </StatusBadge>
                       <span>{p.region || 'Wilayah belum diisi'}</span>
                     </span>
@@ -340,7 +338,7 @@ export function ManagementCharts() {
               ))}
             </div>
             <p className="mt-3 t-footnote text-ink-2">
-              {r.diBawahTarget} dari {r.entitas} entitas berada di bawah target {TARGET}.
+              {r.diBawahTarget} dari {r.entitas} entitas berstatus kritis (skor di bawah {COMPLIANCE_ATTENTION_MIN}).
             </p>
           </>
         )}

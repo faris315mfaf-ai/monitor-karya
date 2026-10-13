@@ -12,14 +12,13 @@ import { toast } from 'sonner'
 import { Textarea } from '@/components/mk/forms'
 import { Card, EmptyNote, ErrorNote, IconButton, Skeleton, cx } from '@/components/mk'
 import { useResource } from '@/hooks/use-resource'
-import { firstName, formatDateShort, formatTime } from '@/lib/format'
+import { firstName, formatDateShort, formatTime, isSameWibDay } from '@/lib/format'
 import { ASK_HEAD_EVENT, NOTES_CHANGED_EVENT, call, type NotesData } from './api'
 import { refreshNavBadges } from './nav-badges'
 
 function when(iso: string) {
   const d = new Date(iso)
-  const today = new Date()
-  const same = d.toDateString() === today.toDateString()
+  const same = isSameWibDay(d)
   return same ? formatTime(d) : `${formatDateShort(d)} · ${formatTime(d)}`
 }
 

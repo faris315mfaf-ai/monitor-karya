@@ -147,7 +147,9 @@ export function DivisionWeeklyDesk() {
   if (loading && !data) return <DeskSkeleton />
   if (error || !data) return <ErrorNote message={error ?? 'Data capaian mingguan belum termuat.'} onRetry={reload} />
 
-  const shown = divisionId === 'ALL' ? data.divisions : data.divisions.filter((d) => d.id === divisionId)
+  // Pilihan divisi milik entitas lain (setelah ganti entitas) tidak berlaku: kembali ke semua divisi.
+  const activeDivision = divisionId !== 'ALL' && data.divisions.some((d) => d.id === divisionId) ? divisionId : 'ALL'
+  const shown = activeDivision === 'ALL' ? data.divisions : data.divisions.filter((d) => d.id === activeDivision)
   // Tenggat mingguan: serah Kamis 17.00 WIB, kunci Jumat 17.00 WIB (src/lib/lock.ts).
   const deadline = (at: string) => `${formatDateLong(at)} pukul ${formatTime(at)} WIB`
   const handoverPassed = Date.now() >= Date.parse(data.week.handoverBy)
@@ -177,7 +179,7 @@ export function DivisionWeeklyDesk() {
             </select>
           </Field>
           <Field label="Divisi" htmlFor="desk-division">
-            <select id="desk-division" value={divisionId} onChange={(e) => setDivisionId(e.target.value)} className={selectCls}>
+            <select id="desk-division" value={activeDivision} onChange={(e) => setDivisionId(e.target.value)} className={selectCls}>
               {data.divisions.length !== 1 && <option value="ALL">Semua divisi ({data.divisions.length})</option>}
               {data.divisions.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -602,7 +604,8 @@ function DivisionBoard({ division, data, onChanged }: { division: DivisionRow; d
           divisionId={division.id}
           divisionName={division.name}
           data={data}
-          item={dialog.item}
+          // Item hidup dari data terbaru: bukti yang baru diunggah/dihapus di dalam dialog ikut tampil.
+          item={dialog.item ? (items.find((i) => i.id === dialog.item!.id) ?? dialog.item) : null}
           lane={dialog.lane}
           locked={locked}
           onClose={() => setDialog(null)}

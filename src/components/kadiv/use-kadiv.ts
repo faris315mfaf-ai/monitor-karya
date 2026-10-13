@@ -23,36 +23,46 @@ export async function postJson<T = Record<string, unknown>>(url: string, body: u
  * tampil dan kartu yang gagal menulis alasannya.
  */
 export function useKadivData(divisionId?: string | null) {
-  const [team, setTeam] = useState<KadivTeam | null>(null)
-  const [review, setReview] = useState<ReviewQueue | null>(null)
+  // Setiap data diberi kunci divisi: saat divisi berganti, data divisi lama tidak boleh tampil
+  // (atau tetap tampil bila muat divisi baru gagal) di bawah nama divisi yang baru.
+  const key = divisionId ?? ''
+  const [teamBox, setTeamBox] = useState<{ key: string; value: KadivTeam } | null>(null)
+  const [reviewBox, setReviewBox] = useState<{ key: string; value: ReviewQueue } | null>(null)
   const [teamError, setTeamError] = useState<string | null>(null)
   const [reviewError, setReviewError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [settledKey, setSettledKey] = useState<string | null>(null)
   const seq = useRef(0)
+  // Divisi terkini: muat ulang dari penutup lama (mis. tombol "Urungkan" di toast) tetap memuat divisi yang sedang tampil.
+  const current = useRef(divisionId ?? null)
+  const team = teamBox?.key === key ? teamBox.value : null
+  const review = reviewBox?.key === key ? reviewBox.value : null
+  const loading = settledKey !== key
 
   const load = useCallback(async () => {
     const n = ++seq.current
-    const q = divisionId ? `?divisionId=${encodeURIComponent(divisionId)}` : ''
+    const div = current.current
+    const loadKey = div ?? ''
+    const q = div ? `?divisionId=${encodeURIComponent(div)}` : ''
     const [t, r] = await Promise.allSettled([getJson<KadivTeam>(`/api/kadiv/team${q}`), getJson<ReviewQueue>(`/api/outputs/review${q}`)])
     if (n !== seq.current) return
     if (t.status === 'fulfilled') {
-      setTeam(t.value)
+      setTeamBox({ key: loadKey, value: t.value })
       setTeamError(null)
     } else setTeamError(t.reason instanceof Error ? t.reason.message : 'Data tim belum termuat')
     if (r.status === 'fulfilled') {
-      setReview(r.value)
+      setReviewBox({ key: loadKey, value: r.value })
       setReviewError(null)
     } else setReviewError(r.reason instanceof Error ? r.reason.message : 'Antrean review belum termuat')
-    setLoading(false)
-  }, [divisionId])
+    setSettledKey(loadKey)
+  }, [])
 
   useEffect(() => {
     // Muat awal & saat divisi berganti; setState terjadi setelah fetch selesai.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    current.current = divisionId ?? null
     void load()
-  }, [load])
+  }, [load, divisionId])
 
-  return { team, review, setReview, teamError, reviewError, loading, reload: load }
+  return { team, review, teamError, reviewError, loading, reload: load }
 }
 
 export type KadivDataCtl = ReturnType<typeof useKadivData>

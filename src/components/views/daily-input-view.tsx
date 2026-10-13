@@ -193,7 +193,7 @@ function reportState(p: ProjectItem, locked: boolean): { status: Status; label: 
 }
 
 /** Alur laporan harian: entri → terkirim ke Admin PT → diteruskan ke holding → bahan laporan mingguan. */
-function reportFlow(p: ProjectItem, locked: boolean, lockAt: string): FlowStep[] {
+function reportFlow(p: ProjectItem, locked: boolean, lockAt: string, open247 = false): FlowStep[] {
   const r = p.report
   const sent = Boolean(r?.submittedAt)
   return [
@@ -207,7 +207,7 @@ function reportFlow(p: ProjectItem, locked: boolean, lockAt: string): FlowStep[]
     {
       title: 'Terkirim ke Admin PT',
       status: sent ? 'done' : 'todo',
-      meta: sent ? `Pukul ${formatTime(r!.submittedAt)}` : `Tenggat ${formatTime(lockAt)}`,
+      meta: sent ? `Pukul ${formatTime(r!.submittedAt)}` : open247 ? 'Kirim kapan saja' : `Tenggat ${formatTime(lockAt)}`,
     },
     {
       title: 'Diteruskan ke holding',
@@ -351,8 +351,12 @@ export function DailyInputView() {
       ? 'done'
       : 'accent'
 
+  // Pergantian hari: sampai respons tanggal baru tiba, layar masih berisi tanggal lama — tandai sibuk agar tak disangka isi tanggal baru.
+  const wantedKey = day ?? data.todayKey
+  const switching = loading && Boolean(data.reportDateKey) && Boolean(wantedKey) && data.reportDateKey !== wantedKey
+
   return (
-    <>
+    <div className={cx('mk-app__inner w-full', switching && 'opacity-60 pointer-events-none transition-opacity')} aria-busy={switching || undefined}>
       <DashHeader context={single ? single.name : 'Laporan kemajuan'} tools={headBadge} />
 
       <div>
@@ -444,6 +448,7 @@ export function DailyInputView() {
                 locked={singleLocked}
                 dayLocked={data.locked}
                 lockAt={data.lockAt}
+                open247={data.countdown === null}
                 dateKey={dateKey}
                 canRequestUnlock={Boolean(data.canRequestUnlock)}
                 onSaved={reload}
@@ -503,6 +508,7 @@ export function DailyInputView() {
                   locked={isLockedFor(opened, data.locked)}
                   dayLocked={data.locked}
                   lockAt={data.lockAt}
+                  open247={data.countdown === null}
                   dateKey={dateKey}
                   canRequestUnlock={Boolean(data.canRequestUnlock)}
                   onSaved={reload}
@@ -535,7 +541,7 @@ export function DailyInputView() {
           )}
         </>
       )}
-    </>
+    </div>
   )
 }
 
@@ -616,6 +622,7 @@ export function DailyReportCard({
         locked={locked}
         dayLocked={data.locked}
         lockAt={data.lockAt}
+        open247={data.countdown === null}
         canRequestUnlock={Boolean(data.canRequestUnlock)}
         onSaved={() => {
           reload()
@@ -637,6 +644,7 @@ function EntryDesk({
   locked: lockedProp,
   dayLocked,
   lockAt,
+  open247 = false,
   dateKey,
   canRequestUnlock,
   onSaved,
@@ -647,6 +655,8 @@ function EntryDesk({
   /** Tanggal ini sudah lewat tenggat 17.00. */
   dayLocked: boolean
   lockAt: string
+  /** Aturan entitas 24/7 (tanpa jam batas): alur tidak menampilkan "Tenggat <jam>". */
+  open247?: boolean
   /** "YYYY-MM-DD" bila bukan hari ini (laporan lampau yang sedang dibuka). */
   dateKey?: string
   canRequestUnlock: boolean
@@ -818,7 +828,7 @@ function EntryDesk({
       {/* Ponsel: alur (vertikal) baru tampil setelah terkirim; sebelumnya daftar langsung ke entri. [F2-PIC] */}
       {!isPhone || r?.submittedAt ? (
         <div className="mk-lap-inset">
-          <FlowDiagram steps={reportFlow(project, locked, lockAt)} orientation={isPhone ? 'vertical' : 'horizontal'} label="Alur laporan harian" />
+          <FlowDiagram steps={reportFlow(project, locked, lockAt, open247)} orientation={isPhone ? 'vertical' : 'horizontal'} label="Alur laporan harian" />
         </div>
       ) : null}
 

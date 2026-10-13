@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { useResource } from '@/hooks/use-resource'
-import { useApp, type SessionUser } from '@/components/app-provider'
+import { useApp } from '@/components/app-provider'
 import { NotificationButton } from '@/components/shell'
 import {
   Button, Card, Chip, EmptyNote, ErrorNote, FlowDiagram, Hero, PageHeader, Sheet, Skeleton, StatusBadge, cx,
@@ -10,7 +10,7 @@ import {
 } from '@/components/mk'
 import { Field, InfoLine, SectionTitle, selectCls } from '@/components/companies/parts'
 import { EscalationStatusBadge } from '@/components/status-badges'
-import { can } from '@/lib/rbac'
+import { escalationPerms } from '@/lib/escalation-perms'
 import { ESCALATION_STATUS_META, ESCALATION_NEEDED_LABELS } from '@/lib/constants'
 import { formatDateTime, formatNumber, formatRelative } from '@/lib/format'
 import { toastWithUndo } from '@/lib/undo-client' // [F2-URUNGKAN]
@@ -62,20 +62,6 @@ const STATUS_OPTIONS = [
 
 const statusLabel = (s: string) => ESCALATION_STATUS_META[s]?.label ?? s
 const neededLabel = (n: string) => ESCALATION_NEEDED_LABELS[n] || n
-
-/**
- * Langkah yang tersedia pada satu eskalasi menurut peran: direktur menandai
- * ditinjau, Manajemen mencatat keputusan, dan keduanya (atau pengaju) menutup
- * setelah diputuskan.
- */
-function escalationPerms(user: SessionUser, e: Escalation) {
-  const mayReview = can(user.role, 'escalation:followup') && e.status === 'DIAJUKAN'
-  const mayDecide = can(user.role, 'escalation:decide') && e.status !== 'DITUTUP' && e.status !== 'DIPUTUSKAN'
-  const mayClose =
-    e.status === 'DIPUTUSKAN' &&
-    (can(user.role, 'escalation:decide') || can(user.role, 'escalation:followup') || e.raisedById === user.id)
-  return { mayReview, mayDecide, mayClose }
-}
 
 export function EscalationsView() {
   const { user } = useApp()

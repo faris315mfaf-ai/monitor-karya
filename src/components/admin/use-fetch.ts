@@ -9,11 +9,14 @@ import { useCallback, useEffect, useState } from 'react'
 export function useFetch<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(url !== null)
   const [tick, setTick] = useState(0)
+  // Selesai untuk kunci (url + muat ulang) mana; `loading` diturunkan darinya supaya
+  // url yang baru terpasang (mis. Sheet dibuka) tidak sempat tampil "kosong" tanpa memuat.
+  const [doneKey, setDoneKey] = useState<string | null>(null)
+  const key = url ? `${url}#${tick}` : null
 
   useEffect(() => {
-    if (!url) return
+    if (!url || !key) return
     let alive = true
     fetch(url, { cache: 'no-store' })
       .then(async (res) => {
@@ -28,16 +31,16 @@ export function useFetch<T>(url: string | null) {
         }
       })
       .catch(() => alive && setError('Tidak dapat menghubungi server'))
-      .finally(() => alive && setLoading(false))
+      .finally(() => alive && setDoneKey(key))
     return () => {
       alive = false
     }
-  }, [url, tick])
+  }, [url, key])
 
   const reload = useCallback(() => {
-    setLoading(true)
     setTick((t) => t + 1)
   }, [])
+  const loading = key !== null && doneKey !== key
   return { data, setData, error, loading, reload }
 }
 

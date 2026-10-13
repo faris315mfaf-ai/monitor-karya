@@ -221,6 +221,7 @@ export function ManagementDashboard({ data }: { data: ManagementData; reload: ()
       <WeeklyReportSheet
         division={report}
         weekLabel={data.reportWeek?.label ?? `M${data.week}`}
+        handoverBy={data.reportWeek?.handoverBy}
         viewer={data.viewer ?? { canRemind: false, canMarkRead: false, canDecideDeadline: false }}
         actions={weekly}
         onClose={() => setReport(null)}

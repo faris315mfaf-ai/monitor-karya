@@ -15,7 +15,7 @@ import {
 } from '@/components/mk'
 import { Field, useConfirm } from '@/components/companies/parts'
 import { useResource } from '@/hooks/use-resource'
-import { formatDateShort, formatRelative } from '@/lib/format'
+import { formatDateShort, formatFileSize, formatRelative } from '@/lib/format'
 import {
   OUTPUT_FILTERS, OUTPUT_META, call, daysUntil, notesChanged, uploadOutputEvidence,
   type EvidenceItem, type OutputItem, type OutputStatus, type useOutputs,
@@ -293,11 +293,7 @@ function ProjectOutputsCard({
 /* Sheet output                                                        */
 /* ------------------------------------------------------------------ */
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
-  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
-}
+const fmtSize = formatFileSize
 
 export function OutputSheet(props: { output: OutputItem; projectId: string; onClose: () => void; onChanged: () => void }) {
   if (props.output.projectId !== props.projectId) return null
@@ -755,10 +751,13 @@ function OutputForm({
 
   async function save(e?: React.FormEvent) {
     e?.preventDefault()
+    // Tombol simpan di footer Sheet berada di luar komponen ini; cegah kirim ganda (output ganda).
+    if (saving) return
     if (title.trim().length < 3) {
       setErr('Judul output minimal 3 huruf')
       return
     }
+    setErr(null)
     setSaving(true)
     try {
       if (output) {

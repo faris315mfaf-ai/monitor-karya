@@ -13,8 +13,8 @@ import { Avatar, Button, Card, EmptyNote, FlowDiagram, Icon, Sheet, StatusBadge,
 import { refreshNavBadges } from '@/components/pic/nav-badges'
 import { WeeklyCommentThread, type WeeklyCommentThreadHandle } from './weekly-comments'
 import { divisionTone } from '@/lib/division-tone'
-import { formatNumber, formatRelative, initials } from '@/lib/format'
-import { WEEKLY_HANDOVER_LABEL, WEEKLY_LOCK_LABEL } from '@/lib/lock'
+import { formatNumber, formatRelative, formatTime, initials } from '@/lib/format'
+import { WEEKLY_HANDOVER_DAY, WEEKLY_HANDOVER_LABEL, WEEKLY_LOCK_DAY, WEEKLY_LOCK_LABEL } from '@/lib/lock'
 import { WEEKLY_BADGE, pct, type DivisionSummary, type RingkasanData, type WeeklyState } from './types'
 
 type Viewer = NonNullable<RingkasanData['viewer']>
@@ -26,7 +26,9 @@ export function useWeeklyActions(entityOf: (d: DivisionSummary) => string, weekK
   const [reminded, setReminded] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
-  const stateOf = (d: DivisionSummary): WeeklyState => override[d.id] ?? d.weekly.state
+  // Kunci per laporan (bukan per divisi): tanda baca minggu lalu tidak menempel ke laporan minggu berikutnya.
+  const keyOf = (d: DivisionSummary) => d.weekly.id ?? `${d.id}:${weekKey ?? ''}`
+  const stateOf = (d: DivisionSummary): WeeklyState => override[keyOf(d)] ?? d.weekly.state
 
   async function send(method: 'POST' | 'DELETE', d: DivisionSummary) {
     const res = await fetch('/api/ringkasan/laporan-dibaca', {
@@ -46,7 +48,7 @@ export function useWeeklyActions(entityOf: (d: DivisionSummary) => string, weekK
     setBusy(d.id)
     try {
       await send('POST', d)
-      setOverride((o) => ({ ...o, [d.id]: 'read' }))
+      setOverride((o) => ({ ...o, [keyOf(d)]: 'read' }))
       refreshNavBadges()
       toast.success(`Laporan Divisi ${d.name} ditandai sudah dibaca.`, {
         action: {
@@ -54,7 +56,7 @@ export function useWeeklyActions(entityOf: (d: DivisionSummary) => string, weekK
           onClick: () => {
             send('DELETE', d)
               .then(() => {
-                setOverride((o) => ({ ...o, [d.id]: before === 'read' ? 'sent' : before }))
+                setOverride((o) => ({ ...o, [keyOf(d)]: before === 'read' ? 'sent' : before }))
                 refreshNavBadges()
               })
               .catch((e: Error) => toast.error(e.message))
@@ -212,21 +214,34 @@ export function WeeklyReportsCard({
   )
 }
 
+/** "Kamis 17.00" dari satu instan tenggat (WIB). */
+function deadlineLabel(iso: string) {
+  return `${new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: 'Asia/Jakarta' }).format(new Date(iso))} ${formatTime(iso)}`
+}
+
 /** Sheet laporan: terkirim (angka, poin utama, kendala, tanggapan) atau belum masuk (pengingat, kontak). */
 export function WeeklyReportSheet({
   division,
   weekLabel,
+  handoverBy,
   viewer,
   actions,
   onClose,
 }: {
   division: DivisionSummary | null
   weekLabel: string
+  /** Tenggat serah minggu laporan dari API (ISO). Kosong = label bawaan lock.ts. */
+  handoverBy?: string | null
   viewer: Viewer
   actions: WeeklyActions
   onClose: () => void
 }) {
   const { setActiveTab } = useApp()
+  // Jam kunci mingguan sama dengan jam serah (weeklyDeadlines), hanya hari kunci yang bergeser.
+  const handoverLabel = handoverBy ? deadlineLabel(handoverBy) : WEEKLY_HANDOVER_LABEL
+  const lockLabel = handoverBy
+    ? deadlineLabel(new Date(Date.parse(handoverBy) + (WEEKLY_LOCK_DAY - WEEKLY_HANDOVER_DAY) * 86400000).toISOString())
+    : WEEKLY_LOCK_LABEL
   const [last, setLast] = useState<DivisionSummary | null>(division)
   const [contactOpen, setContactOpen] = useState(false)
   const thread = useRef<WeeklyCommentThreadHandle>(null)
@@ -285,7 +300,7 @@ export function WeeklyReportSheet({
       {d && missing && (
         <>
           <p className="t-body text-ink">
-            Laporan mingguan {weekLabel} Divisi {d.name} belum dikirim. Tenggat serahnya {WEEKLY_HANDOVER_LABEL} dan minggu itu dikunci {WEEKLY_LOCK_LABEL}.
+            Laporan mingguan {weekLabel} Divisi {d.name} belum dikirim. Tenggat serahnya {handoverLabel} dan minggu itu dikunci {lockLabel}.
           </p>
           <div className={`mk-note-box ${actions.reminded[d.id] ? 'mk-soft--done' : 'mk-soft--neutral'}`}>
             {actions.reminded[d.id]

@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { Button, Card, EmptyNote, ErrorNote, Skeleton, cx } from '@/components/mk'
 import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
-import { formatDateShort, formatTime } from '@/lib/format'
+import { formatDateShort, formatTime, isSameWibDay } from '@/lib/format'
 import { COMMENT_MAX } from '@/lib/oversight-shared'
 
 export type WeeklyComment = {
@@ -43,7 +43,8 @@ async function send(method: 'POST' | 'DELETE' | 'PATCH', body: unknown) {
 
 function when(iso: string) {
   const d = new Date(iso)
-  return d.toDateString() === new Date().toDateString() ? formatTime(d) : `${formatDateShort(d)} · ${formatTime(d)}`
+  // "Hari ini" menurut kalender WIB (bukan zona waktu peramban), sama dengan jam yang ditampilkan.
+  return isSameWibDay(d) ? formatTime(d) : `${formatDateShort(d)} · ${formatTime(d)}`
 }
 
 function Bubbles({ items }: { items: WeeklyComment[] }) {

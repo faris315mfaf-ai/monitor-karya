@@ -23,7 +23,7 @@ import { Input } from '@/components/mk/forms'
 import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
 import { refreshNavBadges } from '@/components/pic/nav-badges'
-import { formatDateShort, formatRelative, initials } from '@/lib/format'
+import { formatDateShort, formatFileSize, formatRelative, initials } from '@/lib/format'
 import {
   APPROVAL_LIMITS, APPROVAL_STATUS_LABELS, APPROVAL_TYPE_LABELS, formatAmountShort, type ApprovalType,
 } from '@/lib/oversight-shared'
@@ -375,9 +375,7 @@ const TYPE_OPTIONS: { value: ApprovalType; label: string }[] = [
   { value: 'CUTI', label: 'Cuti' },
 ]
 
-function fileSizeLabel(n: number) {
-  return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toLocaleString('id-ID', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
-}
+const fileSizeLabel = formatFileSize
 
 function todayKey() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())

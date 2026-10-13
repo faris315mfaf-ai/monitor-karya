@@ -16,7 +16,6 @@ import {
 import { DailyStatusBadge, WeeklyHeaderBadge, weeklyHeaderStatus, weeklyItemStatus } from '@/components/status-badges'
 import { DashHeader, phaseSteps } from '@/components/views/dash-common'
 import { WEEKLY_STATUS_META } from '@/lib/constants'
-import { DAILY_CUTOFF_LABEL } from '@/lib/lock'
 import { formatDateShort, formatNumber, formatPercent, formatTime } from '@/lib/format'
 import { AdminSummary } from '@/components/admin/admin-summary' // [F2-ADMIN]
 import { useOutputs, useProjectProgress, useProposals } from '@/components/pic/api'
@@ -67,13 +66,19 @@ export type PicData = {
 }
 
 /** "Tenggat 17.00 · 2 jam 40 menit lagi" / "Tenggat 17.00 · lewat 4 menit" (tanpa menyalahkan). */
-function deadlineText(c: PicData['countdown'], lockAt: string) {
+export function deadlineText(c: PicData['countdown'], lockAt: string) {
+  // Label jam diturunkan dari lockAt kiriman API (searah dengan hitungan mundur), bukan konstanta env.
+  // Titik kunci tepat tengah malam WIB bukan "jam 00.00": mode 24/7 mengunci di akhir hari (24.00),
+  // sedangkan pengisian yang ditutup mengunci sejak awal hari (sudah lewat).
+  const midnight = formatTime(lockAt) === '00.00'
+  if (midnight && c.passed) return 'Pengisian laporan sedang ditutup'
+  const label = midnight ? '24.00' : formatTime(lockAt)
   if (c.passed) {
     const mins = Math.max(0, Math.floor((Date.now() - Date.parse(lockAt)) / 60000))
     const late = mins < 60 ? `${mins} menit` : mins < 24 * 60 ? `${Math.floor(mins / 60)} jam ${mins % 60} menit` : null
-    return late ? `Tenggat ${DAILY_CUTOFF_LABEL} · lewat ${late}` : `Tenggat ${DAILY_CUTOFF_LABEL} sudah lewat`
+    return late ? `Tenggat ${label} · lewat ${late}` : `Tenggat ${label} sudah lewat`
   }
-  return c.hours > 0 ? `Tenggat ${DAILY_CUTOFF_LABEL} · ${c.hours} jam ${c.minutes} menit lagi` : `Tenggat ${DAILY_CUTOFF_LABEL} · ${c.minutes} menit lagi`
+  return c.hours > 0 ? `Tenggat ${label} · ${c.hours} jam ${c.minutes} menit lagi` : `Tenggat ${label} · ${c.minutes} menit lagi`
 }
 
 function daysLeft(iso: string | null) {
@@ -353,7 +358,7 @@ export function KadivDashboard({ data }: { data: KadivData }) {
   const s = data.summary
   const [filter, setFilter] = useState<(typeof ITEM_FILTERS)[number]>('ALL')
   const div = data.divisions[0]
-  const divName = data.divisions.length === 1 ? `Divisi ${div.name}` : `${data.divisions.length} divisi Anda`
+  const divName = data.divisions.length === 1 ? `Divisi ${div.name}` : data.divisions.length === 0 ? 'Divisi Anda' : `${data.divisions.length} divisi Anda`
   const anySubmitted = data.divisions.some((d) => d.submitted)
   const allApproved = data.divisions.length > 0 && data.divisions.every((d) => d.approved)
   const allForwarded = data.divisions.length > 0 && data.divisions.every((d) => d.forwarded)
@@ -547,6 +552,7 @@ export function KadivDashboard({ data }: { data: KadivData }) {
       <div className="mk-row">
         {team ? (
           <WeeklySummaryCard
+            key={team.division?.id ?? 'tanpa-divisi'}
             id="kadiv-weekly-summary"
             divisionId={team.division?.id}
             pendingReview={kadiv.review?.queue.length}

@@ -2,15 +2,17 @@
 
 /**
  * Peta kepatuhan berjenjang (holding → sub-holding → PT) dari /api/compliance-map.
- * Skor selalu tertulis, warnanya dari token status, dan setiap kelompok bisa
+ * Skor selalu tertulis bersama kata dan warna dari ambang tunggal
+ * (@/lib/compliance-band: ≥90 Baik · 75–89 Perlu perhatian · <75 Kritis); setiap kelompok bisa
  * dibuka/tutup dengan papan ketik (tombol ber-aria-expanded).
  */
 
 import { useState } from 'react'
 import { useFetch } from '@/hooks/use-fetch'
-import { EmptyNote, ErrorNote, Icon, Skeleton, cx, type Status } from '@/components/mk'
+import { EmptyNote, ErrorNote, Icon, Skeleton, StatusBadge, cx, type Status } from '@/components/mk'
 import { ENTITY_TYPE_LABELS } from '@/lib/constants'
 import { formatPercent } from '@/lib/format'
+import { COMPLIANCE_LEGEND, complianceBand } from '@/lib/compliance-band'
 
 type TreeNode = {
   id: string
@@ -24,21 +26,11 @@ type TreeNode = {
   children?: TreeNode[]
 }
 
-/** Ambang skor → status desain (sama dengan legenda di bawah). */
+/** Ambang skor → status desain: satu sumber dengan legenda (@/lib/compliance-band). */
 function scoreStatus(score: number | null | undefined): Status {
   if (score === null || score === undefined) return 'neutral'
-  if (score >= 90) return 'done'
-  if (score >= 75) return 'on'
-  if (score >= 60) return 'risk'
-  return 'late'
+  return complianceBand(score).tone
 }
-
-const LEGEND: { status: Status; label: string }[] = [
-  { status: 'done', label: '≥ 90' },
-  { status: 'on', label: '75–89' },
-  { status: 'risk', label: '60–74' },
-  { status: 'late', label: '< 60' },
-]
 
 export function ComplianceTreemap({
   scopeEntityId,
@@ -70,10 +62,10 @@ export function ComplianceTreemap({
         ))}
       </ul>
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3 t-caption text-ink-2">
-        {LEGEND.map((l) => (
-          <span key={l.status} className="flex items-center gap-1.5">
-            <span className={cx('mk-dot', 'mk-bg--' + l.status)} aria-hidden />
-            {l.label}
+        {COMPLIANCE_LEGEND.map((l) => (
+          <span key={l.tone} className="flex items-center gap-1.5">
+            <span className={cx('mk-dot', 'mk-bg--' + l.tone)} aria-hidden />
+            {l.label} {l.range}
           </span>
         ))}
       </div>
@@ -126,10 +118,9 @@ function TreeNodeRow({
           <span className="hidden t-caption text-ink-3 sm:inline">{node.entityCount} PT</span>
         )}
         {score !== null && score !== undefined && (
-          <span className={cx('flex items-center gap-1 t-footnote font-semibold tabular-nums', 'mk-text--' + status)}>
-            <span className={cx('mk-dot', 'mk-bg--' + status)} aria-hidden />
-            {formatPercent(score, 0)}
-          </span>
+          <StatusBadge status={status} size="sm" className="shrink-0 tabular-nums">
+            {complianceBand(score).label} {formatPercent(score, 0)}
+          </StatusBadge>
         )}
       </button>
       {hasChildren && expanded && (

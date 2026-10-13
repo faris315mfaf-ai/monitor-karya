@@ -453,7 +453,7 @@ export function DirectorDashboard({ data }: { data: RingkasanData }) {
       </div>
 
       <ProjectSheet project={open} onClose={() => setOpen(null)} />
-      <WeeklyReportSheet division={report} weekLabel={weekLabel} viewer={viewer} actions={weekly} onClose={() => setReport(null)} />
+      <WeeklyReportSheet division={report} weekLabel={weekLabel} handoverBy={data.reportWeek?.handoverBy} viewer={viewer} actions={weekly} onClose={() => setReport(null)} />
       <RejectDeadlineSheet ctl={deadline} />
       <RejectApprovalSheet ctl={approvalCtl} />
     </>

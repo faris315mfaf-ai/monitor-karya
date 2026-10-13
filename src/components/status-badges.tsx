@@ -15,6 +15,7 @@ import {
   UNLOCK_STATUS_META,
 } from '@/lib/constants'
 import { formatPercent } from '@/lib/format'
+import { complianceBand } from '@/lib/compliance-band'
 
 const DAILY: Record<string, Status> = {
   SELESAI: 'done',
@@ -85,14 +86,14 @@ export function UnlockStatusBadge({ status }: { status: string }) {
   return <StatusBadge status={UNLOCK[status]} size="sm">{meta.label}</StatusBadge>
 }
 
+/** Skor kepatuhan → status desain. Ambang tunggal di @/lib/compliance-band (≥90 · 75–89 · <75). */
 export function complianceStatus(score: number): Status {
-  return score >= 90 ? 'done' : score >= 75 ? 'on' : score >= 60 ? 'risk' : 'late'
+  return complianceBand(score).tone
 }
 
-/** [F4-B] Status selalu warna + ikon + kata: kata kepatuhan mengikuti panel SDM (Patuh · Perlu perhatian · Terlambat). */
+/** Kata kepatuhan (Baik · Perlu perhatian · Kritis), selalu bersama warna + ikon. */
 export function complianceLabel(score: number): string {
-  const st = complianceStatus(score)
-  return st === 'late' ? 'Terlambat' : st === 'risk' ? 'Perlu perhatian' : 'Patuh'
+  return complianceBand(score).label
 }
 
 export function ComplianceBadge({ score }: { score: number }) {

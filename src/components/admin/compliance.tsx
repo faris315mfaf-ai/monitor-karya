@@ -57,6 +57,10 @@ const dayLabel = (iso: string) =>
   ' ' +
   new Intl.DateTimeFormat('id-ID', { day: 'numeric', timeZone: WIB }).format(new Date(iso))
 
+/** Tenggat serah mingguan dari payload API, mis. "Kamis 17.00 WIB" (bukan teks tetap). */
+const handoverText = (iso: string) =>
+  `${new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: WIB }).format(new Date(iso))} ${formatTime(iso)} WIB`
+
 /** Label 3 huruf peta panas di ponsel (04-admin-pt.md §Ponsel). Dua kata atau
  * lebih memakai inisial (Sumber Daya Manusia → SDM); satu kata memakai tiga
  * huruf pertamanya (Teknologi → Tek). Nama lengkap tetap di caption kartu. */
@@ -127,7 +131,7 @@ export function ComplianceCard({ state, className, onChanged }: { state: Complia
           ? 'Memuat…'
           : mode === 'harian'
             ? `${data.totals.reported} dari ${data.totals.expected} orang lapor hari ini${data.totals.onLeave ? ` · ${data.totals.onLeave} cuti/izin` : ''} · ketuk divisi untuk detail`
-            : `M${data.week.isoWeek}: ${weeklyIn} dari ${data.divisions.length} divisi menyerahkan · tenggat Kamis 17.00 WIB`
+            : `M${data.week.isoWeek}: ${weeklyIn} dari ${data.divisions.length} divisi menyerahkan · tenggat ${handoverText(data.week.handoverBy)}`
       }
       action={
         <SegmentedControl
@@ -184,7 +188,7 @@ export function ComplianceCard({ state, className, onChanged }: { state: Complia
                       meta={`${d.reported} dari ${d.expected} orang`}
                     />
                   ) : (
-                    <span className="t-footnote text-ink-2">Tenggat Kamis 17.00 WIB</span>
+                    <span className="t-footnote text-ink-2">{`Tenggat ${handoverText(data.week.handoverBy)}`}</span>
                   )}
                   <div className="mt-auto flex items-center gap-2">
                     <Button size="sm" variant="secondary" onClick={() => setOpenId(d.id)}>
@@ -400,7 +404,7 @@ function DivisionSheet({ state, openId, onClose, onChanged }: { state: Complianc
                 </StatusBadge>
               ) : null}
               <span className="t-caption text-ink-2">
-                {d.weekly.submittedAt ? `Diserahkan ${formatRelative(d.weekly.submittedAt).toLowerCase()}` : 'Tenggat Kamis 17.00 WIB'}
+                {d.weekly.submittedAt ? `Diserahkan ${formatRelative(d.weekly.submittedAt).toLowerCase()}` : `Tenggat ${handoverText(data.week.handoverBy)}`}
               </span>
             </div>
           </div>

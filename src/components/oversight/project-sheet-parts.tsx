@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { Button, FlowDiagram, Skeleton, cx, type FlowStep } from '@/components/mk'
 import { Textarea } from '@/components/mk/forms'
 import { useResource } from '@/hooks/use-resource'
-import { formatDateShort, formatRelative, formatTime } from '@/lib/format'
+import { formatDateShort, formatRelative, formatTime, isSameWibDay } from '@/lib/format'
 import type { NotesData, StagesData, StageItem } from '@/components/pic/api'
 
 const STAGE_META: Record<StageItem['status'], { status: FlowStep['status']; label: string }> = {
@@ -118,8 +118,7 @@ export function useProjectReview(projectId: string | null, onChange?: () => void
     }
   }
 
-  const today = new Date().toDateString()
-  const reviewedToday = Boolean(data?.mine && new Date(data.mine.reviewedAt).toDateString() === today)
+  const reviewedToday = Boolean(data?.mine && isSameWibDay(data.mine.reviewedAt))
   return { data, busy, mark, reviewedToday, available: Boolean(data && !data.pendingMigration && data.canReview) }
 }
 

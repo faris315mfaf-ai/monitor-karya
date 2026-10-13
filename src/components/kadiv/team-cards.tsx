@@ -12,7 +12,7 @@ import {
   ActivityItem, AreaChart, Avatar, Button, Card, DivisionBar, EmptyNote, ErrorNote, Heatmap, Skeleton, useIsPhone,
 } from '@/components/mk'
 import { ROLE_LABELS } from '@/lib/constants'
-import { firstName, formatRelative } from '@/lib/format'
+import { firstName, formatRelative, formatTime } from '@/lib/format'
 import { MemberSheet } from './member-sheet'
 import { MembersSheet } from './members-sheet'
 import { ReportBadge, loadTone } from './parts'
@@ -46,8 +46,8 @@ export function useTeamSheets(ctl: KadivDataCtl) {
   const member = ctl.team?.members.find((m) => m.id === memberId) ?? null
   const element = ctl.team ? (
     <>
-      <MemberSheet member={member} team={ctl.team} onClose={() => setMemberId(null)} onChanged={ctl.reload} />
-      {ctl.team.division && <MembersSheet open={manage} divisionId={ctl.team.division.id} onClose={() => setManage(false)} onChanged={ctl.reload} />}
+      <MemberSheet key={memberId ?? 'tutup'} member={member} team={ctl.team} onClose={() => setMemberId(null)} onChanged={ctl.reload} />
+      {ctl.team.division && <MembersSheet key={ctl.team.division.id} open={manage} divisionId={ctl.team.division.id} onClose={() => setManage(false)} onChanged={ctl.reload} />}
     </>
   ) : null
   return { open: setMemberId, manage: () => setManage(true), element }
@@ -79,7 +79,8 @@ export function TeamDailyCard({ ctl, sheets, className, id }: { ctl: KadivDataCt
     }
   }
 
-  const deadline = t?.cutoffLabel ?? '17.00'
+  // Label dari payload (cutoffLabel, lalu lockAt); tanpa keduanya tampil tanda hubung, bukan jam tebakan.
+  const deadline = t?.cutoffLabel || (t?.lockAt ? formatTime(t.lockAt) : '—')
   return (
     <Card
       id={id}
