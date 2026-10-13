@@ -14,7 +14,8 @@ vi.mock('@/lib/db', () => ({ db: {
 vi.mock('@/lib/storage', () => ({ storageConfigured: m.configured, EVIDENCE_BUCKET: 'evidence' }))
 vi.mock('@/lib/storage-s3', () => ({ signedS3EvidenceUrl: m.signed }))
 vi.mock('@/lib/kpi-snapshot', () => ({ refreshKpiSnapshots: m.kpi }))
-vi.mock('@/lib/lock', () => ({ isWorkingDay: m.working }))
+// [T13] Hari kerja kini dari aturan PT (report-settings); m.working menggantikan isWorkingDayWith.
+vi.mock('@/lib/report-settings', () => ({ getReportSettings: async () => ({ workingDays: [1, 2, 3, 4, 5] }), isWorkingDayWith: m.working }))
 vi.mock('@/lib/reminders', () => ({ remindUnreportedDivisions: m.remind }))
 vi.mock('@/lib/reminder-rules', () => ({ reportingEntities: m.entities, getRules: m.rules, isDue: m.due, runDueRules: m.run, entitiesWithRuleEnabled: m.enabled }))
 vi.mock('@/lib/access-requests', () => ({ revertExpiredAccess: m.revert }))

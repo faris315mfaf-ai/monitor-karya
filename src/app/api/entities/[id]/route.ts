@@ -3,6 +3,7 @@ import { serverError } from '@/lib/api-error'
 import { db } from '@/lib/db'
 import { refuseUnscoped, requireApiUser, isGlobalRole, scopePathPrefix } from '@/lib/auth'
 import { monthKeyNow } from '@/lib/wib'
+import { refusePerformer } from '@/lib/pic-access'
 
 // GET /api/entities/[id] - entity detail with stats
 export async function GET(
@@ -12,6 +13,11 @@ export async function GET(
   try {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
+    // [T12] Detail entitas memuat laporan harian/mingguan semua proyek dan divisi
+    // PT-nya (capaian, kendala, penyetuju) — milik peran pemantau; PIC dan kepala
+    // divisi tak punya tab Entitas dan memakai dasbor masing-masing.
+    const forbidden = refusePerformer(user)
+    if (forbidden) return forbidden
     const unscoped = refuseUnscoped(user)
     if (unscoped) return unscoped
     const { id } = await params

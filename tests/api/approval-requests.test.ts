@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   db: {
     approvalRequest: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     attendance: { findMany: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
+    reportSettings: { findUnique: vi.fn() },
     project: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     user: { findUnique: vi.fn(), findMany: vi.fn() },
     division: { findMany: vi.fn(), findUnique: vi.fn() },
@@ -176,6 +177,18 @@ describe('PATCH /api/approval-requests', () => {
     ])
     expect(rows[0]).toMatchObject({ userId: 'pic-1', status: 'CUTI', recordedById: 'dir-1' })
     expect(JSON.parse(db.approvalRequest.update.mock.calls[0][0].data.appliedData)).toEqual({ attendance: ['2026-10-09', '2026-10-12'] })
+  })
+
+  it('[T12] cuti di PT berhari kerja 7 hari mencatat Sabtu–Minggu juga', async () => {
+    mocks.currentUser.value = DIREKTUR
+    db.reportSettings.findUnique.mockResolvedValue({ dailyCutoffHour: null, workingDays: [], dailyOpen: true, weeklyCutoffHour: null, weeklyOpen: true })
+    db.approvalRequest.findUnique.mockResolvedValue({
+      ...ROW, type: 'CUTI', amount: null, requestedById: 'pic-1',
+      startDate: wib('2026-10-10T00:00:00'), endDate: wib('2026-10-11T00:00:00'), // Sabtu–Minggu
+    })
+    const res = await PATCH(req('PATCH', { id: 'ar-1', action: 'approve' }))
+    expect(res.status).toBe(200)
+    expect(db.attendance.createMany.mock.calls[0][0].data).toHaveLength(2)
   })
 
   it('urungkan lewat 15 menit ditolak; dalam 15 menit mengembalikan DIAJUKAN', async () => {

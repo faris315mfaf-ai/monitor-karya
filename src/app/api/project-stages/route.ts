@@ -95,26 +95,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Tulis alasan tahap tertahan' }, { status: 422 })
   }
 
-  const count = await db.projectStage.count({ where: { projectId: guard.project.id } })
-  if (count >= MAX_STAGES) return NextResponse.json({ error: `Maksimal ${MAX_STAGES} tahap per proyek` }, { status: 422 })
-  const last = await db.projectStage.findFirst({
-    where: { projectId: guard.project.id },
-    orderBy: { position: 'desc' },
-    select: { position: true },
+  // [T11, R-5] Cek batas, posisi, dan pembuatan satu transaksi di bawah kunci
+  // baris proyek — dua POST bersamaan tidak lagi melewati MAX_STAGES atau
+  // memakai posisi yang sama.
+  const projectId = guard.project.id
+  const stage = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    const count = await tx.projectStage.count({ where: { projectId } })
+    if (count >= MAX_STAGES) return null
+    const last = await tx.projectStage.findFirst({
+      where: { projectId },
+      orderBy: { position: 'desc' },
+      select: { position: true },
+    })
+    return tx.projectStage.create({
+      data: {
+        projectId,
+        position: (last?.position ?? -1) + 1,
+        name: parsed.data.name as string,
+        startDate: parsed.data.startDate as Date | null,
+        dueDate: parsed.data.dueDate as Date | null,
+        status: parsed.data.status as string,
+        note: parsed.data.note as string | null,
+      },
+      select: SELECT,
+    })
   })
-
-  const stage = await db.projectStage.create({
-    data: {
-      projectId: guard.project.id,
-      position: (last?.position ?? -1) + 1,
-      name: parsed.data.name as string,
-      startDate: parsed.data.startDate as Date | null,
-      dueDate: parsed.data.dueDate as Date | null,
-      status: parsed.data.status as string,
-      note: parsed.data.note as string | null,
-    },
-    select: SELECT,
-  })
+  if (!stage) return NextResponse.json({ error: `Maksimal ${MAX_STAGES} tahap per proyek` }, { status: 422 })
   await auditPic(req, user, 'CREATE_PROJECT_STAGE', 'PROJECT_STAGE', stage.id, { projectId: guard.project.id, name: stage.name })
   return NextResponse.json({ ok: true, stage }, { status: 201 })
 }

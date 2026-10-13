@@ -2,7 +2,8 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import { ROLE_LABELS } from '@/lib/constants'
-import { isDailyLocked, isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import { isoWeekOf, startOfWibDay, WEEKLY_CUTOFF_HOUR, weeklyDeadlines } from '@/lib/lock'
+import { getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { lastWorkingDays } from '@/lib/kadiv'
 import { DAILY_PIC_TEMPLATE } from '@/lib/reminders-pic'
 import {
@@ -77,13 +78,19 @@ export function groupProjectsByDivision(projects: ScopeProject[], divisions: Div
   return out
 }
 
-export async function loadCompliance(entityIds: string[] | null, opts: { canRemind: boolean; now?: Date }): Promise<ComplianceData> {
+export async function loadCompliance(
+  entityIds: string[] | null,
+  // settingsEntityId: PT yang aturan jam batasnya dipakai (PT akun / PT yang dipilih); null = bawaan.
+  opts: { canRemind: boolean; now?: Date; settingsEntityId?: string | null }
+): Promise<ComplianceData> {
   const now = opts.now ?? new Date()
   const today = startOfWibDay(now)
   const days = lastWorkingDays(today, 10)
   const firstDay = days[0] ?? today
   const { isoYear, isoWeek } = isoWeekOf(today)
-  const wk = weeklyDeadlines(today)
+  // [T12] Jam batas harian & serah mingguan mengikuti ReportSettings PT, bukan env.
+  const rpt = await getReportSettings(opts.settingsEntityId ?? null)
+  const wk = weeklyDeadlines(today, rpt.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
 
   const [projects, divisions] = await Promise.all([scopeProjects(entityIds), scopeDivisions(entityIds)])
   const live = projects.filter((p) => p.picUser?.isActive)
@@ -211,7 +218,7 @@ export async function loadCompliance(entityIds: string[] | null, opts: { canRemi
   return {
     today: today.toISOString(),
     days: days.map((d) => d.toISOString()),
-    locked: isDailyLocked(today, now),
+    locked: isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now),
     week: { isoYear, isoWeek, handoverBy: wk.handoverBy.toISOString(), lockAt: wk.lockAt.toISOString(), handoverPassed: now >= wk.handoverBy },
     totals: {
       expected: all.expected,

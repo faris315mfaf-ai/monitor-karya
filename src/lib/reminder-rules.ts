@@ -2,7 +2,8 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import { isMasterRole } from '@/lib/rbac'
-import { isDailyLocked, isWorkingDay, isoWeekOf, startOfWibDay, wibIsoDay } from '@/lib/lock'
+import { isoWeekOf, startOfWibDay, wibIsoDay } from '@/lib/lock'
+import { getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
 import { remindUnreportedDivisions } from '@/lib/reminders'
 import { AUTO_ACTOR_NAME, DAILY_PIC_TEMPLATE, remindPicsDaily } from '@/lib/reminders-pic'
 import {
@@ -149,10 +150,20 @@ function wibMinutes(now: Date): number {
   return w.getUTCHours() * 60 + w.getUTCMinutes()
 }
 
-/** Jatuh tempo: hari cocok, jam sudah lewat, dan belum berjalan hari ini. */
-export function isDue(rule: ReminderRuleView, now = new Date()): boolean {
+/** Hari kerja bawaan (Sen–Jum) untuk pemanggil lama yang belum meneruskan aturan PT. */
+const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5]
+
+/**
+ * Jatuh tempo: hari cocok, jam sudah lewat, dan belum berjalan hari ini.
+ * [T13] `workingDays` = hari kerja PT (ReportSettings; kosong = setiap hari).
+ * Tanpa argumen ketiga berlaku Sen–Jum seperti dulu, jadi pemanggil lama tidak
+ * berubah. Aturan bertanggal-pekan (`weekday`) tidak terpengaruh hari kerja.
+ * Rute cron dan runDueRules meneruskan hari kerja PT yang sama, sehingga hitungan
+ * "seharusnya jalan" dan "benar-benar jalan" tidak pernah berbeda.
+ */
+export function isDue(rule: ReminderRuleView, now = new Date(), workingDays: number[] = DEFAULT_WORKING_DAYS): boolean {
   if (!rule.enabled) return false
-  if (rule.weekday ? wibIsoDay(now) !== rule.weekday : !isWorkingDay(now)) return false
+  if (rule.weekday ? wibIsoDay(now) !== rule.weekday : !isWorkingDayWith(workingDays, now)) return false
   const [h, m] = rule.time.split(':').map(Number)
   if (wibMinutes(now) < h * 60 + m) return false
   return !rule.lastRunAt || new Date(rule.lastRunAt) < startOfWibDay(now)
@@ -164,7 +175,9 @@ export function isDue(rule: ReminderRuleView, now = new Date()): boolean {
 
 async function runDaily(entityId: string, now: Date): Promise<number> {
   const today = startOfWibDay(now)
-  if (isDailyLocked(today, now)) return 0
+  // [T12] Kunci harian mengikuti aturan PT (24/7 = tidak terkunci), bukan jam env.
+  const rpt = await getReportSettings(entityId)
+  if (isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now)) return 0
   const projects = await db.project.findMany({
     where: { entityId, lifecycle: 'AKTIF', picUserId: { not: null } },
     select: { id: true },
@@ -176,17 +189,17 @@ async function runDaily(entityId: string, now: Date): Promise<number> {
 }
 
 /** Hari kerja ke-1…n sebelum `today` (tengah malam WIB). */
-function previousWorkingDays(today: Date, n: number): Date[] {
+function previousWorkingDays(today: Date, n: number, workingDays: number[]): Date[] {
   const out: Date[] = []
   for (let d = new Date(today.getTime() - DAY); out.length < n && today.getTime() - d.getTime() < 30 * DAY; d = new Date(d.getTime() - DAY)) {
-    if (isWorkingDay(d)) out.push(startOfWibDay(d))
+    if (isWorkingDayWith(workingDays, d)) out.push(startOfWibDay(d))
   }
   return out
 }
 
 async function runEscalation(entityId: string, days: number, now: Date): Promise<number> {
   const today = startOfWibDay(now)
-  const window = previousWorkingDays(today, Math.max(1, Math.min(10, days)))
+  const window = previousWorkingDays(today, Math.max(1, Math.min(10, days)), (await getReportSettings(entityId)).workingDays)
   if (window.length === 0) return 0
   const projects = await db.project.findMany({
     where: { entityId, lifecycle: 'AKTIF', picUserId: { not: null }, OR: [{ startDate: null }, { startDate: { lte: window[window.length - 1] } }] },
@@ -249,7 +262,8 @@ async function runEscalation(entityId: string, days: number, now: Date): Promise
 async function runManagementSummary(entityId: string, now: Date): Promise<number> {
   const today = startOfWibDay(now)
   const from = new Date(today.getTime() - 7 * DAY)
-  const workdays = Array.from({ length: 7 }, (_, i) => new Date(from.getTime() + i * DAY)).filter((d) => isWorkingDay(d)).length
+  const { workingDays } = await getReportSettings(entityId) // [T12] hari kerja menurut aturan PT
+  const workdays = Array.from({ length: 7 }, (_, i) => new Date(from.getTime() + i * DAY)).filter((d) => isWorkingDayWith(workingDays, d)).length
   const prev = isoWeekOf(from)
   const [entity, activeProjects, submitted, late, divisions, weekly, recipients] = await Promise.all([
     db.entity.findUnique({ where: { id: entityId }, select: { name: true } }),
@@ -324,8 +338,9 @@ export async function runDueRules(now = new Date()): Promise<{ entityId: string;
   const out: { entityId: string; kind: ReminderKind; sent: number }[] = []
   for (const pt of pts) {
     const rules = await getRules(pt.id)
+    const { workingDays } = await getReportSettings(pt.id)
     for (const rule of rules) {
-      if (!isDue(rule, now)) continue
+      if (!isDue(rule, now, workingDays)) continue
       let sent = 0
       try {
         if (rule.kind === 'HARIAN') sent = await runDaily(pt.id, now)

@@ -219,8 +219,17 @@ export const PROJECT_SLOT_SIGNERS: Record<string, string[]> = {
   MANAJEMEN: ['MANAJEMEN', 'DIREKTUR_SDM_GA'],
 }
 
-/** Slot yang terpaku pada PT proyek: penandatangannya harus dari PT yang sama. */
+/** Slot yang terpaku pada PT proyek: penandatangannya harus menjangkau PT itu. */
 export const PROJECT_ENTITY_SLOTS = ['ADMIN_PT', 'DIREKTUR_ENTITAS'] as const
+
+/**
+ * Slot entitas yang ditandatangani di seluruh cakupan penandatangan, bukan
+ * hanya PT yang sama persis (E2E-2 BUG-01, 13 Okt 2026). Direktur entitas
+ * membawahi PT-nya dan semua yang di bawahnya (docs/fitur/entitas.md), sama
+ * dengan gerbang baca `scopeEntityIds` dan `canDecideApprovalIn`; akun
+ * direktur bisa berlingkup SUB_HOLDING. Slot Admin PT tetap PT-nya sendiri.
+ */
+export const PROJECT_SUBTREE_SLOTS = ['DIREKTUR_ENTITAS'] as const
 
 export function approvalChainFor(role: string): string[] {
   return PROJECT_APPROVAL_CHAIN[role] ?? []
@@ -232,16 +241,24 @@ export function pendingSlot(chain: string[], approvedRoles: Iterable<string>): s
   return chain.find((r) => !done.has(r)) ?? null
 }
 
-/** Apakah akun ini boleh menandatangani `slot` untuk proyek milik `entityId`. */
+/**
+ * Apakah akun ini boleh menandatangani `slot` untuk proyek milik `entityId`.
+ * `reach` = hasil `scopeEntityIds(user)` (entitas yang terjangkau akun). Tanpa
+ * `reach` (atau null), slot entitas gagal-tertutup ke PT yang sama persis.
+ */
 export function canSignSlot(
   user: { role: string; scopeEntityId: string | null },
   slot: string,
-  entityId: string
+  entityId: string,
+  reach?: readonly string[] | null
 ): boolean {
   if (!can(user.role, 'project:approve')) return false
   if (isMasterRole(user.role)) return true
   if (!(PROJECT_SLOT_SIGNERS[slot] ?? []).includes(user.role)) return false
-  if ((PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot)) return user.scopeEntityId === entityId
+  if ((PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot)) {
+    if (user.scopeEntityId === entityId) return true
+    return (PROJECT_SUBTREE_SLOTS as readonly string[]).includes(slot) && !!reach && reach.includes(entityId)
+  }
   return true
 }
 

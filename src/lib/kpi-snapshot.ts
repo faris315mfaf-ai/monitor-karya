@@ -2,8 +2,9 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import {
-  dailyLockAt, dailyRequiresEvidence, isDailyLocked, isoWeekOf, startOfWibDay, weeklyDeadlines, weeklyRequiresEvidence,
+  dailyRequiresEvidence, isoWeekOf, startOfWibDay, WEEKLY_CUTOFF_HOUR, weeklyDeadlines, weeklyRequiresEvidence,
 } from '@/lib/lock'
+import { dailyDeadlineWith, getReportSettings } from '@/lib/report-settings'
 import {
   complianceScore, historicalOnTimeDaily, monthBounds, monthKeyOf, pct, previousMonthKey, workdaysBetween, type Ratio,
 } from '@/lib/kpi-math'
@@ -40,9 +41,21 @@ async function computeEntityMonth(entityId: string, monthKey: string, now: Date)
   const { start, end } = monthBounds(monthKey)
   const today = startOfWibDay(now)
   const isCurrent = today >= start && today < end
-  // Hari terakhir yang dihitung: hari ini bila sudah terkunci, selain itu kemarin.
-  const lastDay = isCurrent ? (isDailyLocked(today, now) ? today : new Date(today.getTime() - DAY)) : new Date(end.getTime() - DAY)
-  const days = lastDay >= start ? workdaysBetween(start, lastDay) : []
+  // [T12] Jam batas, hari kerja, dan jam serah mingguan mengikuti ReportSettings PT
+  // (bukan env / Sen–Jum tetap). Aturan saat ini dipakai juga untuk hari lampau:
+  // belum ada riwayat perubahan settings. Mode 24/7 = tenggat akhir hari WIB.
+  const rpt = await getReportSettings(entityId)
+  const deadlineOf = (d: Date) => dailyDeadlineWith(rpt.dailyCutoffHour, d)
+  // Hari terakhir yang dihitung: hari ini bila tenggatnya sudah lewat, selain itu kemarin.
+  const lastDay = isCurrent ? (now >= deadlineOf(today) ? today : new Date(today.getTime() - DAY)) : new Date(end.getTime() - DAY)
+  // [T13] Hari wajib lapor = hari kerja menurut aturan PT: `workingDays: []` berarti
+  // SETIAP HARI (keputusan pemilik; bawaan produksi 24/7), jadi akhir pekan ikut
+  // masuk pembagi; PT yang memilih Sen–Jum tidak punya kewajiban akhir pekan.
+  // Konsisten dengan dailyGate/isWorkingDayWith, kadiv-math dan reminder-rules (satu
+  // sumber: report-settings). Catatan: aturan SAAT INI dipakai juga untuk bulan lalu
+  // yang dihitung ulang (belum ada riwayat settings), jadi perubahan aturan menggeser
+  // pembagi surut pada 7 hari pertama bulan baru.
+  const days = lastDay >= start ? workdaysBetween(start, lastDay, rpt.workingDays) : []
 
   const [projects, totalProjects, divisions] = await Promise.all([
     db.project.findMany({ where: { entityId }, select: { id: true, lifecycle: true, picUserId: true, startDate: true, createdAt: true, approvedAt: true } }),
@@ -73,7 +86,7 @@ async function computeEntityMonth(entityId: string, monthKey: string, now: Date)
     }),
   ])
   const absent = new Set(attendance.map((a) => `${a.userId}|${a.date.getTime()}`))
-  const onTime = historicalOnTimeDaily({ days, projects, history, reports, lockAt: dailyLockAt, absent: (id, d) => absent.has(`${id}|${d.getTime()}`) })
+  const onTime = historicalOnTimeDaily({ days, projects, history, reports, lockAt: deadlineOf, absent: (id, d) => absent.has(`${id}|${d.getTime()}`) })
   // Snapshot lama tidak memiliki kolom null/coverage. Jangan terbitkan angka
   // pengganti bila kewajiban historis belum dapat dibuktikan. Cron melaporkan failed.
   if (!onTime.historyComplete) throw new Error(`Riwayat lifecycle ${onTime.unknownProjects} proyek belum lengkap`)
@@ -84,7 +97,7 @@ async function computeEntityMonth(entityId: string, monthKey: string, now: Date)
   for (let t = start.getTime(); t < end.getTime(); t += DAY) {
     const d = new Date(t)
     if (new Date(t + 7 * 3600000).getUTCDay() !== 1) continue
-    if (weeklyDeadlines(d).handoverBy > now) continue
+    if (weeklyDeadlines(d, rpt.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR).handoverBy > now) continue
     weeks.push(isoWeekOf(d))
   }
   const weeklyRows = weeks.length
@@ -128,7 +141,7 @@ async function computeEntityMonth(entityId: string, monthKey: string, now: Date)
   let reportsToday = 0
   let lateToday = 0
   let pendingReports = 0
-  if (isCurrent && workdaysBetween(today, today).length) {
+  if (isCurrent && workdaysBetween(today, today, rpt.workingDays).length) {
     const todayRows = await db.dailyProjectReport.findMany({
       where: { entityId, projectId: { in: activeIds }, reportDate: today, submittedAt: { not: null } },
       select: { isLate: true },

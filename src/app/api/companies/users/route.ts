@@ -144,7 +144,7 @@ export async function PATCH(req: NextRequest) {
   const data: Record<string, unknown> = {}
   const audit: Record<string, unknown> = {}
 
-  const name = s('name')
+  const name = s('name')?.slice(0, 120)
   if (name !== undefined) {
     if (!name) return NextResponse.json({ error: 'Nama wajib diisi.' }, { status: 422 })
     data.name = name
@@ -166,8 +166,22 @@ export async function PATCH(req: NextRequest) {
     data.email = email
     audit.email = email
   }
-  if (body.title !== undefined) data.title = s('title') || null
-  if (body.phone !== undefined) data.phone = s('phone') || null
+  // [T11, R-7] Jabatan dipangkas 120 karakter; telepon memakai format yang sama
+  // dengan /api/profile.
+  if (body.title !== undefined) data.title = s('title')?.slice(0, 120) || null
+  if (body.phone !== undefined) {
+    const phone = s('phone')
+    // [T13] Form admin mengirim `phone` pada SETIAP PATCH. Nilai warisan yang dulu
+    // tak divalidasi (mis. "0812.3456.789") tidak boleh memblokir ubah peran /
+    // nonaktifkan akun: format hanya diperiksa bila nilainya BERBEDA dari yang tersimpan.
+    const stored = existing.phone ?? ''
+    if (phone !== undefined && phone !== stored) {
+      if (phone && !/^\+?[0-9\s-]{8,20}$/.test(phone)) {
+        return NextResponse.json({ error: 'Nomor telepon tidak valid' }, { status: 422 })
+      }
+      data.phone = phone || null
+    }
+  }
   if (typeof body.avatarColor === 'string' && /^#[0-9a-f]{6}$/i.test(body.avatarColor)) data.avatarColor = body.avatarColor
 
   const role = s('role')
@@ -292,23 +306,36 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Ini Super Admin aktif terakhir; angkat Super Admin lain dulu.' }, { status: 409 })
   }
 
-  await db.$transaction(async (tx) => {
-    // Relasi ke akun ini bersifat opsional di skema, jadi baris laporannya
-    // tetap ada dengan penulis kosong; hanya tautan pimpinannya yang dilepas.
-    await tx.division.updateMany({ where: { headUserId: id }, data: { headUserId: null } })
-    await tx.project.updateMany({ where: { picUserId: id }, data: { picUserId: null } })
-    await tx.user.delete({ where: { id } })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'DELETE_ACCOUNT',
-        targetType: 'USER',
-        targetId: id,
-        beforeData: JSON.stringify({ username: existing.username, name: existing.name, role: existing.role }),
-        ip: clientIp(req),
-      },
+  try {
+    await db.$transaction(async (tx) => {
+      // Relasi ke akun ini bersifat opsional di skema, jadi baris laporannya
+      // tetap ada dengan penulis kosong; hanya tautan pimpinannya yang dilepas.
+      await tx.division.updateMany({ where: { headUserId: id }, data: { headUserId: null } })
+      await tx.project.updateMany({ where: { picUserId: id }, data: { picUserId: null } })
+      await tx.user.delete({ where: { id } })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'DELETE_ACCOUNT',
+          targetType: 'USER',
+          targetId: id,
+          beforeData: JSON.stringify({ username: existing.username, name: existing.name, role: existing.role }),
+          ip: clientIp(req),
+        },
+      })
     })
-  })
+  } catch (err) {
+    // [T12] Output, catatan proyek, dan usulan tenggat memegang akun ini lewat
+    // relasi wajib (tanpa ON DELETE SET NULL): menghapus akun yang pernah bekerja
+    // gagal P2003. Dulu galat itu lolos mentah (500); sekarang 409 dengan jalan keluar.
+    if ((err as { code?: unknown } | null)?.code === 'P2003') {
+      return NextResponse.json(
+        { error: 'Akun ini punya riwayat kerja (output, catatan, atau usulan) sehingga tidak bisa dihapus. Nonaktifkan saja agar riwayatnya tetap utuh.' },
+        { status: 409 }
+      )
+    }
+    return serverError(err, 'Gagal menghapus akun. Coba lagi.', 'companies/users DELETE')
+  }
 
   return NextResponse.json({ ok: true })
 }

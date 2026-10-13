@@ -2,7 +2,7 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import { can } from '@/lib/rbac'
-import { DAILY_CUTOFF_LABEL } from '@/lib/lock'
+import { dailyCutoffLabelWith, getReportSettings } from '@/lib/report-settings'
 
 /**
  * Pengingat laporan harian ke PIC satu proyek [F1-D] — satu tempat untuk
@@ -66,6 +66,7 @@ export async function remindPicDaily(
   }
 
   const actorName = actor.kind === 'user' ? actor.name : AUTO_ACTOR_NAME
+  const rpt = await getReportSettings(project.entityId) // [T12] label tenggat mengikuti aturan PT proyek
   const created = await db.notificationLog.create({
     data: {
       userId: project.picUser.id,
@@ -76,7 +77,7 @@ export async function remindPicDaily(
       sentAt: new Date(),
       payload: JSON.stringify({
         title: `Laporan harian ${project.name} belum dikirim`,
-        body: `Tenggat pukul ${DAILY_CUTOFF_LABEL}. Diingatkan oleh ${actorName}.`,
+        body: `Tenggat pukul ${dailyCutoffLabelWith(rpt)}. Diingatkan oleh ${actorName}.`,
         tab: 'work-desk',
         projectId,
         entityId: project.entityId,

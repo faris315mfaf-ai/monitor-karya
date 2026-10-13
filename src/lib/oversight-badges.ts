@@ -78,7 +78,7 @@ export async function oversightBadges(user: SessionUser): Promise<Record<string,
             return rows.filter((p) => {
               if (p.approvals.some((a) => a.decision === 'DITOLAK')) return false
               const slot = pendingSlot(p.approvalChain, p.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role))
-              return slot !== null && canSignSlot(user, slot, p.entityId)
+              return slot !== null && canSignSlot(user, slot, p.entityId, scope)
             }).length
           }),
         ]).then((n) => n.reduce((a, b) => a + b, 0))

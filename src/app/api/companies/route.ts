@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '' // [T12] nama dibatasi 120 karakter
   if (name.length < 2) return NextResponse.json({ error: 'Nama perusahaan wajib diisi.' }, { status: 422 })
   const isHolding = body.isHolding === true
   const identity = readIdentity(body)
@@ -243,7 +243,7 @@ export async function PATCH(req: NextRequest) {
 
   const data: Record<string, unknown> = {}
   if (typeof body.name === 'string') {
-    const name = body.name.trim()
+    const name = body.name.trim().slice(0, 120) // [T12] dibatasi 120 karakter
     if (name.length < 2) return NextResponse.json({ error: 'Nama perusahaan wajib diisi.' }, { status: 422 })
     data.name = name
   }
@@ -255,7 +255,7 @@ export async function PATCH(req: NextRequest) {
   const logo = parseLogo(body.logoData)
   if (!logo.ok) return NextResponse.json({ error: logo.error }, { status: 422 })
   if (logo.value !== undefined) data.logoData = logo.value
-  if (typeof body.region === 'string') data.region = body.region.trim() || null
+  if (typeof body.region === 'string') data.region = body.region.trim().slice(0, 120) || null
   if (typeof body.isActive === 'boolean') data.isActive = body.isActive
 
   const updated = await db.entity.update({ where: { id }, data, select: { id: true, name: true, code: true, isActive: true } })
@@ -308,25 +308,37 @@ export async function DELETE(req: NextRequest) {
     )
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.adminAppointment.deleteMany({ where: { entityId: id } })
-    await tx.kpiSnapshot.deleteMany({ where: { entityId: id } })
-    await tx.project.deleteMany({ where: { entityId: id } })
-    await tx.division.deleteMany({ where: { entityId: id } })
-    await tx.user.deleteMany({ where: { scopeEntityId: id, role: { not: 'SUPERADMIN' } } })
-    await tx.user.updateMany({ where: { scopeEntityId: id }, data: { scopeEntityId: null } })
-    await tx.entity.delete({ where: { id } })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'DELETE_COMPANY',
-        targetType: 'ENTITY',
-        targetId: id,
-        beforeData: JSON.stringify({ code: existing.code, name: existing.name }),
-        ip: clientIp(req),
-      },
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.adminAppointment.deleteMany({ where: { entityId: id } })
+      await tx.kpiSnapshot.deleteMany({ where: { entityId: id } })
+      await tx.project.deleteMany({ where: { entityId: id } })
+      await tx.division.deleteMany({ where: { entityId: id } })
+      await tx.user.deleteMany({ where: { scopeEntityId: id, role: { not: 'SUPERADMIN' } } })
+      await tx.user.updateMany({ where: { scopeEntityId: id }, data: { scopeEntityId: null } })
+      await tx.entity.delete({ where: { id } })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'DELETE_COMPANY',
+          targetType: 'ENTITY',
+          targetId: id,
+          beforeData: JSON.stringify({ code: existing.code, name: existing.name }),
+          ip: clientIp(req),
+        },
+      })
     })
-  })
+  } catch (err) {
+    // [T12] Akun/proyek PT ini bisa dipegang baris lain (output, catatan, usulan,
+    // permintaan akses) lewat relasi wajib: P2003 dulu lolos sebagai 500 mentah.
+    if ((err as { code?: unknown } | null)?.code === 'P2003') {
+      return NextResponse.json(
+        { error: 'Perusahaan ini masih dipakai data lain (akun atau proyek punya riwayat kerja). Nonaktifkan saja agar riwayatnya tetap utuh.' },
+        { status: 409 }
+      )
+    }
+    return serverError(err, 'Gagal menghapus perusahaan. Coba lagi.', 'companies DELETE')
+  }
 
   return NextResponse.json({ ok: true })
 }

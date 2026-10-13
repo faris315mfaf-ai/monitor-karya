@@ -3,7 +3,9 @@ import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { serverError } from '@/lib/api-error' // [F3-D]
+import { intParam, MAX_PAGE } from '@/app/api/_paging'
 import { performerProjectScope } from '@/lib/pic-access'
+import { parseWibDateKey } from '@/lib/lock'
 
 // GET /api/daily-reports - paginated daily reports with filters
 export async function GET(req: NextRequest) {
@@ -11,21 +13,26 @@ export async function GET(req: NextRequest) {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
-    const entityId = sp.get('entityId') || undefined
-    const status = sp.get('status') || undefined
+    const page = intParam(sp.get('page'), 1, 1, MAX_PAGE)
+    const pageSize = intParam(sp.get('pageSize'), 20, 1, 200)
+    const entityId = sp.get('entityId')?.slice(0, 64) || undefined
+    // [T11, R-4] Parameter teks dipangkas agar tidak jadi beban kueri.
+    const status = sp.get('status')?.slice(0, 32) || undefined
     const dateFrom = sp.get('dateFrom')
     const dateTo = sp.get('dateTo')
-    const search = sp.get('search') || undefined
+    const search = sp.get('search')?.slice(0, 128) || undefined
     // [T3-A1] Drill-down laporan per proyek (dashboard manajemen per perusahaan).
     const projectId = sp.get('projectId') || undefined
 
     const reportDate: Prisma.DateTimeFilter = {}
     for (const [raw, key] of [[dateFrom, 'gte'], [dateTo, 'lte']] as const) {
       if (!raw) continue
-      const d = new Date(raw)
-      if (Number.isNaN(d.getTime())) {
+      // [T12] "YYYY-MM-DD" adalah hari WIB: reportDate tersimpan sebagai tengah
+      // malam WIB, jadi `new Date('2026-10-10')` (00.00 UTC = 07.00 WIB) membuat
+      // dateFrom=hari itu justru melewatkan laporan hari itu. Bentuk ISO lengkap
+      // tetap dipakai apa adanya.
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? parseWibDateKey(raw) : new Date(raw)
+      if (!d || Number.isNaN(d.getTime())) {
         return NextResponse.json({ error: 'Format tanggal tidak valid' }, { status: 400 })
       }
       reportDate[key] = d
@@ -51,7 +58,7 @@ export async function GET(req: NextRequest) {
       ...(status ? { status } : {}),
       ...(Object.keys(reportDate).length ? { reportDate } : {}),
       ...(search
-        ? { project: { name: { contains: search } } }
+        ? { project: { name: { contains: search, mode: 'insensitive' as const } } }
         : {}),
       ...(scopeIds || projectScope
         ? {

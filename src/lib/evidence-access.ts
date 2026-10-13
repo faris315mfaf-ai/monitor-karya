@@ -4,7 +4,6 @@ import { db } from '@/lib/db'
 import { isMasterRole } from '@/lib/rbac'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import {
-  isDailyLocked,
   isProgressLocked,
   startOfWibDay,
   weekPeriodOf,
@@ -54,7 +53,13 @@ async function targetEntity(
       },
     })
     if (!r) return null
-    const blocked = r.isLocked || Boolean(r.forwardedAt) || isDailyLocked(r.reportDate)
+    // [T11-DB] Jam batas & dailyOpen mengikuti settings entitas (bukan 17.00 env),
+    // sama seperti jalur task dan dailyGate.
+    const rptSettings = await getReportSettings(r.entityId)
+    const blocked =
+      r.isLocked ||
+      Boolean(r.forwardedAt) ||
+      isDailyLockedWith(rptSettings.dailyCutoffHour, rptSettings.dailyOpen, r.reportDate, new Date())
     const unlocked = blocked ? Boolean(await activeUnlockFor('DAILY_REPORT', targetId)) : false
     return {
       entityId: r.entityId,
@@ -84,7 +89,12 @@ async function targetEntity(
     if (!item) return null
     const report = item.weeklyReport
     const unlocked = Boolean(await activeUnlockFor('WEEKLY_REPORT', report.id))
-    const block = weeklyWriteBlock({ period: weekPeriodOf(report.periodStart), report, unlocked })
+    const block = weeklyWriteBlock({
+      period: weekPeriodOf(report.periodStart),
+      report,
+      unlocked,
+      settings: await getReportSettings(report.entityId),
+    })
     return {
       entityId: report.entityId,
       headUserId: report.division.headUserId,

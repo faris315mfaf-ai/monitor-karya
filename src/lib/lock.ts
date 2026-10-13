@@ -44,6 +44,17 @@ export const DAILY_CUTOFF_LABEL = hourLabel(DAILY_CUTOFF_HOUR)
 export const WEEKLY_HANDOVER_LABEL = `${DAY_NAMES_ID[WEEKLY_HANDOVER_DAY]} ${hourLabel(WEEKLY_CUTOFF_HOUR)}`
 export const WEEKLY_LOCK_LABEL = `${DAY_NAMES_ID[WEEKLY_LOCK_DAY]} ${hourLabel(WEEKLY_CUTOFF_HOUR)}`
 
+/**
+ * [T13] Label serah/kunci mingguan untuk jam batas tertentu (jam entitas), mis.
+ * "Kamis 15.00 WIB" / "Jumat 15.00 WIB". Hari serah/kunci tetap dari env global.
+ */
+export function weeklyLabelsWith(cutoffHour: number): { handover: string; lock: string } {
+  return {
+    handover: `${DAY_NAMES_ID[WEEKLY_HANDOVER_DAY]} ${hourLabel(cutoffHour)}`,
+    lock: `${DAY_NAMES_ID[WEEKLY_LOCK_DAY]} ${hourLabel(cutoffHour)}`,
+  }
+}
+
 /** The UTC instant of a given WIB wall-clock hour on the WIB calendar day of `date`. */
 function wibHourOn(date: Date, hour: number): Date {
   const wib = new Date(date.getTime() + WIB_OFFSET_MS)
@@ -169,6 +180,34 @@ export function isWeeklyLocked(periodStart: Date, now: Date = new Date(), settin
   const cutoffHour = settings?.weeklyCutoffHour
   if (cutoffHour === null) return false // tanpa batas jam → tidak pernah terkunci waktu
   return now >= weeklyDeadlines(periodStart, cutoffHour ?? WEEKLY_CUTOFF_HOUR).lockAt
+}
+
+/**
+ * [T13] Tenggat mingguan menurut aturan entitas. `lockAt`/`handoverBy` untuk
+ * TAMPILAN (jam entitas, cadangan env bila belum diatur); `effectiveLockAt` untuk
+ * PENEGAKAN: ditutup (`weeklyOpen: false`) = terkunci sejak awal minggu, tanpa batas jam
+ * (`weeklyCutoffHour: null`) = baru berakhir di pergantian minggu.
+ */
+export function weeklyDeadlinesWith(date: Date, settings?: WeeklyLockSettings | null) {
+  const base = weeklyDeadlines(date, settings?.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
+  const effectiveLockAt = settings && !settings.weeklyOpen
+    ? base.periodStart
+    : settings && settings.weeklyCutoffHour === null
+      ? new Date(base.periodStart.getTime() + 7 * 86400000)
+      : base.lockAt
+  return { ...base, effectiveLockAt }
+}
+
+/**
+ * [T13] Pesan 409 "minggu terkunci" menurut aturan mingguan entitas: ditutup
+ * sementara, jam kustom ("Jumat 15.00 WIB"), atau bawaan env bila jam belum diatur.
+ */
+export function weeklyLockedMessage(settings?: WeeklyLockSettings | null): string {
+  if (settings && !settings.weeklyOpen) {
+    return 'Capaian mingguan sedang ditutup sementara melalui aturan pelaporan perusahaan.'
+  }
+  const label = typeof settings?.weeklyCutoffHour === 'number' ? weeklyLabelsWith(settings.weeklyCutoffHour).lock : WEEKLY_LOCK_LABEL
+  return `Minggu ini sudah dikunci (${label}).`
 }
 
 /** Laporan mingguan yang sudah diteruskan Admin PT ke holding dibekukan (6 Okt 2026). */

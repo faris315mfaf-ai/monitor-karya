@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
     division: { findUnique: vi.fn() },
     weeklyDivisionReport: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     weeklyReportItem: { findMany: vi.fn(), findFirst: vi.fn() },
-    evidence: { count: vi.fn() },
+    evidence: { count: vi.fn(), groupBy: vi.fn() },
+    aspectCategory: { count: vi.fn() },
+    priority: { count: vi.fn() },
     unlockRequest: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
@@ -81,6 +83,14 @@ beforeEach(() => {
   db.weeklyDivisionReport.findUnique.mockResolvedValue({ id: 'wr-1', statusHeader: 'DRAFT' })
   db.weeklyDivisionReport.update.mockImplementation(async ({ data }) => ({ id: 'wr-1', ...data }))
   db.evidence.count.mockImplementation(async ({ where }) => evidenceByItem[where.targetId] ?? 0)
+  // Serah/setujui menghitung bukti semua item dengan satu groupBy (bukan N count).
+  db.evidence.groupBy.mockImplementation(async ({ where }) =>
+    (where.targetId.in as string[])
+      .filter((id) => (evidenceByItem[id] ?? 0) > 0)
+      .map((id) => ({ targetId: id, _count: { _all: evidenceByItem[id] } }))
+  )
+  db.aspectCategory.count.mockResolvedValue(1)
+  db.priority.count.mockResolvedValue(1)
   db.unlockRequest.findFirst.mockResolvedValue(null)
   db.auditLog.create.mockResolvedValue({})
 })
@@ -114,7 +124,9 @@ describe('POST /api/weekly-input — serahkan', () => {
     const res = await post({ divisionId: 'div-1', action: 'submit' })
     expect(res.status).toBe(422)
     expect((await res.json()).errors).toHaveLength(1)
-    expect(db.evidence.count).toHaveBeenCalledWith({ where: { targetType: 'WEEKLY_ITEM', targetId: 'a' } })
+    expect(db.evidence.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { targetType: 'WEEKLY_ITEM', targetId: { in: ['a'] } } })
+    )
   })
 
   it('lolos bila semua item yang perlu bukti sudah berbukti', async () => {
@@ -238,6 +250,13 @@ describe('/api/weekly-input — buka kunci & pembekuan', () => {
     const res = await put({ divisionId: 'div-1', workItem: 'x', status: 'ON_PROGRESS' })
     expect(res.status).toBe(422)
     expect((await res.json()).error).toMatch(/Aspek dan prioritas/)
+  })
+
+  it('aspek atau prioritas yang tidak ada: 422 jelas, bukan galat FK 500', async () => {
+    db.aspectCategory.count.mockResolvedValue(0)
+    const res = await put({ divisionId: 'div-1', workItem: 'x', status: 'ON_PROGRESS', aspectCategoryId: 'tes', priorityId: 'p' })
+    expect(res.status).toBe(422)
+    expect((await res.json()).error).toMatch(/Aspek atau prioritas tidak dikenal/)
   })
 
   it('laporan diteruskan dengan buka kunci: tidak diserahkan ulang (409)', async () => {

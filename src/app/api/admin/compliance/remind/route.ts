@@ -4,7 +4,8 @@ import { requireApiUser } from '@/lib/auth'
 import { can } from '@/lib/rbac'
 import { serverError } from '@/lib/api-error'
 import { clientIp, limitReminders } from '@/lib/security'
-import { DAILY_CUTOFF_LABEL, isDailyLocked, startOfWibDay } from '@/lib/lock'
+import { startOfWibDay } from '@/lib/lock'
+import { dailyCutoffLabelWith, getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { DAILY_PIC_TEMPLATE, remindPicsDaily, type RemindActor } from '@/lib/reminders-pic'
 import { groupProjectsByDivision, scopeDivisions, scopeProjects } from '@/lib/admin-compliance-server'
 
@@ -53,11 +54,13 @@ export async function POST(req: NextRequest) {
 
   const now = new Date()
   const today = startOfWibDay(now)
-  if (isDailyLocked(today, now)) {
-    return NextResponse.json({ error: `Laporan hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
-  }
 
   try {
+    // [T12] Kunci harian mengikuti aturan PT akun ini (ReportSettings), bukan jam env.
+    const rpt = await getReportSettings(user.scopeEntityId)
+    if (isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now)) {
+      return NextResponse.json({ error: `Laporan hari ini sudah dikunci pukul ${dailyCutoffLabelWith(rpt)}.`, locked: true }, { status: 409 })
+    }
     // Pengingat hanya untuk proyek di PT akun ini (sama dengan /api/work-desk).
     const entityIds = [user.scopeEntityId]
     const projects = (await scopeProjects(entityIds)).filter((p) => p.picUser?.isActive)

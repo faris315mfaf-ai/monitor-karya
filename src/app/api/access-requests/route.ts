@@ -6,7 +6,7 @@ import { activationError, activationIssueLimit, issueAccountActivation } from '@
 import { refuseUnscoped, requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { entityRef } from '@/lib/account-desk'
 import {
-  AccessRefusal, applyAccessRequest, decisionDesk, describe, mayDecideFor, readPayload, revertExpiredAccess,
+  AccessRefusal, applyAccessRequest, decisionDesk, describe, lockRequestRows, mayDecideFor, readPayload, revertExpiredAccess,
 } from '@/lib/access-requests'
 import { ACCESS_REQUEST_TYPES, type AccessRequestItem, type AccessRequestType, type AccessStatus } from '@/lib/admin-meta'
 import { USERNAME_RE, isValidEmail, slugify } from '@/lib/companies'
@@ -162,6 +162,9 @@ export async function POST(req: NextRequest) {
   const readable = await scopeEntityIds(user)
   let entityId: string | null
   let targetUserId: string | null = null
+  // [T11, S-5] Cek duplikat diulang di dalam transaksi (di bawah kunci baris)
+  // agar dua pengajuan bersamaan tidak sama-sama lolos.
+  let recheck: { where: Prisma.AccessRequestWhereInput; message: string; clash?: Prisma.UserWhereInput } | null = null
 
   if (type === 'AKUN_BARU') {
     const wanted = typeof body.entityId === 'string' && body.entityId ? body.entityId : null
@@ -184,6 +187,11 @@ export async function POST(req: NextRequest) {
     if (clash) return NextResponse.json({ error: 'Username atau email itu sudah dipakai akun lain.' }, { status: 422 })
     const dupe = await db.accessRequest.findFirst({ where: { type, status: 'DIAJUKAN', payload: { contains: `"name":${JSON.stringify(p.name)}` }, entityId } })
     if (dupe) return NextResponse.json({ error: 'Permintaan akun untuk nama ini sudah diajukan.' }, { status: 409 })
+    recheck = {
+      where: { type, status: 'DIAJUKAN', payload: { contains: `"name":${JSON.stringify(p.name)}` }, entityId },
+      message: 'Permintaan akun untuk nama ini sudah diajukan.',
+      clash: { OR: [{ username }, { email }] },
+    }
   } else {
     const p = payload as { userId: string }
     const target = await db.user.findUnique({ where: { id: p.userId }, select: { id: true, scopeEntityId: true } })
@@ -194,25 +202,43 @@ export async function POST(req: NextRequest) {
     targetUserId = target.id
     const dupe = await db.accessRequest.findFirst({ where: { type, status: 'DIAJUKAN', targetUserId } })
     if (dupe) return NextResponse.json({ error: 'Permintaan serupa untuk akun ini masih menunggu keputusan.' }, { status: 409 })
+    recheck = { where: { type, status: 'DIAJUKAN', targetUserId }, message: 'Permintaan serupa untuk akun ini masih menunggu keputusan.' }
   }
 
-  const created = await db.$transaction(async (tx) => {
-    const row = await tx.accessRequest.create({
-      data: { type, payload: JSON.stringify(payload), reason, entityId, requestedById: user.id, targetUserId },
-      include,
+  let created: RowWithNames
+  try {
+    created = await db.$transaction(async (tx) => {
+      // Kunci baris pengaju (dan akun sasaran / perusahaan) sebelum cek ulang: tulisan
+      // bersamaan dari pengaju yang sama diserialkan, pemenang kedua melihat yang pertama.
+      await lockRequestRows(tx, { requesterId: user.id, targetUserId, entityId })
+      if (recheck) {
+        if (recheck.clash && (await tx.user.findFirst({ where: recheck.clash, select: { id: true } }))) {
+          throw new AccessRefusal('Username atau email itu sudah dipakai akun lain.', 422)
+        }
+        if (await tx.accessRequest.findFirst({ where: recheck.where, select: { id: true } })) {
+          throw new AccessRefusal(recheck.message, 409)
+        }
+      }
+      const row = await tx.accessRequest.create({
+        data: { type, payload: JSON.stringify(payload), reason, entityId, requestedById: user.id, targetUserId },
+        include,
+      })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'REQUEST_ACCESS',
+          targetType: 'ACCESS_REQUEST',
+          targetId: row.id,
+          afterData: JSON.stringify({ type, entityId, targetUserId }),
+          ip: ipOf(req),
+        },
+      })
+      return row
     })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'REQUEST_ACCESS',
-        targetType: 'ACCESS_REQUEST',
-        targetId: row.id,
-        afterData: JSON.stringify({ type, entityId, targetUserId }),
-        ip: ipOf(req),
-      },
-    })
-    return row
-  })
+  } catch (err) {
+    if (err instanceof AccessRefusal) return NextResponse.json({ error: err.message }, { status: err.status })
+    return serverError(err, 'Permintaan akses gagal disimpan. Coba lagi.', 'access-requests POST')
+  }
   const [item] = await toItems([created], user)
   return NextResponse.json({ ok: true, item }, { status: 201 })
 }

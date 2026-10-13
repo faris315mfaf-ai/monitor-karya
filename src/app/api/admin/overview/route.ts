@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     ])
 
     const [dailyCompliance, memberDivisions] = await Promise.all([
-      loadCompliance(entityIds, { canRemind: false }),
+      loadCompliance(entityIds, { canRemind: false, settingsEntityId: user.scopeEntityId }),
       // Pertahankan penanda keanggotaan respons lama, termasuk anggota tanpa proyek.
       db.division.count({ where: {
         isActive: true,

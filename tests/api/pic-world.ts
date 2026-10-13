@@ -144,6 +144,7 @@ export const db: Record<string, Record<string, Mock>> & { $transaction: Mock } =
   get(_t, key) {
     if (typeof key !== 'string' || key === 'then') return undefined
     if (key === '$transaction') return transaction
+    if (key === '$queryRaw') return queryRaw // [T11] kunci baris FOR UPDATE: tiruan tanpa efek
     let p = modelProxies.get(key)
     if (!p) {
       p = model(key)
@@ -152,6 +153,8 @@ export const db: Record<string, Record<string, Mock>> & { $transaction: Mock } =
     return p
   },
 })
+
+const queryRaw = vi.fn(async () => [])
 
 const transaction = vi.fn(async (arg: unknown) => {
   if (typeof arg === 'function') return (arg as (tx: unknown) => unknown)(db)

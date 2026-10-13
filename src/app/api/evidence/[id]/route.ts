@@ -1,4 +1,4 @@
-import { clientIp } from '@/lib/security'
+import { clientIp, safeEvidenceUrl } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
@@ -29,7 +29,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   // Link-style evidence predates file storage; hand back the link as-is.
   if (evidence.url) {
-    return NextResponse.json({ url: evidence.url, kind: 'link' as const })
+    // [T12] Baris warisan bisa memuat skema berbahaya (javascript:, data:) atau kredensial tertanam.
+    const safe = safeEvidenceUrl(evidence.url)
+    if (!safe) return NextResponse.json({ error: 'Tautan bukti ini tidak valid dan tidak dapat dibuka.' }, { status: 422 })
+    return NextResponse.json({ url: safe, kind: 'link' as const })
   }
 
   if (!storageConfigured()) {
@@ -69,19 +72,27 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
   }
 
-  await db.evidence.delete({ where: { id } })
-  const count = await syncEvidenceCount(evidence.targetType, evidence.targetId)
-
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: 'REMOVE_EVIDENCE',
-      targetType: evidence.targetType,
-      targetId: evidence.targetId,
-      beforeData: JSON.stringify({ fileName: evidence.fileName, storageKey: evidence.storageKey }),
-      ip: clientIp(req),
-    },
-  })
-
-  return NextResponse.json({ ok: true, evidenceCount: count })
+  // [T12] Hapus baris + hitung ulang cache + audit dalam satu transaksi.
+  try {
+    const count = await db.$transaction(async (tx) => {
+      const gone = await tx.evidence.deleteMany({ where: { id } })
+      if (gone.count === 0) return null // sudah dihapus permintaan lain
+      const count = await syncEvidenceCount(evidence.targetType, evidence.targetId, tx)
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'REMOVE_EVIDENCE',
+          targetType: evidence.targetType,
+          targetId: evidence.targetId,
+          beforeData: JSON.stringify({ fileName: evidence.fileName, storageKey: evidence.storageKey }),
+          ip: clientIp(req),
+        },
+      })
+      return count
+    }, { isolationLevel: 'ReadCommitted' })
+    if (count === null) return NextResponse.json({ error: 'Bukti tidak ditemukan' }, { status: 404 })
+    return NextResponse.json({ ok: true, evidenceCount: count })
+  } catch (err) {
+    return serverError(err, 'Gagal menghapus bukti. Coba lagi.', 'evidence DELETE row')
+  }
 }

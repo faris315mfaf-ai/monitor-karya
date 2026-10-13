@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
-import { DAILY_CUTOFF_LABEL, isDailyLocked, startOfWibDay } from '@/lib/lock'
+import { startOfWibDay } from '@/lib/lock'
+import { dailyCutoffLabelWith, getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { buildTeam, markMemberRead, pickLedDivision, remindTeam } from '@/lib/kadiv'
 import { auditPic, readJson, str } from '@/lib/pic-access'
 import { limitReminders } from '@/lib/security'
@@ -44,12 +45,15 @@ export async function POST(req: NextRequest) {
   const limited = limitReminders(user.id, 'kadiv-team')
   if (limited) return limited
 
-  if (isDailyLocked(startOfWibDay(new Date()))) {
-    return NextResponse.json({ error: `Laporan hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
-  }
   try {
     const { current } = await pickLedDivision(user, str(body, 'divisionId', 64) || null)
     if (!current) return NextResponse.json({ error: 'Divisi ini di luar tanggung jawab Anda' }, { status: 403 })
+    // [T12] Kunci harian mengikuti aturan PT divisi (ReportSettings), bukan jam env.
+    const rpt = await getReportSettings(current.entityId)
+    const now = new Date()
+    if (isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, startOfWibDay(now), now)) {
+      return NextResponse.json({ error: `Laporan hari ini sudah dikunci pukul ${dailyCutoffLabelWith(rpt)}.`, locked: true }, { status: 409 })
+    }
     const r = await remindTeam(user, current, str(body, 'userId', 64) || null)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
     return NextResponse.json(r)

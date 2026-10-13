@@ -61,12 +61,17 @@ export function previousMonthKey(monthKey: string): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-/** Hari kerja (Senin–Jumat WIB) dalam [from, to], keduanya tengah malam WIB. */
-export function workdaysBetween(from: Date, to: Date): Date[] {
+/**
+ * Hari kerja dalam [from, to], keduanya tengah malam WIB. Tanpa `workingDays`
+ * = Senin–Jumat; dengan `workingDays` (ISO 1..7, aturan PT) kosong = setiap hari.
+ */
+export function workdaysBetween(from: Date, to: Date, workingDays?: number[]): Date[] {
   const out: Date[] = []
   for (let t = from.getTime(); t <= to.getTime(); t += DAY) {
     const dow = new Date(t + WIB).getUTCDay()
-    if (dow !== 0 && dow !== 6) out.push(new Date(t))
+    const iso = dow === 0 ? 7 : dow
+    const ok = workingDays ? workingDays.length === 0 || workingDays.includes(iso) : iso <= 5
+    if (ok) out.push(new Date(t))
   }
   return out
 }

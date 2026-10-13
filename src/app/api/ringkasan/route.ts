@@ -444,7 +444,7 @@ export async function GET() {
         const approved = p.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
         const rejected = p.approvals.some((a) => a.decision === 'DITOLAK')
         const slot = pendingSlot(p.approvalChain, approved)
-        const mine = !rejected && slot !== null && canSignSlot(user, slot, p.entityId)
+        const mine = !rejected && slot !== null && canSignSlot(user, slot, p.entityId, scopeIds)
         return {
           id: p.id,
           name: p.name,

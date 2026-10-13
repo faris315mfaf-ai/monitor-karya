@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     // Pengingat bekerja per PT pemilik akun (src/lib/reminders-pic.ts), jadi
     // tombolnya hanya untuk akun yang terikat pada satu PT.
     const canRemind = !!user.scopeEntityId && (can(user.role, 'notify:remind') || can(user.role, 'daily:forward'))
-    return NextResponse.json(await loadCompliance(entityIds, { canRemind }))
+    return NextResponse.json(await loadCompliance(entityIds, { canRemind, settingsEntityId: user.scopeEntityId ?? requested }))
   } catch (err) {
     return serverError(err, 'Kepatuhan laporan belum termuat. Coba lagi.', 'admin/compliance GET')
   }

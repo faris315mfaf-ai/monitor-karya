@@ -33,14 +33,17 @@ export function safeEqual(given: string, expected: string): boolean {
 
 /**
  * IP klien untuk jejak audit dan pembatas laju. `x-real-ip` diisi Vercel; di
- * VPS hanya Caddy yang menerbukan port dan Caddy MENAMBAHKAN alamat klien di
- * belakang `x-forwarded-for` yang sudah ada (tidak menimpa), sehingga entri
- * PERTAMA bisa diisi klien untuk memutasi ember pembatas. Entri TERAKHIR
- * dipakai: itulah yang ditambahkan proxy tepercaya terdekat. Bila suatu saat
- * ada lebih dari satu hop (mis. CDN di depan Caddy), entri terakhir jatuh ke
- * peer proxy — pembatas jadi terlalu ketat, tidak pernah terlalu longgar.
- * Tanpa proxy tepercaya nilai ini bisa dipalsukan, jadi pembatas laju tidak
- * pernah HANYA memakai IP. (Tambalan temuan T2-S2-S1.)
+ * VPS template Caddy (deploy/app-vps/monitor-karya.caddy) MENIMPA `X-Real-IP`
+ * dan `X-Forwarded-For` dengan alamat peer sebenarnya, jadi nilai kiriman
+ * klien tidak pernah sampai ke sini. SYARAT WAJIB: aplikasi hanya boleh
+ * dijangkau lewat proxy yang menimpa kedua header itu (jangan ekspos port
+ * kontainer langsung, dan proxy lain seperti nginx harus memakai
+ * `proxy_set_header X-Real-IP $remote_addr`); tanpa itu header bisa
+ * dipalsukan klien dan ember pembatas per-IP bebas dimutasi. Bila tanpa
+ * `x-real-ip`, entri TERAKHIR `x-forwarded-for` dipakai (yang ditambahkan
+ * proxy tepercaya terdekat; entri pertama bisa diisi klien). Karena itu
+ * pembatas laju tidak pernah HANYA memakai IP (ada kunci per-akun juga).
+ * (Tambalan temuan T2-S2-S1; dokumentasi diperjelas T11-INFRA.)
  */
 export function clientIp(req: Request): string | null {
   const real = req.headers.get('x-real-ip')?.trim()
@@ -54,20 +57,41 @@ export function clientIp(req: Request): string | null {
 // Pembatas laju (jendela tetap, di memori)
 // ------------------------------------------------------------------
 
-type Bucket = { count: number; resetAt: number }
+type Bucket = { count: number; resetAt: number; limit: number }
 const buckets = new Map<string, Bucket>()
 const MAX_BUCKETS = 20_000
+const EVICT_BATCH = 1000
 
+/** Ember yang sedang memblokir: hitungan sudah mencapai batas dan jendela belum habis. */
+const isLocked = (b: Bucket, now: number) => b.resetAt > now && b.count >= b.limit
+
+/**
+ * Menjaga ukuran peta. [T13] Urutan pembuangan: (1) ember kedaluwarsa; (2) ember
+ * yang TIDAK sedang memblokir, hitungan terkecil lebih dulu lalu yang tertua —
+ * banjir kunci acak (hitungan 1) membuang dirinya sendiri, bukan hitungan
+ * kegagalan korban; (3) hanya bila semuanya terkunci, yang tertua. Dengan begitu
+ * status kunci aktif (login) tidak bisa dihapus penyerang dengan membanjiri kunci.
+ */
 function prune(now: number) {
   if (buckets.size < MAX_BUCKETS) return
   for (const [k, b] of buckets) if (b.resetAt <= now) buckets.delete(k)
-  // Masih penuh (serangan dengan banyak kunci): buang yang tertua.
-  if (buckets.size >= MAX_BUCKETS) {
-    const drop = buckets.size - MAX_BUCKETS + 1000
-    let i = 0
+  if (buckets.size < MAX_BUCKETS) return
+  const need = buckets.size - MAX_BUCKETS + EVICT_BATCH
+  const open: [string, Bucket][] = []
+  for (const e of buckets) if (!isLocked(e[1], now)) open.push(e)
+  // sort stabil: urutan sisip (tertua dulu) dipertahankan untuk hitungan sama
+  open.sort((x, y) => x[1].count - y[1].count)
+  let dropped = 0
+  for (const [k] of open) {
+    if (dropped >= need) break
+    buckets.delete(k)
+    dropped++
+  }
+  if (dropped < need) {
     for (const k of buckets.keys()) {
-      if (i++ >= drop) break
+      if (dropped >= need) break
       buckets.delete(k)
+      dropped++
     }
   }
 }
@@ -84,10 +108,11 @@ export function hit(key: string, limit: number, windowMs: number): RateResult {
   prune(now)
   let b = buckets.get(key)
   if (!b || b.resetAt <= now) {
-    b = { count: 0, resetAt: now + windowMs }
+    b = { count: 0, resetAt: now + windowMs, limit }
     buckets.set(key, b)
   }
   b.count += 1
+  b.limit = limit
   if (b.count > limit) return { ok: false, retryAfterSec: Math.max(1, Math.ceil((b.resetAt - now) / 1000)) }
   return { ok: true, remaining: limit - b.count }
 }
@@ -191,4 +216,19 @@ export function contentMatchesMime(buf: Uint8Array, mime: string): boolean {
 export function safeDisplayName(name: string): string {
   const cleaned = cleanText(name, 400).replace(/[\\/]+/g, '-').replace(/\s+/g, ' ')
   return cleaned.slice(-200) || 'berkas'
+}
+
+/**
+ * [T12] Tautan bukti warisan yang aman dikirim ke klien: hanya http(s) tanpa
+ * kredensial tertanam dan dengan host. Selain itu (javascript:, data:, dsb.)
+ * dinolkan; baris unggahan berkas (url null) tetap null.
+ */
+export function safeEvidenceUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    return (u.protocol === 'https:' || u.protocol === 'http:') && !u.username && !u.password && !!u.hostname ? raw : null
+  } catch {
+    return null
+  }
 }

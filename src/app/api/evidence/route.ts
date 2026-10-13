@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
-import { cleanText, clientIp, safeDisplayName } from '@/lib/security'
+import { cleanText, clientIp, safeDisplayName, safeEvidenceUrl } from '@/lib/security'
+import { serverError } from '@/lib/api-error'
 
 /**
  * Supporting evidence attached to a report line.
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
     where: { targetType, targetId },
     orderBy: { createdAt: 'desc' },
   })
-  return NextResponse.json({ items, total: items.length })
+  // [T12] Tautan warisan disaring sebelum ke klien (hanya http(s) tanpa kredensial).
+  return NextResponse.json({ items: items.map((e) => ({ ...e, url: safeEvidenceUrl(e.url) })), total: items.length })
 }
 
 export async function POST(req: NextRequest) {
@@ -72,32 +74,38 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const evidence = await db.evidence.create({
-    data: {
-      targetType,
-      targetId,
-      storageKey: `link:${targetType}:${targetId}:${Date.now()}`,
-      fileName,
-      mime: 'text/uri-list',
-      size: url.length,
-      url,
-      uploadedById: user.id,
-    },
-  })
-
-  const count = await syncEvidenceCount(targetType, targetId)
-
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: 'ATTACH_EVIDENCE',
-      targetType,
-      targetId,
-      afterData: JSON.stringify({ fileName, url }),
-      ip: clientIp(req),
-      userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
-    },
-  })
-
-  return NextResponse.json({ ok: true, evidence, evidenceCount: count })
+  // [T12] Bukti + hitung ulang cache + audit satu transaksi: dua tautan bersamaan tidak
+  // lagi meninggalkan evidenceCount basi, dan bukti tak tercipta tanpa jejak audit.
+  try {
+    const { evidence, count } = await db.$transaction(async (tx) => {
+      const evidence = await tx.evidence.create({
+        data: {
+          targetType,
+          targetId,
+          storageKey: `link:${targetType}:${targetId}:${Date.now()}`,
+          fileName,
+          mime: 'text/uri-list',
+          size: url.length,
+          url,
+          uploadedById: user.id,
+        },
+      })
+      const count = await syncEvidenceCount(targetType, targetId, tx)
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'ATTACH_EVIDENCE',
+          targetType,
+          targetId,
+          afterData: JSON.stringify({ fileName, url }),
+          ip: clientIp(req),
+          userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
+        },
+      })
+      return { evidence, count }
+    }, { isolationLevel: 'ReadCommitted' })
+    return NextResponse.json({ ok: true, evidence, evidenceCount: count })
+  } catch (err) {
+    return serverError(err, 'Gagal menyimpan bukti. Coba lagi.', 'evidence POST')
+  }
 }

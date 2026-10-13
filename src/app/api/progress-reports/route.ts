@@ -1,4 +1,5 @@
-import { clientIp } from '@/lib/security'
+import { clientIp, safeEvidenceUrl } from '@/lib/security'
+import { serverError } from '@/lib/api-error'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
@@ -127,7 +128,7 @@ export async function GET(req: NextRequest) {
               submittedAt: r.submittedAt,
               isLocked: r.isLocked,
               updatedAt: r.updatedAt,
-              evidence: evidence.filter((e) => e.targetId === r.id),
+              evidence: evidence.filter((e) => e.targetId === r.id).map((e) => ({ ...e, url: safeEvidenceUrl(e.url) })),
             }
           : null,
       }
@@ -146,7 +147,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  const projectId = typeof body.projectId === 'string' ? body.projectId.slice(0, 64) : ''
   const cadence = parseCadence(body.cadence)
   if (!cadence) return NextResponse.json({ error: 'Kadens tidak dikenali' }, { status: 400 })
 
@@ -170,10 +171,14 @@ export async function PUT(req: NextRequest) {
   }
 
   const action = body.action === 'submit' ? 'submit' : 'save'
-  const status = typeof body.status === 'string' ? body.status : ''
-  const summary = typeof body.summary === 'string' ? body.summary : ''
-  const obstacle = typeof body.obstacle === 'string' && body.obstacle.trim() ? body.obstacle : null
-  const followUp = typeof body.followUp === 'string' && body.followUp.trim() ? body.followUp : null
+  // [T11, S-2] Panjang field dipangkas seperti laporan harian/task agar badan
+  // permintaan tidak bisa menyimpan string raksasa ke DB dan jejak audit.
+  const status = typeof body.status === 'string' ? body.status.slice(0, 32) : ''
+  const summary = typeof body.summary === 'string' ? body.summary.slice(0, 4000) : ''
+  const obstacle =
+    typeof body.obstacle === 'string' && body.obstacle.trim() ? body.obstacle.slice(0, 2000) : null
+  const followUp =
+    typeof body.followUp === 'string' && body.followUp.trim() ? body.followUp.slice(0, 2000) : null
   const progressPct = Math.max(0, Math.min(100, Number(body.progressPct) || 0))
 
   const evidenceCount = existing
@@ -200,32 +205,45 @@ export async function PUT(req: NextRequest) {
     ...(action === 'submit' ? { submittedById: user.id, submittedAt: new Date() } : {}),
   }
 
-  const report = existing
-    ? await db.projectProgressReport.update({ where: { id: existing.id }, data })
-    : await db.projectProgressReport.create({
-        data: {
-          ...data,
-          projectId,
-          entityId: guard.project.entityId,
-          cadence,
-          periodKey: period.key,
-          periodStart: period.start,
-          periodEnd: period.end,
-        },
-      })
+  // [T11, S-3/R-6] Galat tulis tidak lagi lolos mentah: kiriman bersamaan untuk
+  // periode yang sama (P2002) dibalas 409, galat lain 500 umum.
+  let report: { id: string }
+  try {
+    report = existing
+      ? await db.projectProgressReport.update({ where: { id: existing.id }, data })
+      : await db.projectProgressReport.create({
+          data: {
+            ...data,
+            projectId,
+            entityId: guard.project.entityId,
+            cadence,
+            periodKey: period.key,
+            periodStart: period.start,
+            periodEnd: period.end,
+          },
+        })
 
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: action === 'submit' ? 'SUBMIT_PROGRESS_REPORT' : 'SAVE_PROGRESS_REPORT',
-      targetType: 'PROGRESS_REPORT',
-      targetId: report.id,
-      beforeData: existing ? JSON.stringify({ status: existing.status, progressPct: existing.progressPct }) : null,
-      afterData: JSON.stringify({ cadence, periodKey: period.key, status, progressPct }),
-      ip: clientIp(req),
-      userAgent: req.headers.get('user-agent') || null,
-    },
-  })
+    await db.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: action === 'submit' ? 'SUBMIT_PROGRESS_REPORT' : 'SAVE_PROGRESS_REPORT',
+        targetType: 'PROGRESS_REPORT',
+        targetId: report.id,
+        beforeData: existing ? JSON.stringify({ status: existing.status, progressPct: existing.progressPct }) : null,
+        afterData: JSON.stringify({ cadence, periodKey: period.key, status, progressPct }),
+        ip: clientIp(req),
+        userAgent: req.headers.get('user-agent') || null,
+      },
+    })
+  } catch (err) {
+    if ((err as { code?: unknown })?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Laporan periode ini sedang disimpan bersamaan. Muat ulang lalu kirim lagi.', locked: false },
+        { status: 409 }
+      )
+    }
+    return serverError(err, 'Laporan kemajuan gagal disimpan.', 'progress-reports PUT')
+  }
 
   return NextResponse.json({ ok: true, reportId: report.id, periodKey: period.key, submitted: action === 'submit' })
 }
@@ -234,7 +252,7 @@ export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
 
-  const id = req.nextUrl.searchParams.get('id') || ''
+  const id = (req.nextUrl.searchParams.get('id') || '').slice(0, 64)
   const existing = await db.projectProgressReport.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 })
 
@@ -251,32 +269,38 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Laporan ini sudah dikunci dan tidak dapat dihapus.', locked: true }, { status: 409 })
   }
 
-  // Lampirannya ikut dihapus — dari penyimpanan dulu, lalu barisnya.
-  const files = await db.evidence.findMany({ where: { targetType: 'PROGRESS_REPORT', targetId: id } })
-  if (storageConfigured()) {
-    for (const f of files) {
-      if (!f.url) {
-        try {
-          await removeEvidence(f.storageKey)
-        } catch {
-          // Objek yang sudah hilang tidak boleh menggagalkan penghapusan laporan.
+  // [T11, S-3] Penghapusan dibungkus agar galat tak terduga tidak bocor mentah.
+  try {
+    // Lampirannya ikut dihapus — dari penyimpanan dulu, lalu barisnya.
+    const files = await db.evidence.findMany({ where: { targetType: 'PROGRESS_REPORT', targetId: id } })
+    if (storageConfigured()) {
+      for (const f of files) {
+        if (!f.url) {
+          try {
+            await removeEvidence(f.storageKey)
+          } catch {
+            // Objek yang sudah hilang tidak boleh menggagalkan penghapusan laporan.
+          }
         }
       }
     }
-  }
-  await db.evidence.deleteMany({ where: { targetType: 'PROGRESS_REPORT', targetId: id } })
-  await db.projectProgressReport.delete({ where: { id } })
+    await db.evidence.deleteMany({ where: { targetType: 'PROGRESS_REPORT', targetId: id } })
+    await db.projectProgressReport.delete({ where: { id } })
 
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: 'DELETE_PROGRESS_REPORT',
-      targetType: 'PROGRESS_REPORT',
-      targetId: id,
-      beforeData: JSON.stringify({ cadence: existing.cadence, periodKey: existing.periodKey, status: existing.status }),
-      ip: clientIp(req),
-    },
-  })
+    await db.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'DELETE_PROGRESS_REPORT',
+        targetType: 'PROGRESS_REPORT',
+        targetId: id,
+        beforeData: JSON.stringify({ cadence: existing.cadence, periodKey: existing.periodKey, status: existing.status }),
+        ip: clientIp(req),
+      },
+    })
+
+  } catch (err) {
+    return serverError(err, 'Laporan kemajuan gagal dihapus.', 'progress-reports DELETE')
+  }
 
   return NextResponse.json({ ok: true })
 }

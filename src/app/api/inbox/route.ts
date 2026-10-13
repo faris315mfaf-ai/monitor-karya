@@ -3,14 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
-import {
-  dailyCountdown,
-  dailyLockAt,
-  isDailyLocked,
-  isoWeekOf,
-  startOfWibDay,
-  weeklyDeadlines,
-} from '@/lib/lock'
+import { WEEKLY_CUTOFF_HOUR, isoWeekOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import { dailyCountdownWith, dailyLockInstantWith, getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
 import { issueUndo } from '@/lib/undo' // [F2-URUNGKAN]
 
@@ -37,7 +31,11 @@ export async function GET() {
   const entityWhere = user.scopeEntityId ? { entityId: user.scopeEntityId } : {}
   const today = startOfWibDay(new Date())
   const { isoYear, isoWeek } = isoWeekOf(new Date())
-  const deadlines = weeklyDeadlines(new Date())
+  // [T12] Jam batas mengikuti aturan PT (ReportSettings), bukan env 17.00. Akun
+  // induk tanpa PT memakai aturan bawaan.
+  const rpt = await getReportSettings(user.scopeEntityId)
+  const nowDate = new Date()
+  const deadlines = weeklyDeadlines(nowDate, rpt.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
 
   const [projects, reports, divisions, weekly] = await Promise.all([
     db.project.findMany({
@@ -65,9 +63,9 @@ export async function GET() {
 
   return NextResponse.json({
     reportDate: today.toISOString(),
-    dailyLockAt: dailyLockAt(today).toISOString(),
-    dailyCountdown: dailyCountdown(),
-    dailyLocked: isDailyLocked(today),
+    dailyLockAt: dailyLockInstantWith(rpt, today).toISOString(),
+    dailyCountdown: dailyCountdownWith(rpt, nowDate),
+    dailyLocked: isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, nowDate),
     week: { isoYear, isoWeek, handoverBy: deadlines.handoverBy.toISOString(), lockAt: deadlines.lockAt.toISOString() },
     daily: projects.map((p) => {
       const r = reportByProject.get(p.id)

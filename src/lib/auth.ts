@@ -90,6 +90,52 @@ export function clearSessionCookie(res: NextResponse) {
   res.cookies.set(SESSION_COOKIE, '', cookieOptions(0))
 }
 
+// ------------------------------------------------------------------
+// Cookie perangkat dikenal — [T13] membebaskan pemilik sah dari plafon login
+// lintas-IP tanpa membuka celah tebak-sandi bagi penyerang.
+// ------------------------------------------------------------------
+
+export const DEVICE_COOKIE = IS_PROD ? '__Host-mk_device' : 'mk_device'
+const DEVICE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60
+
+/**
+ * Token perangkat: `<userId>.<exp>.<HMAC>` yang terikat pada sidik kata sandi,
+ * jadi ganti/setel ulang kata sandi otomatis mencabutnya. Hanya orang yang
+ * pernah berhasil masuk (tahu kata sandinya) yang memilikinya.
+ */
+export function createDeviceToken(userId: string, passwordHash: string | null): { token: string; maxAge: number } {
+  const exp = Math.floor(Date.now() / 1000) + DEVICE_MAX_AGE_SECONDS
+  const body = `${userId}.${exp}.${passwordFingerprint(passwordHash)}`
+  return { token: `${Buffer.from(body).toString('base64url')}.${sign(`dev:${body}`)}`, maxAge: DEVICE_MAX_AGE_SECONDS }
+}
+
+/** Apakah `token` perangkat sah milik `userId` dengan kata sandi saat ini? */
+export function isKnownDevice(token: string | undefined, userId: string, passwordHash: string | null): boolean {
+  if (!token || token.length > 512) return false
+  const [enc, sig, extra] = token.split('.')
+  if (!enc || !sig || extra !== undefined) return false
+  let body: string
+  try {
+    body = Buffer.from(enc, 'base64url').toString()
+  } catch {
+    return false
+  }
+  const expected = Buffer.from(sign(`dev:${body}`))
+  const given = Buffer.from(sig)
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false
+  const [sub, exp, pv] = body.split('.')
+  if (sub !== userId || !exp || Number(exp) * 1000 <= Date.now()) return false
+  const want = Buffer.from(passwordFingerprint(passwordHash))
+  const have = Buffer.from(pv ?? '')
+  return want.length === have.length && timingSafeEqual(want, have)
+}
+
+/** Memasang cookie perangkat dikenal pada respons masuk yang berhasil. */
+export function setDeviceCookie(res: NextResponse, userId: string, passwordHash: string | null) {
+  const { token, maxAge } = createDeviceToken(userId, passwordHash)
+  res.cookies.set(DEVICE_COOKIE, token, { ...cookieOptions(maxAge), priority: 'medium' as const })
+}
+
 export function readSessionToken(token: string | undefined): SessionPayload | null {
   if (!token) return null
   const [body, signature, extra] = token.split('.')

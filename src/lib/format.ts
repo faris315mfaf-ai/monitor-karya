@@ -32,6 +32,16 @@ const idDateTimeFormatter = new Intl.DateTimeFormat('id-ID', {
   timeZone: WIB_TZ,
 })
 
+const wibDayFormatter = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: WIB_TZ })
+
+/** Apakah dua instan jatuh pada hari kalender WIB yang sama (bukan zona waktu peramban). */
+export function isSameWibDay(a: Date | string, b: Date | string = new Date()): boolean {
+  const da = typeof a === 'string' ? new Date(a) : a
+  const db = typeof b === 'string' ? new Date(b) : b
+  if (isNaN(da.getTime()) || isNaN(db.getTime())) return false
+  return wibDayFormatter.format(da) === wibDayFormatter.format(db)
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return '-'
   const d = typeof date === 'string' ? new Date(date) : date
@@ -97,6 +107,13 @@ export function formatRp(n: number | null | undefined): string {
   }).format(n)
 }
 
+/** 512 B · 48 KB · 1,5 MB — ukuran berkas dengan koma desimal Indonesia. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(bytes / 1024 / 1024)} MB`
+}
+
 export function ageDays(date: Date | string | null | undefined): number {
   if (!date) return 0
   const d = typeof date === 'string' ? new Date(date) : date
@@ -120,11 +137,11 @@ export function formatDateShort(date: Date | string | null | undefined): string 
 
 /** Rp 48,5 jt · Rp 1,2 M */
 export function formatRpShort(n: number | null | undefined): string {
-  if (n === null || n === undefined || isNaN(n)) return 'Rp0'
+  if (n === null || n === undefined || isNaN(n)) return 'Rp 0'
   const dec = (v: number) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(v)
   if (n >= 1e9) return `Rp ${dec(n / 1e9)} M`
   if (n >= 1e6) return `Rp ${dec(n / 1e6)} jt`
-  return `Rp${new Intl.NumberFormat('id-ID').format(n)}`
+  return `Rp ${new Intl.NumberFormat('id-ID').format(n)}`
 }
 
 /** Sapaan menurut jam WIB. */

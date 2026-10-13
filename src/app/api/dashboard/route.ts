@@ -85,11 +85,16 @@ export async function GET(req: NextRequest) {
       }),
     ])
 
+  // [T12] Kunci `lateEntitiesThisMonth` = bulan ini: tanpa batas periode, insiden
+  // berulang dari bulan-bulan lalu ikut tampil, dan `take: 30` tanpa urutan
+  // memotong sembarang baris. Urut dari yang paling sering terlambat.
   const lateIncidents = await db.lateIncident.findMany({
     where: {
       occurrenceInMonth: { gte: 3 },
+      period: { startsWith: monthKeyNow() },
       ...(pathPrefix ? { entityId: { in: entities.map((e) => e.id) } } : {}),
     },
+    orderBy: [{ occurrenceInMonth: 'desc' }, { createdAt: 'desc' }],
     take: 30,
   })
 

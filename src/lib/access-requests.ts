@@ -24,6 +24,24 @@ export function decisionDesk(user: Pick<SessionUser, 'role' | 'scopeEntityId'>):
   return null
 }
 
+/**
+ * [T13] Mengunci baris yang diperebutkan pengajuan (POST /api/access-requests) dalam
+ * satu transaksi. Dua baris User dikunci menurut URUTAN id (bukan pengaju-lalu-sasaran):
+ * pengajuan silang (X untuk akun Y dan Y untuk akun X) tidak lagi saling menunggu
+ * sehingga tak ada deadlock Postgres. FOR NO KEY UPDATE tetap menyerialkan penulis
+ * tetapi tidak memblokir sisipan anak ber-FK (KEY SHARE) pada baris User/Entity itu.
+ */
+export async function lockRequestRows(
+  tx: Pick<Tx, '$queryRaw'>,
+  input: { requesterId: string; targetUserId: string | null; entityId: string | null },
+) {
+  const userIds = Array.from(new Set([input.requesterId, ...(input.targetUserId ? [input.targetUserId] : [])])).sort()
+  for (const uid of userIds) await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${uid} FOR NO KEY UPDATE`
+  if (!input.targetUserId && input.entityId) {
+    await tx.$queryRaw`SELECT "id" FROM "Entity" WHERE "id" = ${input.entityId} FOR NO KEY UPDATE`
+  }
+}
+
 /** Boleh memutuskan permintaan pada PT ini (null = tingkat grup). */
 export function mayDecideFor(desk: Desk | null, entityId: string | null): boolean {
   if (!desk) return false

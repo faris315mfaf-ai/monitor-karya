@@ -99,7 +99,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
 
-  const ids = Array.isArray(body.ids) ? (body.ids as unknown[]).filter((x): x is string => typeof x === 'string') : []
+  // [T11, R-3] Batas jumlah dan panjang id agar `IN (...)` tidak membengkak.
+  const ids = Array.isArray(body.ids)
+    ? (body.ids as unknown[]).filter((x): x is string => typeof x === 'string' && x.length <= 64).slice(0, 200)
+    : []
   if (!body.all && ids.length === 0) {
     return NextResponse.json({ error: 'Tidak ada notifikasi yang ditandai' }, { status: 422 })
   }

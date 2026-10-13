@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { refuseCron } from '@/lib/cron-auth'
 import { runOperationalJob } from '@/lib/operational-health'
 import { runDueRules, reportingEntities, getRules, isDue } from '@/lib/reminder-rules'
+import { getReportSettings } from '@/lib/report-settings'
 import { revertExpiredAccess } from '@/lib/access-requests'
 import { relockExpiredUnlocks } from '@/lib/unlock-requests'
 
@@ -27,8 +28,9 @@ export async function GET(req: NextRequest) {
     // the due set so a partial failure cannot publish a successful heartbeat.
     const expected = new Set<string>()
     for (const entity of await reportingEntities()) {
+      const { workingDays } = await getReportSettings(entity.id)
       for (const rule of await getRules(entity.id)) {
-        if (isDue(rule, now)) expected.add(`${entity.id}:${rule.kind}`)
+        if (isDue(rule, now, workingDays)) expected.add(`${entity.id}:${rule.kind}`)
       }
     }
     const ran = await runDueRules(now)

@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server'
 import { refuseCron } from '@/lib/cron-auth'
 import { runOperationalJob } from '@/lib/operational-health'
 import { db } from '@/lib/db'
-import { isWorkingDay } from '@/lib/lock'
+import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { remindUnreportedDivisions } from '@/lib/reminders'
 import { REMINDER_DEFAULTS } from '@/lib/admin-meta'
 
 /**
- * Cron Vercel (lihat vercel.json): tiap pagi hari kerja, ingatkan kepala divisi
+ * Cron Vercel (lihat vercel.json): tiap pagi hari kerja (menurut aturan masing-masing PT), ingatkan kepala divisi
  * yang laporan mingguannya belum diserahkan. Vercel mengirim
  * "Authorization: Bearer <CRON_SECRET>"; tanpa rahasia yang cocok tidak ada
  * yang dikirim, jadi endpoint ini tidak bisa dipicu orang luar.
@@ -20,10 +20,6 @@ export async function GET(req: NextRequest) {
   const refused = refuseCron(req)
   if (refused) return refused
   return runOperationalJob('remind-divisions', async () => {
-    if (!isWorkingDay()) {
-      return { ok: true, skipped: 'akhir pekan', sent: 0 }
-    }
-
     // PT yang mematikan "Pengingat laporan mingguan" di Pengingat otomatis dilewati.
     // Strict lookup: the legacy helper swallows query errors and falls back to
     // all entities, which cannot be treated as a successful operational run.
@@ -39,7 +35,19 @@ export async function GET(req: NextRequest) {
     } else {
       entityIds = overrides.filter(rule => rule.enabled).map(rule => rule.entityId)
     }
-    const result = await remindUnreportedDivisions({ entityIds, source: 'CRON' })
+    // [T13] Hari kerja mengikuti aturan tiap PT (ReportSettings): PT 24/7 tetap
+    // diingatkan di akhir pekan, PT berhari kerja kustom hanya pada harinya.
+    // entityIds null = semua entitas aktif, jadi diperluas dulu agar bisa disaring.
+    const now = new Date()
+    const candidates = entityIds ?? (await db.entity.findMany({ where: { isActive: true }, select: { id: true } })).map(entity => entity.id)
+    const due: string[] = []
+    for (const id of candidates) {
+      if (isWorkingDayWith((await getReportSettings(id)).workingDays, now)) due.push(id)
+    }
+    if (due.length === 0) {
+      return { ok: true, skipped: 'bukan hari kerja', sent: 0 }
+    }
+    const result = await remindUnreportedDivisions({ entityIds: due, source: 'CRON' })
 
     await db.auditLog.create({
       data: {

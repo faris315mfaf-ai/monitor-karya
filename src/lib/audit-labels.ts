@@ -17,6 +17,7 @@ export const AUDIT_LABELS: Record<string, string> = {
   UPDATE_PROFILE: 'Ubah profil',
   CREATE_ACCOUNT: 'Buat akun',
   UPDATE_ACCOUNT: 'Ubah akun',
+  UPDATE_REPORT_SETTINGS: 'Ubah aturan pelaporan',
   DELETE_ACCOUNT: 'Hapus akun',
   REQUEST_ACCESS: 'Ajukan permintaan akses',
   APPROVE_ACCESS_REQUEST: 'Setujui permintaan akses',
@@ -130,6 +131,7 @@ export const AUDIT_TARGET_LABELS: Record<string, string> = {
   UNLOCK_REQUEST: 'Permintaan buka kunci',
   ACCESS_REQUEST: 'Permintaan akses',
   REMINDER_RULE: 'Aturan pengingat',
+  REPORT_SETTINGS: 'Aturan pelaporan',
   KPI_SNAPSHOT: 'KPI harian',
   AUDIT_LOG: 'Log aktivitas',
 }
@@ -138,6 +140,7 @@ export const AUDIT_TARGET_LABELS: Record<string, string> = {
 export const AUDIT_VERBS: Record<string, string> = {
   CREATE_ACCOUNT: 'membuat akun',
   UPDATE_ACCOUNT: 'mengubah akun',
+  UPDATE_REPORT_SETTINGS: 'mengubah aturan pelaporan',
   DELETE_ACCOUNT: 'menghapus akun',
   RESET_PASSWORD: 'mengatur ulang kata sandi',
   REQUEST_ACCESS: 'mengajukan permintaan akses',

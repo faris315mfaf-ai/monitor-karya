@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { ensureTemporaryAccessCurrent } from '@/lib/access-requests'
-import { hashPassword, mustChangePasswordFor, setSessionCookie, verifyPassword } from '@/lib/auth'
+import { isKnownDevice, mustChangePasswordFor, setDeviceCookie, setSessionCookie, DEVICE_COOKIE } from '@/lib/auth'
+import { hashPassword, verifyPasswordUniformCost } from '@/lib/password'
 import { MAX_PASSWORD_LENGTH, clientIp, hit, peek, resetRate, tooManyRequests } from '@/lib/security'
 
 // Same message for "no such account" and "wrong password" so the endpoint
@@ -10,13 +11,30 @@ const INVALID = 'Username atau kata sandi salah'
 
 /**
  * Pembatas laju masuk (6 Okt 2026, docs/KEAMANAN.md):
- *  - per akun (identifier): 5 kegagalan / 15 menit, lalu ditolak sampai jendela habis;
+ *  - per (IP, akun): 5 kegagalan / 15 menit, lalu ditolak sampai jendela habis.
+ *    [T11] Kuncinya menyertakan IP supaya orang lain yang sengaja salah sandi
+ *    atas nama korban tidak mengunci pemilik sah dari jaringan berbeda (DoS);
+ *  - per akun (lintas IP): 30 kegagalan / 15 menit. [T13] Plafon ini TIDAK
+ *    mengunci pemilik sah: setelah melewatinya, hanya perangkat yang membawa
+ *    cookie "perangkat dikenal" (dipasang HMAC saat masuk berhasil, terikat ke
+ *    kata sandi akun) yang masih diproses; perangkat tak dikenal ditolak 429
+ *    SEBELUM kata sandi diperiksa, jadi penyerang terdistribusi tak mendapat
+ *    sinyal benar/salah, sedangkan pemilik di perangkat biasanya tetap masuk.
+ *    Klien tanpa cookie (aplikasi Android) bisa tertahan selama serangan
+ *    berlangsung — jendela habis sendiri dalam 15 menit. Sukses tidak menghapus
+ *    hitungan lintas-IP (kalau tidak, satu login sah memberi penyerang 30 tebakan baru);
  *  - per IP: 30 percobaan / 15 menit (menahan penebakan banyak akun dari satu tempat).
+ *    IP tak diketahui (proxy tak memasang header) tidak dibagi satu ember
+ *    "unknown" untuk semua klien — itu akan mengunci semua orang; batas per-IP
+ *    dilewati dan batas per-akun tetap berlaku (peringatan dicatat sekali).
  * Hitungan per instans server (di memori) — rem, bukan kuota global.
  */
 const WINDOW_MS = 15 * 60_000
 const MAX_FAILS_PER_ACCOUNT = 5
+const MAX_FAILS_PER_ACCOUNT_ANY_IP = 30
 const MAX_ATTEMPTS_PER_IP = 30
+
+let warnedNoIp = false
 
 /** Hash tiruan agar "akun tidak ada" memakan waktu yang sama dengan "sandi salah". */
 let dummyHash: Promise<string> | null = null
@@ -47,12 +65,19 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = clientIp(req)
-  const accountKey = `login:acct:${identifier}`
-  const ipKey = `login:ip:${ip ?? 'unknown'}`
-  const ipHit = hit(ipKey, MAX_ATTEMPTS_PER_IP, WINDOW_MS)
-  if (!ipHit.ok) return tooManyRequests(ipHit.retryAfterSec)
+  if (!ip && !warnedNoIp) {
+    warnedNoIp = true
+    console.warn('[login] IP klien tidak terbaca (x-real-ip/x-forwarded-for kosong): pembatas per-IP dilewati. Periksa konfigurasi proxy.')
+  }
+  const accountKey = `login:acct:${ip ?? 'tanpa-ip'}:${identifier}`
+  const accountAnyIpKey = `login:acct-any:${identifier}`
+  if (ip) {
+    const ipHit = hit(`login:ip:${ip}`, MAX_ATTEMPTS_PER_IP, WINDOW_MS)
+    if (!ipHit.ok) return tooManyRequests(ipHit.retryAfterSec)
+  }
   const acct = peek(accountKey, MAX_FAILS_PER_ACCOUNT)
   if (!acct.ok) return tooManyRequests(acct.retryAfterSec)
+  const acctAny = peek(accountAnyIpKey, MAX_FAILS_PER_ACCOUNT_ANY_IP)
 
   let user
   try {
@@ -64,9 +89,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Database tidak terjangkau dari server ini.' }, { status: 503 })
   }
 
-  const ok = await verifyPassword(password, user?.passwordHash ?? (await getDummyHash()))
+  // Plafon lintas-IP terlampaui: hanya perangkat dikenal milik akun ini yang diproses.
+  // Akun tak ada (user null) selalu "tak dikenal" → jawaban 429 sama dengan akun ada.
+  if (!acctAny.ok && !(user && isKnownDevice(req.cookies.get(DEVICE_COOKIE)?.value, user.id, user.passwordHash))) {
+    return tooManyRequests(acctAny.retryAfterSec)
+  }
+
+  const ok = await verifyPasswordUniformCost(password, user?.passwordHash ?? (await getDummyHash()))
   if (!user || !user.passwordHash || !ok) {
     hit(accountKey, MAX_FAILS_PER_ACCOUNT, WINDOW_MS)
+    hit(accountAnyIpKey, MAX_FAILS_PER_ACCOUNT_ANY_IP, WINDOW_MS)
     // Jejak percobaan gagal untuk pemantauan; gagal mencatat tidak mengubah jawaban.
     await db.auditLog
       .create({
@@ -92,6 +124,7 @@ export async function POST(req: NextRequest) {
   if (!user.isActive) {
     return NextResponse.json({ error: 'Akun ini dinonaktifkan' }, { status: 403 })
   }
+  // Hanya hitungan (IP, akun) yang dihapus; hitungan lintas-IP dibiarkan habis sendiri.
   resetRate(accountKey)
 
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
@@ -113,5 +146,6 @@ export async function POST(req: NextRequest) {
     mustChangePassword,
   })
   await setSessionCookie(res, user.id, user.passwordHash)
+  setDeviceCookie(res, user.id, user.passwordHash)
   return res
 }

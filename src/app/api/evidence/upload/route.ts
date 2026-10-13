@@ -8,10 +8,14 @@ import {
   ALLOWED_EVIDENCE_MIME,
   MAX_EVIDENCE_BYTES,
   buildStorageKey,
+  removeEvidence,
   storageConfigured,
   uploadEvidence,
 } from '@/lib/storage'
 import { serverError } from '@/lib/api-error'
+import { findIdempotentReplay, isUniqueViolation, readIdempotencyKey, recordIdempotentResponse } from '@/lib/idempotency'
+
+const IDEMPOTENT_ROUTE = 'POST /api/evidence/upload'
 
 // Files are buffered in memory before going to Storage, so this must run on
 // the Node runtime rather than the edge.
@@ -38,10 +42,22 @@ const EXTENSIONS_FOR_MIME: Record<string, string[]> = {
  * POST /api/evidence/upload — multipart upload of one supporting file.
  *
  * Fields: file, targetType, targetId, and an optional label.
+ *
+ * Header opsional `Idempotency-Key` (outbox Android UNGGAH_BUKTI, 13 Okt 2026):
+ * ulangan berkunci sama dari pengguna yang sama dibalas respons pertama SEBELUM
+ * berkas dibaca/diunggah, jadi tidak ada bukti ganda. Tanpa header: tidak berubah.
  */
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
+
+  const idem = readIdempotencyKey(req)
+  if (!idem.ok) return idem.res
+  const idemKey = idem.key
+  if (idemKey) {
+    const replay = await findIdempotentReplay(db, user.id, idemKey, IDEMPOTENT_ROUTE)
+    if (replay) return replay
+  }
 
   // Tolak sebelum badan dibaca ke memori: berkas 20 MB + pembungkus multipart.
   const declared = Number(req.headers.get('content-length') ?? '')
@@ -131,44 +147,61 @@ export async function POST(req: NextRequest) {
     return serverError(err, 'Gagal mengunggah berkas. Coba lagi.', 'evidence/upload', 502)
   }
 
-  const evidence = await db.evidence.create({
-    data: {
-      targetType,
-      targetId,
-      storageKey: key,
-      fileName: displayName,
-      mime,
-      size: file.size,
-      url: null, // read through a signed URL; never a permanent link
-      uploadedById: user.id,
-    },
-  })
+  // [T11-DB] Objek sudah di storage; bila transaksi DB gagal, objeknya dibuang supaya tidak
+  // yatim di bucket. [T12] Baris + hitung ulang cache + audit satu transaksi.
+  let payload
+  try {
+    payload = await db.$transaction(async (tx) => {
+      const created = await tx.evidence.create({
+        data: {
+          targetType,
+          targetId,
+          storageKey: key,
+          fileName: displayName,
+          mime,
+          size: file.size,
+          url: null, // read through a signed URL; never a permanent link
+          uploadedById: user.id,
+        },
+      })
+      const total = await syncEvidenceCount(targetType, targetId, tx)
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'UPLOAD_EVIDENCE',
+          targetType,
+          targetId,
+          afterData: JSON.stringify({ fileName: created.fileName, size: file.size, mime }),
+          ip: clientIp(req),
+          userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
+        },
+      })
+      const body = {
+        ok: true,
+        evidence: {
+          id: created.id,
+          fileName: created.fileName,
+          mime: created.mime,
+          size: created.size,
+          storageKey: created.storageKey,
+          url: null,
+          createdAt: created.createdAt,
+        },
+        evidenceCount: total,
+      }
+      // Kunci dicatat di transaksi yang sama: ulangan bersamaan gagal P2002 di sini
+      // dan seluruh barisnya batal (tanpa bukti ganda).
+      if (idemKey) await recordIdempotentResponse(tx, user.id, idemKey, IDEMPOTENT_ROUTE, { status: 200, body })
+      return body
+    }, { isolationLevel: 'ReadCommitted' })
+  } catch (err) {
+    try { await removeEvidence(key) } catch { /* Sisa objek ditangani retensi bucket. */ }
+    if (idemKey && isUniqueViolation(err)) {
+      const winner = await findIdempotentReplay(db, user.id, idemKey, IDEMPOTENT_ROUTE)
+      if (winner) return winner
+    }
+    return serverError(err, 'Gagal menyimpan berkas. Coba lagi.', 'evidence/upload create', 500)
+  }
 
-  const count = await syncEvidenceCount(targetType, targetId)
-
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: 'UPLOAD_EVIDENCE',
-      targetType,
-      targetId,
-      afterData: JSON.stringify({ fileName: evidence.fileName, size: file.size, mime }),
-      ip: clientIp(req),
-      userAgent: req.headers.get('user-agent')?.slice(0, 300) || null,
-    },
-  })
-
-  return NextResponse.json({
-    ok: true,
-    evidence: {
-      id: evidence.id,
-      fileName: evidence.fileName,
-      mime: evidence.mime,
-      size: evidence.size,
-      storageKey: evidence.storageKey,
-      url: null,
-      createdAt: evidence.createdAt,
-    },
-    evidenceCount: count,
-  })
+  return NextResponse.json(payload)
 }

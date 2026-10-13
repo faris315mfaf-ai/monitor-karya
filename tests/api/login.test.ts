@@ -87,13 +87,23 @@ describe('POST /api/auth/login', () => {
   it('5 kegagalan untuk satu akun → percobaan ke-6 ditolak 429 tanpa menyentuh basis data', async () => {
     db.user.findFirst.mockResolvedValue(account({ username: 'rina-kunci' }))
     for (let i = 0; i < 5; i++) {
-      expect((await login({ identifier: 'rina-kunci', password: 'salah' })).status).toBe(401)
+      expect((await login({ identifier: 'rina-kunci', password: 'salah' }, '198.51.100.1')).status).toBe(401)
     }
     db.user.findFirst.mockClear()
-    const res = await login({ identifier: 'rina-kunci', password: 'benar-sekali' })
+    const res = await login({ identifier: 'rina-kunci', password: 'benar-sekali' }, '198.51.100.1')
     expect(res.status).toBe(429)
     expect(res.headers.get('retry-after')).toBeTruthy()
     expect(db.user.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('[T11] penyerang mengunci (IP, akun) miliknya sendiri; pemilik sah dari IP lain tetap bisa masuk', async () => {
+    db.user.findFirst.mockResolvedValue(account({ username: 'rina-dos' }))
+    for (let i = 0; i < 5; i++) {
+      expect((await login({ identifier: 'rina-dos', password: 'salah' }, '198.51.100.2')).status).toBe(401)
+    }
+    expect((await login({ identifier: 'rina-dos', password: 'salah' }, '198.51.100.2')).status).toBe(429)
+    const owner = await login({ identifier: 'rina-dos', password: 'benar-sekali' }, '203.0.113.9')
+    expect(owner.status).toBe(200)
   })
 
   it('30 percobaan dari satu IP → berikutnya 429', async () => {

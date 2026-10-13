@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import { isMasterRole } from '@/lib/rbac'
-import { isWorkingDay, parseWibDateKey, startOfWibDay, wibDateKey } from '@/lib/lock'
+import { parseWibDateKey, startOfWibDay, wibDateKey } from '@/lib/lock'
+import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { auditPic, notifyInApp, projectDivisionIds, projectScopeWhere, readJson } from '@/lib/pic-access'
 import { entityDirectors, ledDivisions } from '@/lib/kadiv'
 import { cleanText, hit, tooManyRequests } from '@/lib/security'
@@ -208,12 +209,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** Hari kerja (tengah malam WIB) dari start s.d. end. */
-function workingDays(start: Date, end: Date): Date[] {
+/** Hari kerja (tengah malam WIB) dari start s.d. end, menurut hari kerja PT (kosong = setiap hari). */
+function workingDays(start: Date, end: Date, workDays: number[]): Date[] {
   const out: Date[] = []
   for (let t = start.getTime(); t <= end.getTime(); t += DAY) {
     const d = new Date(t)
-    if (isWorkingDay(d)) out.push(startOfWibDay(d))
+    if (isWorkingDayWith(workDays, d)) out.push(startOfWibDay(d))
   }
   return out
 }
@@ -296,6 +297,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Tulis alasan penolakan untuk pengaju, minimal 5 huruf' }, { status: 422 })
     }
     const status = action === 'approve' ? 'DISETUJUI' : 'DITOLAK'
+    // [T12] Hari cuti yang dicatat mengikuti hari kerja PT pengaju, bukan Sen–Jum tetap.
+    const workDays = action === 'approve' && cur.type === 'CUTI' ? (await getReportSettings(cur.entityId)).workingDays : []
     const result = await db.$transaction(async (tx) => {
       const r = await tx.approvalRequest.updateMany({
         where: { id, status: 'DIAJUKAN' },
@@ -304,7 +307,7 @@ export async function PATCH(req: NextRequest) {
       if (r.count === 0) return null
       const created: string[] = []
       if (action === 'approve' && cur.type === 'CUTI' && cur.startDate && cur.endDate) {
-        const days = workingDays(cur.startDate, cur.endDate)
+        const days = workingDays(cur.startDate, cur.endDate, workDays)
         const existing = await tx.attendance.findMany({
           where: { userId: cur.requestedById, date: { in: days } },
           select: { date: true },

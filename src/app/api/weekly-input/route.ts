@@ -1,4 +1,4 @@
-import { clientIp } from '@/lib/security'
+import { clientIp, safeEvidenceUrl } from '@/lib/security'
 import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -277,7 +277,7 @@ export async function GET(req: NextRequest) {
               isLocked: report.isLocked,
               items: report.items.map((i) => ({
                 ...i,
-                evidence: evidence.filter((e) => e.targetId === i.id),
+                evidence: evidence.filter((e) => e.targetId === i.id).map((e) => ({ ...e, url: safeEvidenceUrl(e.url) })), // [T12]
                 escalationRaised: raisedIds.has(i.id),
               })),
             }
@@ -317,9 +317,12 @@ async function assertOwnsDivision(user: SessionUser, divisionId: string) {
  * can only be edited under an executed unlock; that correction was approved
  * through the unlock flow, so the report keeps its status (and stays forwarded).
  */
-async function backToDraft(report: { id: string; statusHeader: string; forwardedAt?: Date | null }) {
+async function backToDraft(
+  report: { id: string; statusHeader: string; forwardedAt?: Date | null },
+  client: Prisma.TransactionClient = db
+) {
   if (report.statusHeader === 'DRAFT' || report.forwardedAt) return
-  await db.weeklyDivisionReport.update({
+  await client.weeklyDivisionReport.update({
     where: { id: report.id },
     data: { statusHeader: 'DRAFT', submittedAt: null, submittedById: null, approvedAt: null, approvedById: null },
   })
@@ -416,6 +419,15 @@ export async function PUT(req: NextRequest) {
   }
   if (payload.status === 'TERKENDALA' && !payload.obstacleFollowUp) {
     return NextResponse.json({ error: 'Kendala wajib diisi untuk status Terkendala' }, { status: 422 })
+  }
+
+  // [T11-DB] Aspek/prioritas harus ada: id ngawur → 422 yang jelas, bukan P2003 → 500.
+  const [aspectOk, priorityOk] = await Promise.all([
+    db.aspectCategory.count({ where: { id: payload.aspectCategoryId } }),
+    db.priority.count({ where: { id: payload.priorityId } }),
+  ])
+  if (!aspectOk || !priorityOk) {
+    return NextResponse.json({ error: 'Aspek atau prioritas tidak dikenal' }, { status: 422 })
   }
 
   const evidenceCount = existing
@@ -594,8 +606,25 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Item yang sudah dieskalasi tidak dapat dihapus.' }, { status: 409 })
   }
 
-  // Lampirannya ikut dihapus — dari penyimpanan dulu, lalu barisnya.
+  // [T11-DB] Semua baris DB (bukti, item, kembali ke DRAFT, audit) satu transaksi;
+  // objek storage dihapus SETELAH commit (pola daily-input DELETE) sehingga kegagalan
+  // di tengah tidak meninggalkan baris bukti yang menunjuk objek hilang.
   const files = await db.evidence.findMany({ where: { targetType: 'WEEKLY_ITEM', targetId: itemId } })
+  await db.$transaction(async (tx) => {
+    await tx.evidence.deleteMany({ where: { targetType: 'WEEKLY_ITEM', targetId: itemId } })
+    await tx.weeklyReportItem.delete({ where: { id: itemId } })
+    await backToDraft(report, tx)
+    await tx.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'DELETE_WEEKLY_ITEM',
+        targetType: 'WEEKLY_ITEM',
+        targetId: itemId,
+        beforeData: JSON.stringify({ workItem: existing.workItem, status: existing.status, workDate: existing.workDate }),
+        ip: clientIp(req),
+      },
+    })
+  })
   if (storageConfigured()) {
     for (const f of files) {
       if (!f.url) {
@@ -607,20 +636,6 @@ export async function DELETE(req: NextRequest) {
       }
     }
   }
-  await db.evidence.deleteMany({ where: { targetType: 'WEEKLY_ITEM', targetId: itemId } })
-  await db.weeklyReportItem.delete({ where: { id: itemId } })
-  await backToDraft(report)
-
-  await db.auditLog.create({
-    data: {
-      actorId: user.id,
-      action: 'DELETE_WEEKLY_ITEM',
-      targetType: 'WEEKLY_ITEM',
-      targetId: itemId,
-      beforeData: JSON.stringify({ workItem: existing.workItem, status: existing.status, workDate: existing.workDate }),
-      ip: clientIp(req),
-    },
-  })
 
   return NextResponse.json({ ok: true })
 }
@@ -694,10 +709,15 @@ export async function POST(req: NextRequest) {
 
   // Every item must pass validation before the bundle moves on.
   const problems: string[] = []
+  // [T11-DB] Satu groupBy untuk semua item (sebelumnya satu count per item).
+  const evidenceGroups = await db.evidence.groupBy({
+    by: ['targetId'],
+    where: { targetType: 'WEEKLY_ITEM', targetId: { in: items.map((i) => i.id) } },
+    _count: { _all: true },
+  })
+  const evidenceById = new Map(evidenceGroups.map((g) => [g.targetId, g._count._all]))
   for (const item of items) {
-    const evidenceCount = await db.evidence.count({
-      where: { targetType: 'WEEKLY_ITEM', targetId: item.id },
-    })
+    const evidenceCount = evidenceById.get(item.id) ?? 0
     const errs = validateWeeklyItem({ ...item, evidenceCount })
     if (errs.length) problems.push(`${item.workItem}: ${errs[0]}`)
   }

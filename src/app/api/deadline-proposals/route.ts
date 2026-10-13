@@ -14,6 +14,7 @@ import {
   str,
 } from '@/lib/pic-access'
 import { UNDO_WINDOW_MINUTES } from '@/lib/oversight-shared' // [F2-DIREKTUR]
+import { entityDirectors } from '@/lib/kadiv'
 
 /**
  * Usulan geser tenggat proyek (6 Okt 2026) — "Rilis 24 Okt · usul 31 Okt".
@@ -114,29 +115,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Tulis alasannya sebagai fakta, minimal 10 huruf' }, { status: 422 })
   }
 
-  const open = await db.deadlineProposal.findFirst({
-    where: { projectId: guard.project.id, status: 'DIAJUKAN' },
-    select: { id: true },
+  // [T12] Cek "belum ada usulan terbuka" dan pembuatan satu transaksi di bawah
+  // kunci baris proyek: dua POST bersamaan tidak lagi menghasilkan dua usulan
+  // DIAJUKAN untuk proyek yang sama (aturan: satu proyek satu usulan terbuka).
+  const created = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${guard.project.id} FOR UPDATE`
+    const open = await tx.deadlineProposal.findFirst({
+      where: { projectId: guard.project.id, status: 'DIAJUKAN' },
+      select: { id: true },
+    })
+    if (open) return null
+    return tx.deadlineProposal.create({
+      data: {
+        projectId: guard.project.id,
+        previousDate: prev,
+        proposedDate,
+        reason,
+        proposedById: user.id,
+      },
+      select: SELECT,
+    })
   })
-  if (open) return NextResponse.json({ error: 'Masih ada usulan tenggat yang belum diputuskan' }, { status: 409 })
-
-  const created = await db.deadlineProposal.create({
-    data: {
-      projectId: guard.project.id,
-      previousDate: prev,
-      proposedDate,
-      reason,
-      proposedById: user.id,
-    },
-    select: SELECT,
-  })
+  if (!created) return NextResponse.json({ error: 'Masih ada usulan tenggat yang belum diputuskan' }, { status: 409 })
   await auditPic(req, user, 'PROPOSE_DEADLINE', 'PROJECT', guard.project.id, { proposedDate, reason }, { targetEndDate: prev })
 
-  // Pemutus di PT proyek: Direktur entitas dengan cakupan PT itu.
-  const deciders = await db.user.findMany({
-    where: { role: 'DIREKTUR_ENTITAS', scopeEntityId: guard.project.entityId, isActive: true },
-    select: { id: true, email: true },
-  })
+  // Pemutus: Direktur entitas yang membawahi PT proyek (PT itu atau induk
+  // terdekat, mis. sub-holding) — sama dengan penerima permintaan persetujuan.
+  const deciders = (await entityDirectors(guard.project.entityId)).map((d) => ({ id: d.id, email: d.email }))
   await notifyInApp(deciders, 'DEADLINE_PROPOSAL', {
     title: `Usulan geser tenggat · ${guard.project.name}`,
     body: `${user.name} mengusulkan tenggat baru ${new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(proposedDate)}.`,
@@ -172,6 +177,15 @@ export async function PATCH(req: NextRequest) {
     const guard = await guardProjectAccess(user, current.projectId, ['MASTER', 'VIEWER'])
     if (!guard.ok) return guard.res
     const undone = await db.$transaction(async (tx) => {
+      // [T12] Sesudah keputusan, PIC boleh mengajukan usulan baru. Mengurungkan
+      // keputusan lama lalu menghidupkan kembali DIAJUKAN akan menyisakan dua usulan
+      // terbuka untuk satu proyek: tolak selama masih ada yang terbuka.
+      await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${current.projectId} FOR UPDATE`
+      const open = await tx.deadlineProposal.findFirst({
+        where: { projectId: current.projectId, status: 'DIAJUKAN', id: { not: id } },
+        select: { id: true },
+      })
+      if (open) return 'TERBUKA' as const
       const res = await tx.deadlineProposal.updateMany({
         where: { id, status: current.status, decidedById: user.id },
         data: { status: 'DIAJUKAN', decidedById: null, decidedAt: null, decisionNote: null },
@@ -185,6 +199,9 @@ export async function PATCH(req: NextRequest) {
       }
       return true
     })
+    if (undone === 'TERBUKA') {
+      return NextResponse.json({ error: 'Proyek ini sudah punya usulan tenggat baru yang belum diputuskan. Keputusan lama tidak bisa diurungkan.' }, { status: 409 })
+    }
     if (!undone) return NextResponse.json({ error: 'Status usulan sudah berubah' }, { status: 409 })
     await auditPic(req, user, 'UNDO_DEADLINE_DECISION', 'PROJECT', current.projectId, { status: 'DIAJUKAN' }, {
       status: current.status,

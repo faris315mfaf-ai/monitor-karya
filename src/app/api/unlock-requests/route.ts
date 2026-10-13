@@ -8,6 +8,7 @@ import {
   DEFAULT_UNLOCK_HOURS, MAX_UNLOCK_HOURS, normalizeTarget, relockExpiredUnlocks, resolveTarget, setReportLock, targetLabels,
 } from '@/lib/unlock-requests'
 import { serverError } from '@/lib/api-error'
+import { intParam, MAX_PAGE } from '@/app/api/_paging'
 
 /**
  * Buka kunci laporan (lihat src/lib/unlock-requests.ts).
@@ -29,8 +30,8 @@ export async function GET(req: NextRequest) {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '30', 10)))
+    const page = intParam(sp.get('page'), 1, 1, MAX_PAGE)
+    const pageSize = intParam(sp.get('pageSize'), 30, 1, 200)
     const status = sp.get('status') || undefined
 
     if (can(user.role, 'unlock:execute')) await relockExpiredUnlocks().catch(() => 0)
@@ -102,28 +103,43 @@ export async function POST(req: NextRequest) {
         : null
     if (!own) return NextResponse.json({ error: 'Laporan tidak ditemukan di proyek Anda.' }, { status: 404 })
   }
-  const open = await db.unlockRequest.findFirst({
-    where: { targetType, targetId, status: { in: ['DIAJUKAN', 'DISETUJUI'] } },
-    select: { id: true },
-  })
-  if (open) return NextResponse.json({ error: 'Buka kunci untuk laporan ini masih diproses.' }, { status: 409 })
-
-  const created = await db.$transaction(async (tx) => {
-    const row = await tx.unlockRequest.create({
-      data: { targetType, targetId, reason, status: 'DIAJUKAN', requestedById: user.id },
+  // [T11, S-5] Cek "masih diproses" dan pembuatan satu transaksi di bawah kunci
+  // baris laporan (FOR UPDATE) — dua klik bersamaan tidak lagi menghasilkan dua
+  // pengajuan terbuka untuk laporan yang sama.
+  let created
+  try {
+    created = await db.$transaction(async (tx) => {
+      if (targetType === 'DAILY_REPORT') {
+        await tx.$queryRaw`SELECT "id" FROM "DailyProjectReport" WHERE "id" = ${targetId} FOR UPDATE`
+      } else {
+        await tx.$queryRaw`SELECT "id" FROM "WeeklyDivisionReport" WHERE "id" = ${targetId} FOR UPDATE`
+      }
+      const open = await tx.unlockRequest.findFirst({
+        where: { targetType, targetId, status: { in: ['DIAJUKAN', 'DISETUJUI'] } },
+        select: { id: true },
+      })
+      if (open) throw new Error('CONFLICT')
+      const row = await tx.unlockRequest.create({
+        data: { targetType, targetId, reason, status: 'DIAJUKAN', requestedById: user.id },
+      })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'REQUEST_UNLOCK',
+          targetType: 'UNLOCK_REQUEST',
+          targetId: row.id,
+          afterData: JSON.stringify({ targetType, targetId, label: target.label }),
+          ip: ipOf(req),
+        },
+      })
+      return row
     })
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: 'REQUEST_UNLOCK',
-        targetType: 'UNLOCK_REQUEST',
-        targetId: row.id,
-        afterData: JSON.stringify({ targetType, targetId, label: target.label }),
-        ip: ipOf(req),
-      },
-    })
-    return row
-  })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'CONFLICT') {
+      return NextResponse.json({ error: 'Buka kunci untuk laporan ini masih diproses.' }, { status: 409 })
+    }
+    return serverError(err, 'Pengajuan buka kunci gagal disimpan. Coba lagi.', 'unlock-requests POST')
+  }
   return NextResponse.json({ ok: true, item: { ...created, targetLabel: target.label } }, { status: 201 })
 }
 

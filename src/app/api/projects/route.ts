@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client'
 import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
 import { deriveProjectStatus } from '@/lib/project-status'
 import { serverError } from '@/lib/api-error' // [F3-D]
+import { intParam, MAX_PAGE } from '@/app/api/_paging'
 
 /**
  * Modul proyek (11 Sep 2026).
@@ -68,7 +69,7 @@ function canSetLifecycle(user: SessionUser, p: { entityId: string; lifecycle: st
   return can(user.role, 'project:manage') && user.scopeEntityId === p.entityId && p.lifecycle !== 'DIUSULKAN'
 }
 
-function format(p: ProjectRow, user: SessionUser) {
+function format(p: ProjectRow, user: SessionUser, reach: readonly string[] | null) {
   const approvedRoles = p.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role)
   const pending = p.lifecycle === 'DIUSULKAN' ? pendingSlot(p.approvalChain, approvedRoles) : null
   const r = p.dailyReports[0]
@@ -110,7 +111,7 @@ function format(p: ProjectRow, user: SessionUser) {
     permissions: {
       manage: canManage(user, p),
       setLifecycle: canSetLifecycle(user, p),
-      approve: pending !== null && canSignSlot(user, pending, p.entityId),
+      approve: pending !== null && canSignSlot(user, pending, p.entityId, reach),
       resubmit: p.lifecycle === 'DITOLAK' && canManage(user, p),
     },
   }
@@ -125,6 +126,16 @@ async function proposalEntity(user: SessionUser, requested: string | null) {
   if (!id) return null
   const e = await db.entity.findUnique({ where: { id }, select })
   return e && e.type === 'PT' && e.isActive ? e : null
+}
+
+/** Kode proyek berurutan pertama dari nomor `from` yang belum dipakai; `next` = nomor sesudahnya. */
+async function freeProjectCode(entityCode: string, from: number): Promise<{ code: string; next: number }> {
+  let n = from
+  for (;;) {
+    const code = `${entityCode}-PRJ-${String(n).padStart(2, '0')}`
+    if (!(await db.project.findUnique({ where: { code }, select: { id: true } }))) return { code, next: n + 1 }
+    n++
+  }
 }
 
 const parseDate = (v: string): Date | null | undefined => {
@@ -171,8 +182,8 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
+    const page = intParam(sp.get('page'), 1, 1, MAX_PAGE)
+    const pageSize = intParam(sp.get('pageSize'), 20, 1, 200)
     const id = sp.get('id') || undefined
     const entityId = sp.get('entityId') || undefined
     const phase = sp.get('phase') || undefined
@@ -220,7 +231,7 @@ export async function GET(req: NextRequest) {
     for (const p of all) {
       if (p.lifecycle === 'DIUSULKAN') {
         const slot = pendingSlot(p.approvalChain, p.approvals.filter((a) => a.decision === 'DISETUJUI').map((a) => a.role))
-        if (slot && canSignSlot(user, slot, p.entityId)) summary.waiting++
+        if (slot && canSignSlot(user, slot, p.entityId, scopeIds)) summary.waiting++
       }
       if (p.lifecycle === 'DITOLAK' && canManage(user, p)) summary.resubmit++
       if (p.lifecycle !== 'AKTIF') continue
@@ -231,7 +242,7 @@ export async function GET(req: NextRequest) {
       if (state === 'risk') summary.risk++
       if (!report) summary.silent++
     }
-    return NextResponse.json({ items: items.map((p) => format(p, user)), total, page, pageSize, summary })
+    return NextResponse.json({ items: items.map((p) => format(p, user, scopeIds)), total, page, pageSize, summary })
   } catch (err) {
     // [F3-D] Pesan umum ke klien; detail galat hanya ke log server.
     return serverError(err, 'Proyek belum termuat. Coba lagi.', 'projects GET')
@@ -339,10 +350,7 @@ export async function POST(req: NextRequest) {
 
   // Kode berurutan per PT: PT-SIGMA-PRJ-03.
   const count = await db.project.count({ where: { entityId: entity.id } })
-  let code = `${entity.code}-PRJ-${String(count + 1).padStart(2, '0')}`
-  for (let n = count + 2; await db.project.findUnique({ where: { code }, select: { id: true } }); n++) {
-    code = `${entity.code}-PRJ-${String(n).padStart(2, '0')}`
-  }
+  let { code, next: nextN } = await freeProjectCode(entity.code, count + 1)
 
   // Proyek tahap awal boleh didaftarkan tanpa persetujuan; tahap berikutnya
   // tetap lewat rantai seperti biasa.
@@ -353,22 +361,40 @@ export async function POST(req: NextRequest) {
   }
   const chain = skipApproval ? [] : roleChain
   const active = chain.length === 0
-  const project = await db.project.create({
-    data: {
-      ...(data as Prisma.ProjectUncheckedCreateInput),
-      name: data.name as string,
-      phase: (data.phase as string) ?? 'INISIASI',
-      entityId: entity.id,
-      code,
-      lifecycle: active ? 'AKTIF' : 'DIUSULKAN',
-      approvalChain: chain,
-      proposedById: user.id,
-      proposedAt: new Date(),
-      ...(active ? { approvedAt: new Date(), approvedByName: skipApproval ? NO_APPROVAL_LABEL : user.name } : {}),
-      relatedEntities: { create: (related ?? []).map((entityId) => ({ entityId })) },
-    },
-    include: PROJECT_INCLUDE,
-  })
+  const create = (kode: string) =>
+    db.project.create({
+      data: {
+        ...(data as Prisma.ProjectUncheckedCreateInput),
+        name: data.name as string,
+        phase: (data.phase as string) ?? 'INISIASI',
+        entityId: entity.id,
+        code: kode,
+        lifecycle: active ? 'AKTIF' : 'DIUSULKAN',
+        approvalChain: chain,
+        proposedById: user.id,
+        proposedAt: new Date(),
+        ...(active ? { approvedAt: new Date(), approvedByName: skipApproval ? NO_APPROVAL_LABEL : user.name } : {}),
+        relatedEntities: { create: (related ?? []).map((entityId) => ({ entityId })) },
+      },
+      include: PROJECT_INCLUDE,
+    })
+  // [T11, S-5] Kode dibentuk hitung-lalu-cek di luar transaksi; dua pengajuan
+  // bersamaan bisa menghasilkan kode sama (P2002). Ulangi dengan nomor
+  // berikutnya alih-alih 500.
+  let project: Awaited<ReturnType<typeof create>> | null = null
+  for (let attempt = 0; project === null; attempt++) {
+    try {
+      project = await create(code)
+    } catch (err) {
+      if ((err as { code?: unknown })?.code !== 'P2002' || attempt >= 5) {
+        if ((err as { code?: unknown })?.code === 'P2002') {
+          return NextResponse.json({ error: 'Proyek lain sedang diajukan bersamaan. Coba lagi.' }, { status: 409 })
+        }
+        return serverError(err, 'Pengajuan proyek gagal disimpan. Coba lagi.', 'projects POST')
+      }
+      ;({ code, next: nextN } = await freeProjectCode(entity.code, nextN))
+    }
+  }
 
   await db.auditLog.create({
     data: {
@@ -382,7 +408,7 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ ok: true, project: format(project, user) })
+  return NextResponse.json({ ok: true, project: format(project, user, await scopeEntityIds(user)) })
 }
 
 /**
@@ -457,7 +483,7 @@ export async function PATCH(req: NextRequest) {
       },
       stamp: await projectStamp(id),
     })
-    return NextResponse.json({ ok: true, project: format(updated, user), undoToken })
+    return NextResponse.json({ ok: true, project: format(updated, user, await scopeEntityIds(user)), undoToken })
   }
 
   const { errors, data, related } = await readFields(body, existing.entityId, { partial: true })
@@ -468,7 +494,12 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.lifecycle === 'string' && body.lifecycle !== existing.lifecycle) {
     if (!MANAGED_LIFECYCLES.includes(body.lifecycle)) errors.push('Status tidak dikenali.')
     else if (!canSetLifecycle(user, existing)) errors.push('Anda tidak berwenang mengganti status proyek ini.')
-    else {
+    // [T12] Pengajuan yang ditolak penyetuju tidak boleh diaktifkan lewat ganti
+    // status (langsung atau lewat DITUTUP/DIARSIPKAN): jalurnya "ajukan ulang" agar
+    // rantai persetujuan berjalan lagi. Tanpa ini Admin PT bisa menembus penolakan.
+    else if (body.lifecycle === 'AKTIF' && (existing.lifecycle === 'DITOLAK' || existing.approvals.some((a) => a.decision === 'DITOLAK'))) {
+      errors.push('Proyek ini ditolak penyetuju. Ajukan ulang pengajuannya agar melewati persetujuan lagi.')
+    } else {
       data.lifecycle = body.lifecycle
       if (body.lifecycle === 'AKTIF' && !existing.approvedAt) {
         data.approvedAt = new Date()
@@ -521,7 +552,7 @@ export async function PATCH(req: NextRequest) {
         })
       : null
 
-  return NextResponse.json({ ok: true, project: format(updated, user), undoToken })
+  return NextResponse.json({ ok: true, project: format(updated, user, await scopeEntityIds(user)), undoToken })
 }
 
 /** DELETE ?id= — hapus proyek yang belum punya laporan/task; selebihnya diarsipkan. */

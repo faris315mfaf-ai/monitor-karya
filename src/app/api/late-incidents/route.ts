@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
+import { intParam, MAX_PAGE } from '@/app/api/_paging'
 import { refusePerformer } from '@/lib/pic-access'
 import { Prisma } from '@prisma/client'
 import { serverError } from '@/lib/api-error' // [F3-D]
@@ -17,11 +18,11 @@ export async function GET(req: NextRequest) {
     const forbidden = refusePerformer(user)
     if (forbidden) return forbidden
     const sp = req.nextUrl.searchParams
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '50', 10)))
+    const page = intParam(sp.get('page'), 1, 1, MAX_PAGE)
+    const pageSize = intParam(sp.get('pageSize'), 50, 1, 200)
     const entityId = sp.get('entityId') || undefined
     const cycle = sp.get('cycle') || undefined
-    const minOccurrence = Math.max(1, parseInt(sp.get('minOccurrence') || '1', 10))
+    const minOccurrence = intParam(sp.get('minOccurrence'), 1, 1, 1000)
 
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)

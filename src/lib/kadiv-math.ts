@@ -64,14 +64,18 @@ function wibMidnight(d: Date) {
   return new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate()) - WIB)
 }
 
-/** Hari kerja (Senin–Jumat WIB) dalam `windowDays` hari terakhir yang tenggatnya sudah lewat, urut lama → baru. */
-export function lockedWorkdays(now: Date, lockAt: (day: Date) => Date, windowDays = ON_TIME_WINDOW_DAYS): Date[] {
+/**
+ * Hari kerja dalam `windowDays` hari terakhir yang tenggatnya sudah lewat, urut lama → baru.
+ * Tanpa `workingDays` = Senin–Jumat WIB; dengan `workingDays` (ISO 1..7, aturan PT) kosong = setiap hari.
+ */
+export function lockedWorkdays(now: Date, lockAt: (day: Date) => Date, windowDays = ON_TIME_WINDOW_DAYS, workingDays?: number[]): Date[] {
   const today = wibMidnight(now)
   const out: Date[] = []
   for (let i = windowDays - 1; i >= 0; i--) {
     const d = new Date(today.getTime() - i * DAY)
     const dow = new Date(d.getTime() + WIB).getUTCDay()
-    if (dow === 0 || dow === 6) continue
+    const iso = dow === 0 ? 7 : dow
+    if (workingDays ? workingDays.length > 0 && !workingDays.includes(iso) : iso > 5) continue
     if (lockAt(d).getTime() > now.getTime()) continue
     out.push(d)
   }

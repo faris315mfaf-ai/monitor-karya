@@ -94,7 +94,7 @@ describe('S2 hit — jendela tetap dan pembatas memori', () => {
     expect(hit(fresh, 2, 60_000).ok).toBe(false)
   })
 
-  it('banjir kunci dapat menggeser bucket tertua: blokir bisa terhapus (batas rem memori)', async () => {
+  it('[T13] hanya bila SEMUA ember terkunci, yang tertua dibuang (batas rem memori); ember tak terkunci dibuang lebih dulu', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-08T03:00:00Z'))
     // Modul segar supaya peta bucket mulai kosong dan urutan penyisipan pasti.
@@ -103,8 +103,10 @@ describe('S2 hit — jendela tetap dan pembatas memori', () => {
     const victim = 's2:victim-korban'
     fresh.hit(victim, 1, 3_600_000)
     expect(fresh.peek(victim, 1).ok).toBe(false)
-    // Melebihi MAX_BUCKETS memaksa pembuangan 1000 bucket tertua — korban
-    // adalah kunci pertama. Sifat rem memori, bukan kuota global.
+    // Banjir ember yang semuanya juga terkunci (batas 1): tidak ada ember tak terkunci yang
+    // bisa dibuang, jadi pembuangan 1000 tertua — korban adalah kunci pertama. Banjir ember
+    // tak terkunci (mis. satu kegagalan login) TIDAK lagi menyentuh kunci aktif; lihat
+    // tests/security/t13-login-plafon.test.ts.
     for (let i = 0; i < 20_100; i++) fresh.hit(`s2:flood2:${i}`, 1, 3_600_000)
     expect(fresh.peek(victim, 1).ok).toBe(true)
     vi.useRealTimers()

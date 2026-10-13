@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { serverError } from '@/lib/api-error'
-import { isDailyLocked } from '@/lib/lock'
 import { formatDateShort } from '@/lib/format'
+import { dailyDeadlineWith, getReportSettings } from '@/lib/report-settings'
 import { READ_RELATIONS, guardProjectAccess } from '@/lib/pic-access'
 import { nearestDeadlines, reportHistory, weeklyProgress, wibMidnight, type OutputInput, type StageInput } from '@/lib/pic-progress'
 
@@ -45,6 +45,9 @@ export async function GET(req: NextRequest) {
   try {
     const now = new Date()
     const projectId = guard.project.id
+    // [T12] Batas hari ini menurut aturan PT proyek (bukan 17.00 env): entitas
+    // 24/7 baru dianggap "lewat batas" setelah hari itu berakhir.
+    const rpt = await getReportSettings(guard.project.entityId)
     const since = new Date(wibMidnight(now).getTime() - (WEEKS * 7 + 7) * 86400000)
 
     const [project, reports, stages, outputs, proposal] = await Promise.all([
@@ -90,7 +93,7 @@ export async function GET(req: NextRequest) {
         : null,
       plan: weeklyProgress({ stages, project: p, reports, now, weeks: WEEKS }),
       deadlines: nearestDeadlines({ stages, outputs, project: p, proposal, now, formatDate: (d) => formatDateShort(d) }),
-      history: reportHistory({ reports, now, days: HISTORY_DAYS, cutoffPassed: (d) => isDailyLocked(d, now) }),
+      history: reportHistory({ reports, now, days: HISTORY_DAYS, cutoffPassed: (d) => now >= dailyDeadlineWith(rpt.dailyCutoffHour, d) }),
     })
   } catch (err) {
     return serverError(err, 'Progres proyek belum bisa dimuat. Coba lagi.', 'project-progress')

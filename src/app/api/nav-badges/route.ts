@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { isDailyLocked, isWorkingDay, startOfWibDay } from '@/lib/lock'
+import { startOfWibDay } from '@/lib/lock'
+import { getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
 import { oversightBadges } from '@/lib/oversight-badges' // [F2-DIREKTUR]
 
 /**
@@ -24,16 +25,19 @@ export async function GET() {
   const badges: Record<string, number> = {}
   const now = new Date()
 
-  if (user.role === 'PIC_PROYEK' && isWorkingDay(now) && !isDailyLocked(now, now)) {
+  if (user.role === 'PIC_PROYEK') {
+    // [T12] Hari kerja & tenggat mengikuti aturan PT (ReportSettings), bukan Sen–Jum / jam env.
+    // PIC terpaku ke proyek (scopeEntityId null): entitas diambil dari proyek aktif pertamanya.
+    const mine = await db.project.findMany({ where: { picUserId: user.id, lifecycle: 'AKTIF' }, select: { entityId: true } })
+    const rpt = await getReportSettings(mine[0]?.entityId ?? user.scopeEntityId ?? null)
     const today = startOfWibDay(now)
-    const [projects, submitted] = await Promise.all([
-      db.project.count({ where: { picUserId: user.id, lifecycle: 'AKTIF' } }),
-      db.dailyProjectReport.count({
+    if (mine.length && isWorkingDayWith(rpt.workingDays, now) && !isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now)) {
+      const submitted = await db.dailyProjectReport.count({
         where: { reportDate: today, submittedAt: { not: null }, project: { picUserId: user.id, lifecycle: 'AKTIF' } },
-      }),
-    ])
-    const outstanding = Math.max(0, projects - submitted)
-    if (outstanding) badges['daily-input'] = outstanding
+      })
+      const outstanding = Math.max(0, mine.length - submitted)
+      if (outstanding) badges['daily-input'] = outstanding
+    }
   }
 
   if (user.role === 'PIC_PROYEK') {

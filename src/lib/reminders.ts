@@ -2,15 +2,15 @@ import 'server-only'
 
 import { db } from '@/lib/db'
 import {
-  WEEKLY_HANDOVER_LABEL,
-  WEEKLY_LOCK_LABEL,
   isoWeekOf,
   isWeeklyLocked,
   startOfWibDay,
   weekPeriodOf,
   weeklyDeadlines,
+  weeklyLabelsWith,
   type Period,
 } from '@/lib/lock'
+import { DEFAULT_SETTINGS, getReportSettings, type ReportSettingsData } from '@/lib/report-settings'
 
 /**
  * Pengingat ke divisi yang belum melapor (8 Sep 2026).
@@ -102,15 +102,27 @@ export type ReminderResult = {
   results: (UnreportedDivision & { outcome: 'TERKIRIM' | 'SUDAH_HARI_INI' | 'TANPA_KEPALA' })[]
 }
 
-/** Kalimat tenggat untuk minggu yang ditagih, mengikuti jam sekarang. */
-function deadlineSentence(period: Period, now: Date): string {
-  if (isWeeklyLocked(period.start, now)) {
-    return `Minggu itu sudah dikunci sejak ${WEEKLY_LOCK_LABEL}; hubungi Admin PT untuk permohonan buka kunci.`
+/**
+ * Kalimat tenggat untuk minggu yang ditagih, mengikuti jam sekarang. [T13] Jam
+ * serah/kunci mengikuti aturan PT divisi (ReportSettings), bukan env global:
+ * `weeklyOpen=false` = ditutup Admin PT; `weeklyCutoffHour=null` = tanpa batas jam.
+ */
+export function deadlineSentence(period: Period, now: Date, rpt: Pick<ReportSettingsData, 'weeklyCutoffHour' | 'weeklyOpen'> = DEFAULT_SETTINGS): string {
+  if (!rpt.weeklyOpen) {
+    return 'Pengisian capaian mingguan sedang ditutup; hubungi Admin PT.'
   }
-  if (now >= weeklyDeadlines(period.start).handoverBy) {
-    return `Tenggat serah ${WEEKLY_HANDOVER_LABEL} sudah lewat; serahkan sebelum dikunci ${WEEKLY_LOCK_LABEL}.`
+  if (rpt.weeklyCutoffHour === null) {
+    return 'Serahkan secepatnya; minggu ini tidak dibatasi jam kunci.'
   }
-  return `Serahkan paling lambat ${WEEKLY_HANDOVER_LABEL}.`
+  const hour = rpt.weeklyCutoffHour
+  const labels = weeklyLabelsWith(hour)
+  if (isWeeklyLocked(period.start, now, rpt)) {
+    return `Minggu itu sudah dikunci sejak ${labels.lock}; hubungi Admin PT untuk permohonan buka kunci.`
+  }
+  if (now >= weeklyDeadlines(period.start, hour).handoverBy) {
+    return `Tenggat serah ${labels.handover} sudah lewat; serahkan sebelum dikunci ${labels.lock}.`
+  }
+  return `Serahkan paling lambat ${labels.handover}.`
 }
 
 export async function remindUnreportedDivisions(
@@ -144,6 +156,12 @@ export async function remindUnreportedDivisions(
     })
   )
 
+  // [T13] Kalimat tenggat mengikuti aturan PT tiap divisi (satu bacaan per PT).
+  const settingsByEntity = new Map<string, ReportSettingsData>()
+  for (const entityId of new Set(divisions.map((d) => d.entityId))) {
+    settingsByEntity.set(entityId, await getReportSettings(entityId))
+  }
+
   const results: ReminderResult['results'] = []
   let sent = 0
   for (const d of divisions) {
@@ -159,7 +177,7 @@ export async function remindUnreportedDivisions(
     const body =
       `Minggu ${week.isoWeek}/${week.isoYear} untuk ${d.entityName} ` +
       `${d.statusHeader ? 'masih berupa draf' : 'belum diisi'}. ` +
-      deadlineSentence(period, now) +
+      deadlineSentence(period, now, settingsByEntity.get(d.entityId) ?? DEFAULT_SETTINGS) +
       (opts.source === 'MANUAL' && opts.actorName ? ` Diingatkan oleh ${opts.actorName}.` : '')
     await db.notificationLog.create({
       data: {

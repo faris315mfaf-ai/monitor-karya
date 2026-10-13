@@ -1,4 +1,4 @@
-import { clientIp } from '@/lib/security'
+import { clientIp, safeEvidenceUrl } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
@@ -8,7 +8,7 @@ import {
   DAILY_CUTOFF_HOUR,
   TASK_STATUSES,
   TASK_URGENCIES,
-  WEEKLY_LOCK_LABEL,
+  WEEKLY_CUTOFF_HOUR,
   dayInPeriod,
   daysOfWeek,
   hourLabel,
@@ -18,6 +18,7 @@ import {
   startOfWibDay,
   weekPeriodOf,
   weeklyDeadlines,
+  weeklyLockedMessage,
   wibDateKey,
   type Period,
   type TaskScope,
@@ -26,6 +27,8 @@ import { dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDail
 import { guardProjectAccess, READ_RELATIONS } from '@/lib/pic-access'
 import { getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { activeUnlockFor } from '@/lib/unlock-requests'
+import { removeEvidence, storageConfigured } from '@/lib/storage'
+import { IDEMPOTENCY_REPLAY_HEADER, withIdempotency } from '@/lib/idempotency'
 
 /**
  * Daily tasks — the granular work a PIC plans and reports under one project.
@@ -36,6 +39,11 @@ import { activeUnlockFor } from '@/lib/unlock-requests'
  *   PUT                                — update a task (replaces its subtask list)
  *   PATCH                              — move / reorder cards on the weekly board
  *   DELETE ?id=                        — remove a task
+ *
+ * POST/PUT/DELETE menerima header opsional `Idempotency-Key` (outbox Android,
+ * 13 Okt 2026): ulangan dengan kunci yang sama dari pengguna yang sama dibalas
+ * respons pertama tanpa menulis ulang. Tanpa header perilakunya tidak berubah.
+ * Kontrak: android/docs/fase3/E-IDEMPOTENSI.md, helper src/lib/idempotency.ts.
  *
  * Two contexts share these handlers (8 Sep 2026). The daily desk follows the
  * daily 17:00 lock of the task's own day, including daily cards on the weekly
@@ -110,7 +118,9 @@ async function lockCheck(context: Context, projectId: string, workDate: Date, sc
       return NextResponse.json({ error: frozen, locked: true, frozen: gate.frozen, reportId: gate.report?.id ?? null }, { status: 409 })
     }
   }
-  if (context === 'MINGGUAN' && isWeeklyLocked(weekPeriodOf(workDate).start)) return NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  // [T13] Kunci mingguan mengikuti aturan PT proyek (jam kustom / ditutup), bukan env global.
+  const weeklySettings = gate.settings
+  if (context === 'MINGGUAN' && isWeeklyLocked(weekPeriodOf(workDate).start, new Date(), weeklySettings)) return NextResponse.json({ error: weeklyLockedMessage(weeklySettings), locked: true }, { status: 409 })
   if (context === 'HARIAN' || scope === 'HARIAN') {
     if (!gate.timeLocked) return null
     const isToday = day.getTime() === startOfWibDay(new Date()).getTime()
@@ -125,8 +135,8 @@ async function lockCheck(context: Context, projectId: string, workDate: Date, sc
       { status: 409 }
     )
   }
-  return isWeeklyLocked(weekPeriodOf(workDate).start)
-    ? NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  return isWeeklyLocked(weekPeriodOf(workDate).start, new Date(), weeklySettings)
+    ? NextResponse.json({ error: weeklyLockedMessage(weeklySettings), locked: true }, { status: 409 })
     : null
 }
 
@@ -253,7 +263,8 @@ async function attachEvidence<T extends { id: string }>(tasks: T[]) {
     select: { id: true, targetId: true, fileName: true, url: true, mime: true, size: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   })
-  return tasks.map((t) => ({ ...t, evidence: evidence.filter((e) => e.targetId === t.id) }))
+  // [T12] Tautan warisan disaring sebelum ke klien (hanya http(s) tanpa kredensial).
+  return tasks.map((t) => ({ ...t, evidence: evidence.filter((e) => e.targetId === t.id).map((e) => ({ ...e, url: safeEvidenceUrl(e.url) })) }))
 }
 
 export async function GET(req: NextRequest) {
@@ -279,16 +290,18 @@ export async function GET(req: NextRequest) {
       orderBy: [{ workDate: 'asc' }, { sortOrder: 'asc' }, { startAt: 'asc' }, { createdAt: 'asc' }],
     })
 
+    // [T13] Kunci mingguan dari aturan PT proyek (sama dengan weekly-input).
+    const weeklySettings = await getReportSettings(guard.project.entityId)
     return NextResponse.json({
       mode: 'MINGGUAN',
       period: {
         key: period.key,
         start: period.start.toISOString(),
         end: period.end.toISOString(),
-        lockAt: weeklyDeadlines(period.start).lockAt.toISOString(),
+        lockAt: weeklyDeadlines(period.start, weeklySettings.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR).lockAt.toISOString(),
         current: period.key === weekPeriodOf(new Date()).key,
       },
-      locked: isWeeklyLocked(period.start),
+      locked: isWeeklyLocked(period.start, new Date(), weeklySettings),
       frozenDays: await frozenDaysOf(projectId, period),
       today: startOfWibDay(new Date()).toISOString(),
       days: daysOfWeek(period).map((d) => d.toISOString()),
@@ -326,7 +339,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  return db.$transaction((tx) => post(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  return withIdempotency(req, user.id, 'POST /api/tasks', (tx) => post(req, user, tx))
 }
 
 async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
@@ -415,7 +428,7 @@ async function post(req: NextRequest, user: SessionUser, db: Prisma.TransactionC
 export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  return db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  return withIdempotency(req, user.id, 'PUT /api/tasks', (tx) => put(req, user, tx))
 }
 
 async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
@@ -503,8 +516,8 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
-  if (movedLane) await rollupDailyReport(existing.projectId, workDate, db)
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db, { resetBilaKosong: true })
+  if (movedLane) await rollupDailyReport(existing.projectId, workDate, db, { resetBilaKosong: true })
 
   return NextResponse.json({ ok: true, task })
 }
@@ -537,8 +550,9 @@ async function patch(req: NextRequest, user: SessionUser, db: Prisma.Transaction
 
   const period = typeof body.week === 'string' && body.week ? parseWeekKey(body.week) : weekPeriodOf(new Date())
   if (!period) return NextResponse.json({ error: 'Kunci minggu tidak dikenali' }, { status: 400 })
-  if (isWeeklyLocked(period.start)) {
-    return NextResponse.json({ error: `Minggu ini sudah dikunci (${WEEKLY_LOCK_LABEL}).`, locked: true }, { status: 409 })
+  const weeklySettings = await getReportSettings(guard.project.entityId)
+  if (isWeeklyLocked(period.start, new Date(), weeklySettings)) {
+    return NextResponse.json({ error: weeklyLockedMessage(weeklySettings), locked: true }, { status: 409 })
   }
 
   const moves = Array.isArray(body.moves)
@@ -599,7 +613,7 @@ async function patch(req: NextRequest, user: SessionUser, db: Prisma.Transaction
     touched.add(startOfWibDay(byId.get(u.id)!.workDate).getTime())
     touched.add(u.workDate.getTime())
   }
-  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms), db)
+  for (const ms of touched) await rollupDailyReport(projectId, new Date(ms), db, { resetBilaKosong: true })
 
   await db.auditLog.create({
     data: {
@@ -618,7 +632,26 @@ async function patch(req: NextRequest, user: SessionUser, db: Prisma.Transaction
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
-  return db.$transaction((tx) => deleteReport(req, user, tx), { isolationLevel: 'ReadCommitted' })
+  // Ulangan berkunci (Idempotency-Key) dibalas { ok: true } pertama, bukan 404;
+  // `files` hanya terisi saat penghapusan benar-benar terjadi.
+  let files: { url: string | null; storageKey: string }[] = []
+  const res = await withIdempotency(req, user.id, 'DELETE /api/tasks', async (tx) => {
+    const result = await deleteReport(req, user, tx)
+    if (result instanceof NextResponse) return result
+    files = result.files
+    return NextResponse.json({ ok: true })
+  })
+  // [T11-DB] Objek storage dihapus SETELAH transaksi commit (pola daily-input DELETE):
+  // tidak ada berkas yatim di bucket, dan tidak ada baris bukti menunjuk objek hilang
+  // bila transaksi gagal. Tautan (url) tidak punya objek.
+  if (res.ok && !res.headers.has(IDEMPOTENCY_REPLAY_HEADER) && storageConfigured()) {
+    for (const f of files) {
+      if (!f.url) {
+        try { await removeEvidence(f.storageKey) } catch { /* Objek sudah hilang. */ }
+      }
+    }
+  }
+  return res
 }
 
 async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.TransactionClient) {
@@ -643,6 +676,7 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
     )
   }
 
+  const files = await db.evidence.findMany({ where: { targetType: 'TASK', targetId: id } })
   await db.evidence.deleteMany({ where: { targetType: 'TASK', targetId: id } })
   await db.task.delete({ where: { id } })
 
@@ -657,7 +691,7 @@ async function deleteReport(req: NextRequest, user: SessionUser, db: Prisma.Tran
     },
   })
 
-  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db)
+  await rollupDailyReport(existing.projectId, startOfWibDay(existing.workDate), db, { resetBilaKosong: true })
 
-  return NextResponse.json({ ok: true })
+  return { files }
 }

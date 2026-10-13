@@ -2,16 +2,17 @@ import { clientIp } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
-import { PROJECT_ENTITY_SLOTS, can, canSignSlot, isMasterRole, pendingSlot } from '@/lib/rbac'
+import { PROJECT_ENTITY_SLOTS, PROJECT_SUBTREE_SLOTS, can, canSignSlot, isMasterRole, pendingSlot } from '@/lib/rbac'
 import { PROJECT_APPROVER_LABELS } from '@/lib/constants'
 import { approvalSnap, issueUndo, projectStamp } from '@/lib/undo' // [F2-URUNGKAN]
 
 /**
  * Persetujuan pengajuan proyek (11 Sep 2026): slot demi slot mengikuti
  * `Project.approvalChain`, urut. Hanya slot yang sedang menunggu yang bisa
- * ditandatangani — oleh pemegang peran slot itu (Admin PT dan Direktur harus
- * dari PT yang sama; slot Manajemen boleh oleh Manajemen atau Direksi
- * Holding), atau oleh akun induk (TI, Super Admin) atas nama slot itu.
+ * ditandatangani — oleh pemegang peran slot itu (Admin PT harus dari PT yang
+ * sama; Direktur entitas dari cakupan yang memuat PT itu; slot Manajemen
+ * boleh oleh Manajemen atau Direksi Holding), atau oleh akun induk (TI,
+ * Super Admin) atas nama slot itu.
  * Seluruh slot DISETUJUI → proyek AKTIF; satu DITOLAK → DITOLAK.
  *
  *   POST { projectId, decision: 'DISETUJUI' | 'DITOLAK', note? }
@@ -93,9 +94,11 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true, lifecycle: 'AKTIF', pending: null, approvals: [] })
     }
-    if (!canSignSlot(user, slot, project.entityId)) {
+    if (!canSignSlot(user, slot, project.entityId, reach)) {
       const label = PROJECT_APPROVER_LABELS[slot] ?? slot
-      const sameEntity = (PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot) ? ' di PT pemilik proyek' : ''
+      const sameEntity = (PROJECT_SUBTREE_SLOTS as readonly string[]).includes(slot)
+        ? ' yang membawahi PT pemilik proyek'
+        : (PROJECT_ENTITY_SLOTS as readonly string[]).includes(slot) ? ' di PT pemilik proyek' : ''
       return NextResponse.json({ error: `Sekarang giliran ${label}${sameEntity}. Anda tidak bisa menandatangani slot ini.` }, { status: 403 })
     }
 

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { randomBytes } from 'node:crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { s3Configured, uploadS3Evidence, signedS3EvidenceUrl, removeS3Evidence } from './storage-s3'
 
@@ -82,7 +83,8 @@ function safeName(fileName: string): string {
 
 export function buildStorageKey(targetType: string, targetId: string, fileName: string): string {
   const stamp = Date.now().toString(36)
-  const rand = Math.random().toString(36).slice(2, 8)
+  // [T11-DB] PRNG kripto (bukan Math.random): komponen acak kunci tak boleh tertebak.
+  const rand = randomBytes(6).toString('hex')
   return `${targetType}/${targetId}/${stamp}-${rand}-${safeName(fileName)}`
 }
 

@@ -119,10 +119,15 @@ export async function lockDailyReport(client: Prisma.TransactionClient, projectI
  * `evidenceCount` on the report is the day's total: files attached to the
  * report itself plus everything attached to its tasks.
  */
-export async function rollupDailyReport(projectId: string, workDate: Date, client?: Prisma.TransactionClient): Promise<Rollup | null> {
+export async function rollupDailyReport(
+  projectId: string,
+  workDate: Date,
+  client?: Prisma.TransactionClient,
+  opts?: { resetBilaKosong?: boolean }
+): Promise<Rollup | null> {
   if (!client) return db.$transaction(async (tx) => {
     await lockDailyProject(tx, projectId)
-    return rollupDailyReport(projectId, workDate, tx)
+    return rollupDailyReport(projectId, workDate, tx, opts)
   }, { isolationLevel: 'ReadCommitted' })
   await lockDailyReport(client, projectId, workDate)
   const rollup = await computeRollup(projectId, workDate, client)
@@ -142,9 +147,33 @@ export async function rollupDailyReport(projectId: string, workDate: Date, clien
       const own = await client.evidence.count({
         where: { targetType: 'DAILY_REPORT', targetId: existing.id },
       })
+      // [T11-DB] Task terakhir hari itu dihapus/dipindah (resetBilaKosong, hanya dari
+      // rute task): angka turunan tidak boleh tetap SELESAI 100% milik task yang
+      // sudah tiada. Jalur bukti laporan manual TIDAK memakai opsi ini, jadi laporan
+      // yang diisi langsung tanpa task tak tersentuh.
+      // [T13] Reset HANYA untuk draf yang belum dikirim. Laporan yang sudah
+      // `submittedAt` (mode 24/7 masih bisa diubah PIC sebelum diteruskan) sudah
+      // dilihat Admin PT; menimpanya jadi "0%, tak ada perubahan" tanpa jejak
+      // audit menyesatkan penelaah. Eskalasi yang masih terbuka juga tidak
+      // dipadamkan diam-diam.
+      const reset = !!opts?.resetBilaKosong && !existing.submittedAt
+      let keepEscalation = false
+      if (reset) {
+        const open = await client.escalation.count({
+          where: { sourceType: 'DAILY_REPORT', sourceId: existing.id, status: { in: ['DIAJUKAN', 'DITINJAU'] } },
+        })
+        keepEscalation = open > 0
+      }
       await client.dailyProjectReport.update({
         where: { id: existing.id },
-        data: { evidenceCount: own },
+        data: reset
+          ? {
+              evidenceCount: own,
+              status: 'TIDAK_ADA_PERUBAHAN',
+              progressPct: 0,
+              ...(keepEscalation ? {} : { needsEscalation: false }),
+            }
+          : { evidenceCount: own },
       })
     }
     return null
@@ -193,25 +222,42 @@ export async function rollupDailyReport(projectId: string, workDate: Date, clien
  * its parent row. Daily reports and tasks go through the roll-up so that task
  * attachments stay part of the day's total.
  */
-export async function syncEvidenceCount(targetType: string, targetId: string): Promise<number> {
-  const count = await db.evidence.count({ where: { targetType, targetId } })
+export async function syncEvidenceCount(targetType: string, targetId: string, client?: Prisma.TransactionClient): Promise<number> {
+  // [T12] Dengan klien transaksi, hitung ulang berjalan di transaksi pemanggil (bukti
+  // dibuat/dihapus + hitung ulang + audit satu kesatuan). Baris induk dikunci lebih
+  // dulu supaya dua unggahan bersamaan tidak saling menimpa cache dengan angka basi.
+  const c = client ?? db
+  if (client) {
+    if (targetType === 'WEEKLY_ITEM') {
+      await client.$queryRaw`SELECT "id" FROM "WeeklyReportItem" WHERE "id" = ${targetId} FOR UPDATE`
+    } else if (targetType === 'PROGRESS_REPORT') {
+      await client.$queryRaw`SELECT "id" FROM "ProjectProgressReport" WHERE "id" = ${targetId} FOR UPDATE`
+    }
+  }
+  const count = await c.evidence.count({ where: { targetType, targetId } })
 
   if (targetType === 'DAILY_REPORT') {
-    const report = await db.dailyProjectReport.findUnique({
+    const report = await c.dailyProjectReport.findUnique({
       where: { id: targetId },
       select: { projectId: true, reportDate: true },
     })
-    if (report) await rollupDailyReport(report.projectId, report.reportDate)
+    if (report) {
+      if (client) await lockDailyProject(client, report.projectId) // urutan kunci: Project sebelum laporan
+      await rollupDailyReport(report.projectId, report.reportDate, client)
+    }
   } else if (targetType === 'TASK') {
-    const task = await db.task.findUnique({
+    const task = await c.task.findUnique({
       where: { id: targetId },
       select: { projectId: true, workDate: true },
     })
-    if (task) await rollupDailyReport(task.projectId, task.workDate)
+    if (task) {
+      if (client) await lockDailyProject(client, task.projectId)
+      await rollupDailyReport(task.projectId, task.workDate, client)
+    }
   } else if (targetType === 'WEEKLY_ITEM') {
-    await db.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
+    await c.weeklyReportItem.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
   } else if (targetType === 'PROGRESS_REPORT') {
-    await db.projectProgressReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
+    await c.projectProgressReport.updateMany({ where: { id: targetId }, data: { evidenceCount: count } })
   }
 
   return count

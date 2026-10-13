@@ -7,16 +7,20 @@ import { monthKeyNow } from '@/lib/wib'
 import { countDailyIntake } from '@/lib/daily-intake'
 import { DAILY_PIC_TEMPLATE, remindPicDaily, remindPicsDaily, type RemindActor } from '@/lib/reminders-pic'
 import {
-  DAILY_CUTOFF_LABEL,
-  dailyCountdown,
-  dailyLockAt,
-  isDailyLocked,
+  WEEKLY_CUTOFF_HOUR,
   isoWeekOf,
   isWeeklyLocked,
   startOfWibDay,
   weekPeriodOf,
   weeklyDeadlines,
 } from '@/lib/lock'
+import {
+  dailyCountdownWith,
+  dailyCutoffLabelWith,
+  dailyLockInstantWith,
+  getReportSettings,
+  isDailyLockedWith,
+} from '@/lib/report-settings'
 
 /**
  * Meja kerja — pekerjaan HARI INI akun yang sedang masuk, menurut perannya.
@@ -66,12 +70,16 @@ async function picDesk(user: SessionUser) {
   const projects = await db.project.findMany({
     where: { picUserId: user.id, lifecycle: 'AKTIF' },
     select: {
-      id: true, code: true, name: true, phase: true, startDate: true, targetEndDate: true,
+      id: true, code: true, name: true, phase: true, startDate: true, targetEndDate: true, entityId: true,
       entity: { select: { name: true } },
     },
     orderBy: { code: 'asc' },
   })
   const ids = projects.map((p) => p.id)
+  // [T12] Jam batas mengikuti aturan PT (ReportSettings), bukan env 17.00: entitas
+  // 24/7 tidak boleh tampil "terkunci" sesudah 17.00. PIC terpaku ke proyek, jadi
+  // entitas diambil dari proyek pertamanya.
+  const rpt = await getReportSettings(projects[0]?.entityId ?? user.scopeEntityId ?? null)
 
   const [reports, tasks, reminders] = await Promise.all([
     db.dailyProjectReport.findMany({
@@ -95,10 +103,10 @@ async function picDesk(user: SessionUser) {
   return {
     kind: 'PIC' as const,
     today: today.toISOString(),
-    lockAt: dailyLockAt(today).toISOString(),
-    locked: isDailyLocked(today),
-    countdown: dailyCountdown(now),
-    cutoffLabel: DAILY_CUTOFF_LABEL,
+    lockAt: dailyLockInstantWith(rpt, today).toISOString(),
+    locked: isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now),
+    countdown: dailyCountdownWith(rpt, now),
+    cutoffLabel: dailyCutoffLabelWith(rpt),
     days: days.map((d) => d.toISOString()),
     projects: projects.map((p) => {
       const mine = reports.filter((r) => r.projectId === p.id)
@@ -154,9 +162,14 @@ async function kadivDesk(user: SessionUser) {
   const from = new Date(current.start.getTime() - 5 * 7 * DAY)
   const divisions = await db.division.findMany({
     where: { headUserId: user.id, isActive: true },
-    select: { id: true, name: true, entity: { select: { name: true } } },
+    select: { id: true, name: true, entityId: true, entity: { select: { name: true } } },
     orderBy: { name: 'asc' },
   })
+  // [T12] Tenggat serah mengikuti jam batas mingguan PT tiap divisi (bukan env).
+  const weeklyHourByEntity = new Map<string, number>()
+  for (const eid of new Set(divisions.map((d) => d.entityId).filter((x): x is string => Boolean(x)))) {
+    weeklyHourByEntity.set(eid, (await getReportSettings(eid)).weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
+  }
   const reports = await db.weeklyDivisionReport.findMany({
     where: { divisionId: { in: divisions.map((d) => d.id) }, periodStart: { gte: from } },
     select: {
@@ -175,7 +188,7 @@ async function kadivDesk(user: SessionUser) {
         const start = new Date(from.getTime() + i * 7 * DAY)
         const wk = isoWeekOf(start).isoWeek
         const r = reports.find((x) => x.divisionId === d.id && x.isoWeek === wk)
-        const handoverBy = weeklyDeadlines(start).handoverBy
+        const handoverBy = weeklyDeadlines(start, weeklyHourByEntity.get(d.entityId) ?? WEEKLY_CUTOFF_HOUR).handoverBy
         return {
           label: `M${wk}`,
           done: r?.items.filter((it) => it.status === 'SELESAI').length ?? 0,
@@ -196,7 +209,9 @@ async function adminDesk(user: SessionUser, entityId: string) {
   const today = startOfWibDay(now)
   const days = lastWorkingDays(today)
   const { isoYear, isoWeek } = isoWeekOf(now)
-  const deadlines = weeklyDeadlines(now)
+  // [T12] Aturan pelaporan PT (jam batas harian/mingguan, buka-tutup) dari ReportSettings.
+  const rpt = await getReportSettings(entityId)
+  const deadlines = weeklyDeadlines(now, rpt.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
 
   const entity = await db.entity.findUnique({ where: { id: entityId }, select: { id: true, name: true, code: true, region: true } })
   if (!entity) return null
@@ -275,16 +290,16 @@ async function adminDesk(user: SessionUser, entityId: string) {
     kind: 'ADMIN' as const,
     entity,
     today: today.toISOString(),
-    lockAt: dailyLockAt(today).toISOString(),
-    locked: isDailyLocked(today),
-    countdown: dailyCountdown(now),
-    cutoffLabel: DAILY_CUTOFF_LABEL,
+    lockAt: dailyLockInstantWith(rpt, today).toISOString(),
+    locked: isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now),
+    countdown: dailyCountdownWith(rpt, now),
+    cutoffLabel: dailyCutoffLabelWith(rpt),
     week: {
       isoYear,
       isoWeek,
       handoverBy: deadlines.handoverBy.toISOString(),
       lockAt: deadlines.lockAt.toISOString(),
-      locked: isWeeklyLocked(deadlines.periodStart),
+      locked: isWeeklyLocked(deadlines.periodStart, now, rpt),
     },
     intake: { projects: intake.projects, received: intake.received, awaitingForward: intake.awaitingForward, missing: intake.missing },
     canForward: can(user.role, 'daily:forward'),
@@ -407,9 +422,29 @@ export async function POST(req: NextRequest) {
   const limited = limitReminders(user.id, 'work-desk')
   if (limited) return limited
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const today = startOfWibDay(new Date())
-  if (isDailyLocked(today)) {
-    return NextResponse.json({ error: `Laporan hari ini sudah dikunci pukul ${DAILY_CUTOFF_LABEL}.`, locked: true }, { status: 409 })
+  const now = new Date()
+  const today = startOfWibDay(now)
+  // [T12] Gerbang kunci mengikuti aturan PT yang dituju (proyek untuk remind-pic,
+  // PT akun untuk remind-all-pics). Sebelumnya 17.00 env dipakai mutlak: entitas
+  // 24/7 tak bisa mengingatkan PIC sesudah pukul 17.00 padahal laporan masih terbuka.
+  // Peran berlingkup terpaku pada PT-nya (remindPicDaily menolak PT lain); hanya
+  // peran grup tanpa PT yang perlu mencari PT dari proyeknya.
+  let settingsEntityId: string | null = user.scopeEntityId
+  if (!settingsEntityId && body.action === 'remind-pic' && typeof body.projectId === 'string') {
+    const proj = await db.project.findUnique({ where: { id: body.projectId.slice(0, 64) }, select: { entityId: true } })
+    if (proj?.entityId) settingsEntityId = proj.entityId
+  }
+  const rpt = await getReportSettings(settingsEntityId)
+  if (isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now)) {
+    return NextResponse.json(
+      {
+        error: rpt.dailyOpen
+          ? `Laporan hari ini sudah dikunci pukul ${dailyCutoffLabelWith(rpt)}.`
+          : 'Pelaporan harian sedang ditutup oleh aturan perusahaan.',
+        locked: true,
+      },
+      { status: 409 }
+    )
   }
 
   const actor: RemindActor = { kind: 'user', id: user.id, name: user.name, role: user.role, scopeEntityId: user.scopeEntityId }

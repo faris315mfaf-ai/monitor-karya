@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
+import { intParam, MAX_PAGE } from '@/app/api/_paging'
 import { performerDivisionScope } from '@/lib/pic-access'
 
 // GET /api/weekly-reports - paginated weekly division reports
@@ -10,16 +11,18 @@ export async function GET(req: NextRequest) {
     const user = await requireApiUser()
     if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
-    const page = Math.max(1, parseInt(sp.get('page') || '1', 10))
-    const pageSize = Math.max(1, Math.min(200, parseInt(sp.get('pageSize') || '20', 10)))
-    const entityId = sp.get('entityId') || undefined
-    const statusHeader = sp.get('statusHeader') || undefined
-    const search = sp.get('search')?.trim()
+    const page = intParam(sp.get('page'), 1, 1, MAX_PAGE)
+    const pageSize = intParam(sp.get('pageSize'), 20, 1, 200)
+    // [T11, R-4] Parameter teks dipangkas agar tidak jadi beban kueri.
+    const entityId = sp.get('entityId')?.slice(0, 64) || undefined
+    const statusHeader = sp.get('statusHeader')?.slice(0, 32) || undefined
+    const search = sp.get('search')?.trim().slice(0, 128)
     const isoYearStr = sp.get('isoYear')
     const isoWeekStr = sp.get('isoWeek')
 
-    const isoYear = isoYearStr ? parseInt(isoYearStr, 10) : undefined
-    const isoWeek = isoWeekStr ? parseInt(isoWeekStr, 10) : undefined
+    // [T12] Angka bukan-angka (NaN) membuat Prisma menolak kueri (500); abaikan saringannya.
+    const isoYear = isoYearStr ? intParam(isoYearStr, 0, 2000, 2200) || undefined : undefined
+    const isoWeek = isoWeekStr ? intParam(isoWeekStr, 0, 1, 53) || undefined : undefined
 
     // null for roles that may read the whole group.
     const scopeIds = await scopeEntityIds(user)

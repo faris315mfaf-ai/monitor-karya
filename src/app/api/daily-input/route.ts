@@ -1,14 +1,13 @@
-import { clientIp } from '@/lib/security'
+import { clientIp, safeEvidenceUrl } from '@/lib/security'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { withIdempotency } from '@/lib/idempotency'
 import type { Prisma } from '@prisma/client'
 import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { can, isMasterRole } from '@/lib/rbac'
 import {
   DAILY_CUTOFF_HOUR,
   DAILY_STATUSES,
-  dailyCountdown,
-  dailyLockAt,
   hourLabel,
   parseWibDateKey,
   startOfWibDay,
@@ -16,7 +15,7 @@ import {
   wibDateKey,
 } from '@/lib/lock'
 import { computeRollup, dailyGate, frozenMessage, rollupDailyReport, lockDailyProject, lockDailyReport } from '@/lib/daily-rollup'
-import { getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
+import { dailyLockInstantWith, getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
 import { removeEvidence, storageConfigured } from '@/lib/storage'
 
 /**
@@ -103,6 +102,13 @@ export async function GET(req: NextRequest) {
   // Dihitung sebelum projects.map karena lockReason tiap proyek memakainya.
   const rptSettings = await getReportSettings(settingsEntityId)
   const timeLocked = isDailyLockedWith(rptSettings.dailyCutoffHour, rptSettings.dailyOpen, day, now)
+  // [T11-DB] Peran lintas entitas (TI/Super Admin) melihat proyek banyak PT: kunci waktu
+  // tiap proyek mengikuti aturan entitasnya sendiri, bukan entitas proyek pertama.
+  const timeLockedByEntity = new Map<string, boolean>()
+  for (const eid of new Set(projects.map((p) => p.entityId))) {
+    const st = eid === settingsEntityId ? rptSettings : await getReportSettings(eid)
+    timeLockedByEntity.set(eid, isDailyLockedWith(st.dailyCutoffHour, st.dailyOpen, day, now))
+  }
 
   const reports = await db.dailyProjectReport.findMany({
     where: { projectId: { in: projectIds }, reportDate: day },
@@ -156,6 +162,7 @@ export async function GET(req: NextRequest) {
       })
     : []
   const untilById = new Map(otherActive.map((u) => [u.targetId, u.unlockUntil]))
+  const lockAt = dailyLockInstantWith(rptSettings, day)
 
 
   return NextResponse.json({
@@ -163,9 +170,13 @@ export async function GET(req: NextRequest) {
     reportDateKey: wibDateKey(day),
     today: resolved.isToday,
     todayKey: wibDateKey(now),
-    lockAt: dailyLockAt(day).toISOString(),
+    // [T13] Titik kunci menurut aturan PT: 24/7 = akhir hari WIB, ditutup = awal hari
+    // (klien menampilkan tengah malam sebagai 24.00), bukan jam env.
+    lockAt: lockAt.toISOString(),
     locked: timeLocked,
-    countdown: rptSettings.dailyCutoffHour === null ? null : dailyCountdown(now),
+    // [B2] Hitung mundur ke lockAt yang SAMA (jam PT kustom, hari yang dibuka,
+    // pengisian ditutup = sudah lewat), bukan jam env 17.00. 24/7 = null.
+    countdown: rptSettings.dailyCutoffHour === null ? null : countdownUntil(lockAt, now),
     canRequestUnlock: can(user.role, 'unlock:request'),
     openDays: openReports.map((r) => ({
       reportId: r.id,
@@ -185,7 +196,7 @@ export async function GET(req: NextRequest) {
           ? 'FORWARDED'
           : report?.isLocked
             ? 'LOCKED'
-            : timeLocked
+            : (timeLockedByEntity.get(p.entityId) ?? timeLocked)
               ? 'TIME'
               : null
       return {
@@ -211,7 +222,7 @@ export async function GET(req: NextRequest) {
               submittedAt: report.submittedAt,
               forwardedAt: report.forwardedAt,
               isLocked: report.isLocked,
-              evidence: evidences.filter((e) => e.targetId === report.id),
+              evidence: evidences.filter((e) => e.targetId === report.id).map((e) => ({ ...e, url: safeEvidenceUrl(e.url) })), // [T12]
             }
           : null,
       }
@@ -321,7 +332,9 @@ export async function PUT(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
   try {
-    return await db.$transaction((tx) => put(req, user, tx), { isolationLevel: 'ReadCommitted' })
+    // Idempotency-Key opsional (outbox Android KIRIM_LAPORAN): ulangan kirim yang
+    // sudah sukses dibalas respons pertama, tidak menggeser submittedAt.
+    return await withIdempotency(req, user.id, 'PUT /api/daily-input', (tx) => put(req, user, tx))
   } catch (err) {
     // Laporan baru belum punya baris yang bisa dikunci FOR UPDATE; dua kiriman
     // bersamaan untuk (projectId, reportDate) yang sama bertabrakan di constraint
@@ -493,4 +506,19 @@ async function put(req: NextRequest, user: SessionUser, db: Prisma.TransactionCl
     submitted: action === 'submit',
     derivedFromTasks: Boolean(rollup),
   })
+}
+
+/**
+ * [B2] Sisa waktu menuju [lockAt] (titik kunci aturan PT untuk hari yang
+ * dibuka). Bentuk sama dengan dailyCountdown agar klien lama tidak berubah.
+ */
+function countdownUntil(lockAt: Date, now: Date): { hours: number; minutes: number; totalMs: number; passed: boolean } {
+  const diff = lockAt.getTime() - now.getTime()
+  if (diff <= 0) return { hours: 0, minutes: 0, totalMs: 0, passed: true }
+  return {
+    hours: Math.floor(diff / 3600000),
+    minutes: Math.floor((diff % 3600000) / 60000),
+    totalMs: diff,
+    passed: false,
+  }
 }

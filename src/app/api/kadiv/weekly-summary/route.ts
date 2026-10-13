@@ -6,7 +6,8 @@ import { requireApiUser, type SessionUser } from '@/lib/auth'
 import { readJson, str } from '@/lib/pic-access'
 import { buildWeeklySummary, entityDirectors, isMissingTable, pickLedDivision, type LedDivision } from '@/lib/kadiv'
 import { normalizePoints, summaryBlock } from '@/lib/kadiv-math'
-import { isoWeekOf, isoWeekStart, weekPeriodOf, weeklyDeadlines } from '@/lib/lock'
+import { isoWeekOf, isoWeekStart, weekPeriodOf, weeklyDeadlinesWith } from '@/lib/lock'
+import { getReportSettings } from '@/lib/report-settings'
 
 /**
  * Ringkasan laporan mingguan kepala divisi untuk Direktur [F2-KADIV]
@@ -56,7 +57,8 @@ export async function GET(req: NextRequest) {
 /** Kunci minggu berjalan + pemeriksaan bersama untuk PUT/POST. */
 async function writeContext(div: LedDivision, now: Date, client: Prisma.TransactionClient) {
   const period = weekPeriodOf(now)
-  const dl = weeklyDeadlines(now)
+  // [T13] Tenggat serah/kunci mengikuti aturan PT divisi (jam kustom / ditutup), bukan env.
+  const dl = weeklyDeadlinesWith(now, await getReportSettings(div.entityId))
   const { isoYear, isoWeek } = isoWeekOf(now)
   await client.$queryRaw`SELECT "id" FROM "Division" WHERE "id" = ${div.id} FOR UPDATE`
   await client.$queryRaw`SELECT "id" FROM "WeeklyDivisionReport" WHERE "divisionId" = ${div.id} AND "isoYear" = ${isoYear} AND "isoWeek" = ${isoWeek} FOR UPDATE`
@@ -93,7 +95,7 @@ export async function PUT(req: NextRequest) {
       const ctx = await writeContext(div, now, db)
       now = new Date()
       const block = summaryBlock({
-        now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.lockAt,
+        now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.effectiveLockAt,
         forwarded: Boolean(ctx.report?.forwardedAt), sending: false, pendingReview: 0, confirmPending: true,
       })
       if (block) return NextResponse.json({ error: block.message, code: block.code }, { status: 409 })
@@ -146,7 +148,7 @@ export async function POST(req: NextRequest) {
 
       if (action === 'unsend') {
         const block = summaryBlock({
-          now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.lockAt,
+          now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.effectiveLockAt,
           forwarded: Boolean(ctx.report?.forwardedAt), sending: false, pendingReview: 0, confirmPending: true,
         })
         if (block) return NextResponse.json({ error: block.message, code: block.code }, { status: 409 })
@@ -166,7 +168,7 @@ export async function POST(req: NextRequest) {
       const saved = await db.weeklyDivisionSummary.findUnique({ where: key })
       if (saved?.status === 'TERKIRIM') return NextResponse.json({ error: 'Ringkasan minggu ini sudah dikirim', code: 'SENT' }, { status: 409 })
       const block = summaryBlock({
-        now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.lockAt,
+        now, weekStart: ctx.period.start, currentWeekStart: isoWeekStart(now), handoverBy: ctx.dl.handoverBy, lockAt: ctx.dl.effectiveLockAt,
         forwarded: Boolean(ctx.report?.forwardedAt), sending: true, pendingReview: view.live.pendingReview, confirmPending: body.confirmPending === true,
       })
       if (block) {

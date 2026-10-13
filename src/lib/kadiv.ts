@@ -6,9 +6,12 @@ import type { SessionUser } from '@/lib/auth'
 import { isMasterRole } from '@/lib/rbac'
 import { initials } from '@/lib/format'
 import {
-  DAILY_CUTOFF_LABEL, dailyLockAt, isDailyLocked, isoWeekOf, isoWeekStart, parseWeekKey, startOfWibDay, weekPeriodOf,
-  weeklyDeadlines, wibIsoDay,
+  isoWeekOf, isoWeekStart, parseWeekKey, startOfWibDay, weekPeriodOf,
+  weeklyDeadlinesWith, wibIsoDay,
 } from '@/lib/lock'
+import {
+  dailyCutoffLabelWith, dailyDeadlineWith, dailyLockInstantWith, getReportSettings, isDailyLockedWith,
+} from '@/lib/report-settings'
 import { deriveProjectStatus } from '@/lib/project-status'
 import { ON_TIME_TARGET, draftPoints, lockedWorkdays, summaryBlock, type SummaryFacts } from '@/lib/kadiv-math'
 import type {
@@ -259,11 +262,13 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
   const now = new Date()
   const today = startOfWibDay(now)
   const { all, current: div } = await pickLedDivision(user, divisionId)
+  // [T12] Jam batas & hari kerja mengikuti aturan PT divisi (ReportSettings), bukan env.
+  const rpt = await getReportSettings((div ?? all[0])?.entityId ?? null)
   const base = {
     today: today.toISOString(),
-    lockAt: dailyLockAt(today).toISOString(),
-    locked: isDailyLocked(today),
-    cutoffLabel: DAILY_CUTOFF_LABEL,
+    lockAt: dailyLockInstantWith(rpt, today).toISOString(),
+    locked: isDailyLockedWith(rpt.dailyCutoffHour, rpt.dailyOpen, today, now),
+    cutoffLabel: dailyCutoffLabelWith(rpt),
     divisions: all.map((d) => ({ id: d.id, name: d.name })),
   }
   if (divisionId && !div) return null
@@ -288,7 +293,8 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
   const trendFrom = new Date(weekStart.getTime() - 7 * 7 * DAY)
   const heatFrom = days[0] ?? today
   // [F2-KADIV] KPI tepat waktu 30 hari: hari kerja yang tenggat 17.00-nya sudah lewat.
-  const onTimeDays = lockedWorkdays(now, dailyLockAt)
+  const lockAtDay = (d: Date) => dailyDeadlineWith(rpt.dailyCutoffHour, d)
+  const onTimeDays = lockedWorkdays(now, lockAtDay, undefined, rpt.workingDays)
   const onTimeFrom = onTimeDays[0] ?? today
   const attFrom = [heatFrom, onTimeFrom, today].reduce((a, b) => (b < a ? b : a))
 
@@ -479,7 +485,7 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
     projects: historicalProjects,
     history: lifecycleHistory,
     reports: recentReports,
-    lockAt: dailyLockAt,
+    lockAt: lockAtDay,
     absent: (uid, d) => ABSENT.has(attOn(uid, d)?.status ?? 'HADIR'),
   })
 
@@ -548,6 +554,7 @@ export async function buildTeam(user: SessionUser, divisionId?: string | null): 
  */
 export async function remindTeam(user: SessionUser, div: LedDivision, onlyUserId?: string | null) {
   const today = startOfWibDay(new Date())
+  const rpt = await getReportSettings(div.entityId) // [T12] label tenggat mengikuti aturan PT
   const projects = await divisionProjects(div)
   const ids = await teamUserIds(div, projects)
   if (onlyUserId && !ids.includes(onlyUserId)) return { ok: false as const, status: 404, error: 'Orang ini bukan anggota tim Anda' }
@@ -591,7 +598,7 @@ export async function remindTeam(user: SessionUser, div: LedDivision, onlyUserId
         sentAt: new Date(),
         payload: JSON.stringify({
           title: `Laporan harian ${p.name} belum dikirim`,
-          body: `Tenggat pukul ${DAILY_CUTOFF_LABEL}. Diingatkan oleh ${user.name}.`,
+          body: `Tenggat pukul ${dailyCutoffLabelWith(rpt)}. Diingatkan oleh ${user.name}.`,
           tab: 'work-desk',
           projectId: p.id,
           actorName: user.name,
@@ -680,7 +687,8 @@ export async function buildWeeklySummary(div: LedDivision, weekKey: string | nul
   const currentStart = isoWeekStart(now)
   if (period.start.getTime() > currentStart.getTime()) return null
   const { isoYear, isoWeek } = isoWeekOf(period.start)
-  const dl = weeklyDeadlines(period.start)
+  // [T13] Tenggat serah/kunci mingguan mengikuti aturan PT divisi (jam kustom / ditutup).
+  const dl = weeklyDeadlinesWith(period.start, await getReportSettings(div.entityId))
   const weekEnd = new Date(period.start.getTime() + 7 * DAY)
   const asOf = weekEnd < now ? weekEnd : now
 
@@ -773,7 +781,7 @@ export async function buildWeeklySummary(div: LedDivision, weekKey: string | nul
     weekStart: period.start,
     currentWeekStart: currentStart,
     handoverBy: dl.handoverBy,
-    lockAt: dl.lockAt,
+    lockAt: dl.effectiveLockAt,
     forwarded: Boolean(report?.forwardedAt),
     sending: false,
     pendingReview: pending,

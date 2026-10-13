@@ -1,5 +1,7 @@
 // Shared constants and lookup maps for the monitoring app
 
+import { complianceBand } from '@/lib/compliance-band'
+
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN_PT: 'Admin PT',
   KEPALA_DIVISI: 'Kepala divisi',
@@ -187,11 +189,11 @@ export const ASPECT_CATEGORY_LABELS: Record<string, string> = {
   KOM: 'Komersial',
 }
 
-// Compliance score color thresholds (0-100)
+// Kelas warna skor kepatuhan (0-100) — ambang tunggal dari @/lib/compliance-band (≥90 · 75–89 · <75).
 export function complianceColor(score: number): { bg: string; text: string; ring: string } {
-  if (score >= 90) return { bg: 'bg-sukses-soft', text: 'text-sukses', ring: 'ring-sukses/30' }
-  if (score >= 75) return { bg: 'bg-info-soft', text: 'text-info', ring: 'ring-info/30' }
-  if (score >= 60) return { bg: 'bg-waspada-soft', text: 'text-waspada', ring: 'ring-waspada/30' }
+  const { tone } = complianceBand(score)
+  if (tone === 'on') return { bg: 'bg-sukses-soft', text: 'text-sukses', ring: 'ring-sukses/30' }
+  if (tone === 'risk') return { bg: 'bg-waspada-soft', text: 'text-waspada', ring: 'ring-waspada/30' }
   return { bg: 'bg-bahaya-soft', text: 'text-bahaya', ring: 'ring-bahaya/30' }
 }
 

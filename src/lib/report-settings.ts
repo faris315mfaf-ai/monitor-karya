@@ -43,8 +43,17 @@ export async function getReportSettings(entityId: string | null): Promise<Report
       weeklyCutoffHour: row.weeklyCutoffHour,
       weeklyOpen: row.weeklyOpen,
     }
-  } catch {
-    // Tabel belum ada (mock/tes) atau DB belum termigrasi → bawaan 24/7.
+  } catch (err) {
+    // [T11-DB] Galat koneksi/inisialisasi DB tidak boleh disamarkan menjadi "aturan
+    // bawaan" (entitas 24/7 mendadak terkunci 17.00): biarkan naik. Hanya tabel/kolom
+    // belum ada (DB belum termigrasi, mock tes) yang jatuh ke bawaan.
+    const code = (err as { code?: unknown } | null)?.code
+    if (
+      (err as { name?: unknown } | null)?.name === 'PrismaClientInitializationError' ||
+      (typeof code === 'string' && ['P1001', 'P1002', 'P1008', 'P1017'].includes(code))
+    ) {
+      throw err
+    }
     return DEFAULT_SETTINGS
   }
 }
@@ -61,4 +70,48 @@ export function isDailyLockedWith(cutoffHour: number | null, dailyOpen: boolean,
   if (cutoffHour === null) return false
   const lock = wibHourOnDate(reportDate, cutoffHour)
   return lock !== null && now >= lock
+}
+
+// Catatan: wibHourOnDate(d, 24) jatuh pada tengah malam WIB berikutnya (Date.UTC meluap).
+
+/**
+ * Tenggat laporan harian untuk perhitungan KPI "tepat waktu": mengikuti jam batas
+ * entitas. Mode 24/7 (cutoff null) tidak punya jam batas, jadi tenggatnya ditutup
+ * pada akhir hari WIB itu (laporan hari D tetap dinilai pada hari D). `dailyOpen`
+ * sengaja diabaikan: itu sakelar saat ini, bukan fakta historis.
+ */
+export function dailyDeadlineWith(cutoffHour: number | null, reportDate: Date): Date {
+  return wibHourOnDate(reportDate, cutoffHour ?? 24)
+}
+
+/**
+ * Titik kunci laporan harian untuk tampilan (tidak pernah null): ditutup = awal hari,
+ * 24/7 = akhir hari WIB, selain itu jam batas entitas.
+ */
+export function dailyLockInstantWith(
+  s: Pick<ReportSettingsData, 'dailyCutoffHour' | 'dailyOpen'>,
+  reportDate: Date
+): Date {
+  if (!s.dailyOpen) return wibHourOnDate(reportDate, 0)
+  return dailyDeadlineWith(s.dailyCutoffHour, reportDate)
+}
+
+/** Hitung mundur ke titik kunci hari ini menurut settings entitas. */
+export function dailyCountdownWith(
+  s: Pick<ReportSettingsData, 'dailyCutoffHour' | 'dailyOpen'>,
+  now: Date
+): { hours: number; minutes: number; totalMs: number; passed: boolean } {
+  const diff = dailyLockInstantWith(s, now).getTime() - now.getTime()
+  if (diff <= 0) return { hours: 0, minutes: 0, totalMs: 0, passed: true }
+  return {
+    hours: Math.floor(diff / 3600000),
+    minutes: Math.floor((diff % 3600000) / 60000),
+    totalMs: diff,
+    passed: false,
+  }
+}
+
+/** Label jam batas untuk pesan: "17.00 WIB"; mode 24/7 = "24.00 WIB" (akhir hari, sama dengan titik kunci tampilan). */
+export function dailyCutoffLabelWith(s: Pick<ReportSettingsData, 'dailyCutoffHour'>): string {
+  return `${String(s.dailyCutoffHour ?? 24).padStart(2, '0')}.00 WIB`
 }

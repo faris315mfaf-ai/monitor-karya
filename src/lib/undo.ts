@@ -218,7 +218,7 @@ async function mayUndo(
     // Aktivasi data lama dengan rantai kosong tidak memiliki slot penandatangan.
     if (action === 'APPROVE_PROJECT' && savedSlot === null) return true
     const slot = savedSlot?.role
-    return Boolean(slot && entityId && canSignSlot(user, slot, entityId))
+    return Boolean(slot && entityId && canSignSlot(user, slot, entityId, await scopeEntityIds(user)))
   }
   if (action === 'RESUBMIT_PROJECT') {
     if (can(user.role, 'project:manage') && user.scopeEntityId === entityId) return true

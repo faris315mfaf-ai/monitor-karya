@@ -84,8 +84,10 @@ describe('Supabase compatibility', () => {
     await expect(removeEvidence('key')).rejects.toThrow('denied')
   })
   it('keeps the original key shape and filename cleanup', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.5)
-    expect(buildStorageKey('TASK', 'id', 'Laporan café (final).pdf')).toBe(`TASK/id/${Date.now().toString(36)}-i-Laporan-cafe-final.pdf`)
+    // Komponen acak kini dari crypto.randomBytes (12 heks), bukan Math.random.
+    expect(buildStorageKey('TASK', 'id', 'Laporan café (final).pdf')).toMatch(
+      new RegExp(`^TASK/id/${Date.now().toString(36)}-[0-9a-f]{12}-Laporan-cafe-final\\.pdf$`)
+    )
     expect(buildStorageKey('OUTPUT', 'id', '💾')).toMatch(/\/berkas$|-berkas$/)
   })
 })

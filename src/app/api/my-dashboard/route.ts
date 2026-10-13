@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser, scopeEntityIds, type SessionUser } from '@/lib/auth'
-import { dailyCountdown, dailyLockAt, isoWeekOf, isoWeekStart as isoWeekStartOf, startOfWibDay, weeklyDeadlines } from '@/lib/lock'
+import { isoWeekOf, isoWeekStart as isoWeekStartOf, startOfWibDay, WEEKLY_CUTOFF_HOUR, weeklyDeadlines } from '@/lib/lock'
+import { dailyCountdownWith, dailyLockInstantWith, getReportSettings, isWorkingDayWith } from '@/lib/report-settings'
 import { monthKeyNow } from '@/lib/wib'
 import { deriveProjectStatus } from '@/lib/project-status'
 import { countDailyIntake } from '@/lib/daily-intake'
@@ -26,6 +27,7 @@ async function picDashboard(user: SessionUser) {
     where: { picUserId: user.id, lifecycle: 'AKTIF' },
     select: {
       id: true, code: true, name: true, phase: true, lifecycle: true, startDate: true, targetEndDate: true,
+      entityId: true,
       entity: { select: { name: true } },
       dailyReports: {
         orderBy: { reportDate: 'desc' },
@@ -39,6 +41,9 @@ async function picDashboard(user: SessionUser) {
     orderBy: { code: 'asc' },
   })
   const ids = projects.map((p) => p.id)
+  // [T12] Jam batas mengikuti aturan PT (ReportSettings), bukan env. PIC terpaku ke
+  // proyek (scopeEntityId null), jadi entitas diambil dari proyek pertamanya.
+  const rptSettings = await getReportSettings(projects[0]?.entityId ?? user.scopeEntityId ?? null)
 
   const [todayReports, recent] = await Promise.all([
     db.dailyProjectReport.findMany({ where: { projectId: { in: ids }, reportDate: today } }),
@@ -58,8 +63,8 @@ async function picDashboard(user: SessionUser) {
 
   return {
     kind: 'PIC' as const,
-    countdown: dailyCountdown(),
-    lockAt: dailyLockAt(new Date()).toISOString(),
+    countdown: dailyCountdownWith(rptSettings, new Date()),
+    lockAt: dailyLockInstantWith(rptSettings, new Date()).toISOString(),
     summary: {
       projects: projects.length,
       submitted,
@@ -110,13 +115,15 @@ async function picDashboard(user: SessionUser) {
 async function kadivDashboard(user: SessionUser) {
   const now = new Date()
   const { isoYear, isoWeek } = isoWeekOf(now)
-  const deadlines = weeklyDeadlines(now)
 
   const divisions = await db.division.findMany({
     where: { headUserId: user.id, isActive: true },
-    select: { id: true, name: true },
+    select: { id: true, name: true, entityId: true },
   })
   const ids = divisions.map((d) => d.id)
+  // [T12] Jam serah/kunci mingguan mengikuti aturan PT divisi (bukan env).
+  const rptSettings = await getReportSettings(divisions[0]?.entityId ?? null)
+  const deadlines = weeklyDeadlines(now, rptSettings.weeklyCutoffHour ?? WEEKLY_CUTOFF_HOUR)
 
   const reports = await db.weeklyDivisionReport.findMany({
     where: { divisionId: { in: ids }, isoYear, isoWeek },
@@ -211,6 +218,7 @@ async function adminDashboard(user: SessionUser) {
   const { isoYear, isoWeek } = isoWeekOf(new Date())
 
   const heatFrom = new Date(today.getTime() - 20 * 86400000)
+  const rptSettings = await getReportSettings(entityId)
   const [entity, projectList, dailyToday, divisionList, weekly, kpi, lateThisMonth, openEscalations, recentDaily] =
     await Promise.all([
       db.entity.findUnique({ where: { id: entityId }, select: { name: true, code: true, region: true } }),
@@ -246,8 +254,8 @@ async function adminDashboard(user: SessionUser) {
   const days: { date: string; submitted: number; onTime: number }[] = []
   for (let t = today.getTime(); days.length < 10 && t >= heatFrom.getTime(); t -= 86400000) {
     const d = new Date(t)
-    const dow = new Date(t + 7 * 3600000).getUTCDay()
-    if (dow === 0 || dow === 6) continue
+    // [T12] Hari kerja mengikuti aturan PT (kosong = setiap hari), bukan Sen–Jum tetap.
+    if (!isWorkingDayWith(rptSettings.workingDays, d)) continue
     const mine = recentDaily.filter((r) => r.reportDate.getTime() === t)
     days.unshift({
       date: d.toISOString(),
@@ -259,7 +267,7 @@ async function adminDashboard(user: SessionUser) {
   return {
     kind: 'ADMIN' as const,
     entity,
-    countdown: dailyCountdown(),
+    countdown: dailyCountdownWith(rptSettings, new Date()),
     summary: {
       projects,
       divisions,
