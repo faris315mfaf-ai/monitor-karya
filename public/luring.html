@@ -31,9 +31,9 @@
     }
     h1 { font-size: 20px; margin: 0 0 8px; letter-spacing: -0.01em; }
     p { margin: 0 0 8px; color: var(--ink-2); }
-    p.terakhir { font-size: 13px; margin-bottom: 20px; }
+    p + .tombol { margin-top: 12px; }
     .tombol {
-      display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+      display: inline-flex; text-decoration: none; align-items: center; justify-content: center; min-height: 44px;
       padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer;
       background: var(--merah); color: #fff; font: 600 15px inherit; letter-spacing: -0.005em;
     }
@@ -50,18 +50,9 @@
       </svg>
     </div>
     <h1>Anda sedang luring</h1>
-    <p>Koneksi ke server Monitor Karya terputus. Halaman yang pernah Anda buka masih bisa dibaca dari simpanan perangkat; laporan dan perubahan data perlu menunggu koneksi kembali.</p>
-    <p class="terakhir" id="terakhir"></p>
-    <button class="tombol" type="button" onclick="location.replace('/')">Coba lagi</button>
+    <p>Koneksi ke server Monitor Karya terputus. Laporan dan perubahan data perlu menunggu koneksi kembali; data pengguna tidak disimpan di perangkat ini.</p>
+    <!-- Tautan biasa, bukan skrip/onclick: CSP produksi (nonce + strict-dynamic) memblokir JS inline. -->
+    <a class="tombol" href="/">Coba lagi</a>
   </main>
-  <script>
-    try {
-      var t = document.getElementById('terakhir')
-      var m = new Date()
-      t.textContent = 'Terakhir memeriksa koneksi: ' +
-        new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(m) + ' WIB'
-      addEventListener('online', function () { location.replace('/') })
-    } catch (e) { /* halaman tetap berguna tanpa skrip */ }
-  </script>
 </body>
 </html>

@@ -7,7 +7,9 @@
  * laporan, dan konflik 409 wajib divalidasi server saat kirim.
  *
  * Strategi:
- *  - Navigasi: daring-duluan (timeout 5 dtk) → cache halaman → /luring.html.
+ *  - Navigasi: daring-duluan (timeout 5 dtk) → /luring.html. Halaman HTML
+ *    tidak pernah disimpan (memuat data pengguna), jadi fallback-nya selalu
+ *    halaman luring statis.
  *  - Aset statis (_next/static, ikon, logo): stale-while-revalidate.
  *  - Respons API TIDAK PERNAH di-cache dan tidak disajikan dari simpanan:
  *    /api/* membawa data pengguna (PII) yang tidak boleh menetap di
@@ -48,6 +50,13 @@ self.addEventListener('message', (event) => {
       await caches.delete(CACHE_API)
       const keys = await caches.keys()
       await Promise.all(keys.map((k) => caches.delete(k)))
+      // Pasang ulang aset tanpa data pengguna (halaman luring, ikon): tanpa ini
+      // pengguna berikutnya di perangkat yang sama tidak punya fallback
+      // /luring.html sampai SW dipasang ulang. Gagal (sedang luring) diabaikan.
+      try {
+        const c = await caches.open(CACHE_STATIS)
+        await c.addAll(PRA_CACHE)
+      } catch { /* dipasang ulang pada pemasangan SW berikutnya */ }
     })()
   )
 })
