@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="persetujuan_judul">Persetujuan</string>
+    <string name="persetujuan_tab_antrean">Antrean</string>
+    <string name="persetujuan_tab_riwayat">Riwayat</string>
+    <string name="persetujuan_kosong">Semua persetujuan sudah beres.</string>
+    <string name="persetujuan_bagian_permintaan">Materi, anggaran, dan cuti</string>
+    <string name="persetujuan_bagian_permintaan_sub">Ketuk baris untuk membaca penjelasan dan berkasnya</string>
+    <string name="persetujuan_bagian_tenggat">Usulan geser tenggat</string>
+    <string name="persetujuan_bagian_tenggat_sub">Dari PIC proyek</string>
+    <string name="persetujuan_bagian_proyek">Pengajuan proyek baru</string>
+    <string name="persetujuan_bagian_proyek_sub">Menunggu tanda tangan Anda di rantai persetujuan</string>
+    <string name="persetujuan_bagian_eskalasi">Eskalasi terbuka</string>
+    <string name="persetujuan_bagian_eskalasi_sub">Memutuskan eskalasi butuh teks keputusan, jadi dibuka di tab Eskalasi</string>
+    <string name="persetujuan_buka_eskalasi">Buka eskalasi</string>
+    <string name="persetujuan_riwayat_judul">Diputuskan 14 hari terakhir</string>
+    <string name="persetujuan_riwayat_sub">Materi, anggaran, dan cuti</string>
+    <string name="persetujuan_riwayat_kosong">Belum ada keputusan dalam 14 hari terakhir.</string>
+    <string name="persetujuan_menunggu">Menunggu keputusan</string>
+    <string name="persetujuan_setujui">Setujui</string>
+    <string name="persetujuan_tolak">Tolak</string>
+    <string name="persetujuan_batal">Batal</string>
+    <string name="persetujuan_menyimpan">Menyimpan…</string>
+    <string name="persetujuan_kembali">Persetujuan</string>
+    <string name="persetujuan_tutup">Kembali</string>
+    <string name="persetujuan_buka_berkas">Buka %1$s</string>
+    <string name="persetujuan_alasan_label">Alasan penolakan untuk %1$s</string>
+    <string name="persetujuan_alasan_bantuan">Minimal 5 huruf. Pengaju menerima alasan ini di lonceng notifikasinya.</string>
+    <string name="persetujuan_baca_saja">Anda dapat membaca permintaan ini, tetapi keputusannya diambil pihak lain.</string>
+    <string name="persetujuan_urungkan">Urungkan</string>
+    <string name="persetujuan_catatan">Catatan: %1$s</string>
+</resources>

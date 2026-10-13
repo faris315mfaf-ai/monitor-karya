@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="eskalasi_konteks">Pelacakan keputusan lintas entitas</string>
+    <string name="eskalasi_judul">Eskalasi</string>
+    <string name="eskalasi_saring_semua_status">Semua status</string>
+    <string name="eskalasi_saring_lewat_sla">Lewat SLA</string>
+    <string name="eskalasi_saring_kebutuhan">Kebutuhan</string>
+    <string name="eskalasi_saring_semua_kebutuhan">Semua kebutuhan</string>
+    <string name="eskalasi_kosong_saringan">Tidak ada eskalasi dengan saringan ini.</string>
+    <string name="eskalasi_hapus_saringan">Hapus saringan</string>
+    <string name="eskalasi_kosong">Belum ada eskalasi. Semua keputusan berjalan di tingkat masing-masing.</string>
+    <string name="eskalasi_kolom_kosong">Tidak ada eskalasi dengan status ini.</string>
+    <string name="eskalasi_butuh">Butuh %1$s</string>
+    <string name="eskalasi_diputuskan_oleh">Diputuskan %1$s</string>
+    <string name="eskalasi_kembali">Eskalasi</string>
+    <string name="eskalasi_bagian_ringkasan">Ringkasan</string>
+    <string name="eskalasi_bagian_sumber">Sumber</string>
+    <string name="eskalasi_bagian_alur">Alur</string>
+    <string name="eskalasi_bagian_keputusan">Keputusan</string>
+    <string name="eskalasi_diajukan_oleh">Diajukan %1$s · %2$s</string>
+    <string name="eskalasi_diajukan">Diajukan %1$s</string>
+    <string name="eskalasi_keputusan_oleh">Diputuskan oleh %1$s</string>
+    <string name="eskalasi_isian_keputusan">Keputusan dan arahan</string>
+    <string name="eskalasi_isian_keputusan_contoh">Tuliskan keputusan dan arahan pelaksanaannya.</string>
+    <string name="eskalasi_isian_keputusan_bantuan">Minimal 10 karakter.</string>
+    <string name="eskalasi_aksi_batal">Batal</string>
+    <string name="eskalasi_aksi_simpan">Simpan keputusan</string>
+    <string name="eskalasi_aksi_menyimpan">Menyimpan…</string>
+    <string name="eskalasi_aksi_tinjau">Tandai ditinjau</string>
+    <string name="eskalasi_aksi_putuskan">Putuskan eskalasi</string>
+    <string name="eskalasi_aksi_tutup">Tutup eskalasi</string>
+    <string name="eskalasi_aksi_menutup">Menutup…</string>
+    <string name="eskalasi_aksi_kembali">Kembali</string>
+    <string name="eskalasi_urungkan">Urungkan</string>
+    <string name="eskalasi_tanpa_aksi">Tidak ada tindakan untuk Anda pada eskalasi ini.</string>
+</resources>

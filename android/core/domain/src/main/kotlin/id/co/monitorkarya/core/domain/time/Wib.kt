@@ -21,12 +21,9 @@ object Wib {
     /** Kebalikan keEpochMillis: epoch millis menjadi tanggal kalender WIB. */
     fun dariEpochMillis(ms: Long): LocalDate = Instant.ofEpochMilli(ms).atZone(ZONA).toLocalDate()
 
-    /** Batas kunci laporan harian: 17.00 WIB hari t (DAILY_CUTOFF_HOUR = 17 di lock.ts). */
-    fun kunciHarian(t: LocalDate): ZonedDateTime = t.atTime(17, 0).atZone(ZONA)
-
-    /** Apakah laporan harian tanggal t sudah terkunci (isDailyLocked di lock.ts). */
-    fun terkunciHarian(t: LocalDate, sekarang: ZonedDateTime = ZonedDateTime.now(ZONA)): Boolean =
-        !sekarang.isBefore(kunciHarian(t))
+    // C5-R7: kunciHarian/terkunciHarian (17.00 tetap) dihapus. Jam batas kini
+    // mengikuti ReportSettings per entitas (24/7 di produksi) dan selalu
+    // diputuskan server (lockAt/locked) — jangan menghitung tenggat di klien.
 
     /** Label jam "HH.mm" (pemisah titik) untuk pesan antarmuka, selalu dalam WIB. */
     fun labelJam(z: ZonedDateTime): String =

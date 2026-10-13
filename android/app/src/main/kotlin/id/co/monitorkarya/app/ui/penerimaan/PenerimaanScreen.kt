@@ -34,6 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.designsystem.components.EmptyNote
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkBadgeSize
@@ -42,7 +45,6 @@ import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkOpsi
 import id.co.monitorkarya.designsystem.components.MkSegmentedControl
 import id.co.monitorkarya.designsystem.components.MkSkeleton
@@ -70,6 +72,9 @@ fun PenerimaanScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? PenerimaanUiState.Siap)
     val aktivitas by vm.aktivitas.collectAsStateWithLifecycle()
     PenerimaanScreen(
         state = state,
@@ -81,7 +86,8 @@ fun PenerimaanScreen(
             onNotifikasiTampil = vm::notifikasiTampil,
             onUrungkan = vm::urungkan,
         ),
-        offline = offline,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
         modifier = modifier,
     )
 }
@@ -93,6 +99,8 @@ fun PenerimaanScreen(
     aktivitas: AktivitasPenerimaan = AktivitasPenerimaan(),
     aksi: PenerimaanAksi = PenerimaanAksi(),
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf(JenisLaporan.HARIAN.name) }
@@ -123,7 +131,7 @@ fun PenerimaanScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (offline) {
-                MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = aksi.onUlang)
+                BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = aksi.onUlang)
             }
             when (state) {
                 PenerimaanUiState.Memuat -> KerangkaPenerimaan()

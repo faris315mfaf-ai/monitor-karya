@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notif_judul">Notifikasi</string>
+    <string name="notif_n_belum_dibaca">%1$d belum dibaca</string>
+    <string name="notif_semua_dibaca">Semua sudah dibaca</string>
+    <string name="notif_tandai_semua">Tandai semua dibaca</string>
+    <string name="notif_tutup">Tutup</string>
+    <string name="notif_kosong">Belum ada notifikasi.</string>
+    <string name="notif_status_dibaca">Sudah dibaca</string>
+    <string name="notif_status_belum">Belum dibaca</string>
+</resources>

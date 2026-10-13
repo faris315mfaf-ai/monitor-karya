@@ -25,11 +25,13 @@ class EncryptedAuthStore(context: Context) : MkAuthStore {
 
     private val appContext: Context = context.applicationContext
 
-    private val prefs: SharedPreferences by lazy {
+    private val prefs: SharedPreferences by lazy { bukaAtauPulihkan() }
+
+    private fun bangun(): SharedPreferences {
         val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
+        return EncryptedSharedPreferences.create(
             appContext,
             NAMA_BERKAS,
             masterKey,
@@ -37,6 +39,25 @@ class EncryptedAuthStore(context: Context) : MkAuthStore {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
     }
+
+    /**
+     * Berkas sesi atau kunci Keystore bisa rusak/tak terbaca (mis. AEADBadTagException
+     * setelah pemulihan perangkat atau kunci Keystore dibatalkan). Tanpa pemulihan
+     * setiap permintaan jaringan gagal selamanya; dengan pemulihan pengguna cukup
+     * masuk ulang. Sesi yang tak terbaca memang tak berguna.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private fun bukaAtauPulihkan(): SharedPreferences =
+        try {
+            bangun()
+        } catch (e: Exception) {
+            appContext.deleteSharedPreferences(NAMA_BERKAS)
+            runCatching {
+                java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                    .deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            }
+            bangun()
+        }
 
     override fun simpan(setCookieHeaders: List<String>) {
         val editor = prefs.edit()

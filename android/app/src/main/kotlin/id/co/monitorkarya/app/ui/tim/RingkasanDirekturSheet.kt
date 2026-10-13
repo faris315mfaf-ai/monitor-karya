@@ -18,6 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +29,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.draf.PenandaDrafPulih
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonSize
@@ -62,6 +66,7 @@ fun RingkasanDirekturSheet(
     val konfirmasiJumlah by vm.konfirmasiJumlah.collectAsStateWithLifecycle()
     val pesan by vm.pesan.collectAsStateWithLifecycle()
     val sibuk by vm.sibuk.collectAsStateWithLifecycle()
+    val drafPulih by vm.drafPulih.collectAsStateWithLifecycle()
     RingkasanDirekturSheet(
         state = state,
         poin = poin,
@@ -70,7 +75,13 @@ fun RingkasanDirekturSheet(
         pesan = pesan,
         sibuk = sibuk,
         terlihat = terlihat,
-        onTutup = onTutup,
+        // G1: poin yang belum disimpan menjadi draf lokal saat Sheet ditutup.
+        onTutup = {
+            vm.tutup()
+            onTutup()
+        },
+        drafPulih = drafPulih,
+        onBuangDraf = vm::buangDraf,
         onUlang = vm::ulang,
         onUbahPoin = vm::ubahPoin,
         onTambahPoin = vm::tambahPoin,
@@ -105,9 +116,30 @@ fun RingkasanDirekturSheet(
     onTarik: () -> Unit = {},
     onPesanTampil: () -> Unit = {},
     modifier: Modifier = Modifier,
+    /** G1: Sheet dibuka dengan draf lokal (epoch millis); null = tanpa penanda. */
+    drafPulih: Long? = null,
+    onBuangDraf: () -> Unit = {},
 ) {
     val siap = state as? RingkasanUiState.Siap
     val data = siap?.data
+    // E2E-R2 N4: "Tarik untuk disunting" hanya selama jendela urungkan
+    // (sentAt + undoMinutes); dihitung ulang tiap 15 dtk selama Sheet terbuka.
+    var sekarangMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(data?.terkirimIso) {
+        while (true) {
+            sekarangMs = System.currentTimeMillis()
+            delay(15_000)
+        }
+    }
+    val bisaTarik = data != null && data.terkirim && masihBisaTarik(data.terkirimIso, data.undoMenit, sekarangMs)
+    // Pesan hasil aksi (sukses/409) di slot tepat di atas footer — selalu
+    // terlihat, tidak lagi di dasar konten di bawah lipatan (E2E-R2 N4).
+    if (pesan != null) {
+        LaunchedEffect(pesan) {
+            delay(8_000)
+            onPesanTampil()
+        }
+    }
     MkSheet(
         modifier = modifier,
         visible = terlihat,
@@ -117,9 +149,22 @@ fun RingkasanDirekturSheet(
             "Disusun otomatis dari laporan harian dan output · serah paling lambat ${waktuWib(it.batasSerahIso) ?: "-"} WIB"
         },
         backLabel = "Kembali",
+        galat = pesan?.let { teks ->
+            {
+                Text(
+                    text = teks,
+                    style = MkTypography.footnote,
+                    color = LocalMkColors.current.ink,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+        },
         footer = {
             when {
                 data == null -> Unit
+                data.terkirim && !bisaTarik -> MkButton(label = "Tutup", variant = MkButtonVariant.PLAIN, onClick = onTutup)
                 data.terkirim -> MkButton(
                     label = if (sibuk) "Menarik…" else "Tarik untuk disunting",
                     enabled = !sibuk,
@@ -153,18 +198,25 @@ fun RingkasanDirekturSheet(
             is RingkasanUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = onUlang)
             is RingkasanUiState.Siap -> IsiRingkasan(
                 data = state.data,
+                drafPulih = drafPulih,
+                sibuk = sibuk,
+                onBuangDraf = onBuangDraf,
                 poin = poin,
                 konfirmasiPending = konfirmasiPending,
                 konfirmasiJumlah = konfirmasiJumlah,
-                pesan = pesan,
                 onUbahPoin = onUbahPoin,
                 onTambahPoin = onTambahPoin,
                 onHapusPoin = onHapusPoin,
                 onPakaiOtomatis = onPakaiOtomatis,
-                onPesanTampil = onPesanTampil,
             )
         }
     }
+}
+
+/** Jendela tarik kembali masih terbuka? Tanpa stempel kirim → biarkan server memutuskan. */
+internal fun masihBisaTarik(terkirimIso: String?, undoMenit: Int, sekarangMs: Long): Boolean {
+    val kirim = terkirimIso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return true
+    return sekarangMs < kirim + undoMenit * 60_000L
 }
 
 // ------------------------------------------------------------------
@@ -174,18 +226,22 @@ fun RingkasanDirekturSheet(
 @Composable
 private fun IsiRingkasan(
     data: RingkasanDirekturUi,
+    drafPulih: Long?,
+    sibuk: Boolean,
+    onBuangDraf: () -> Unit,
     poin: List<String>,
     konfirmasiPending: Boolean,
     konfirmasiJumlah: Int,
-    pesan: String?,
     onUbahPoin: (Int, String) -> Unit,
     onTambahPoin: () -> Unit,
     onHapusPoin: (Int) -> Unit,
     onPakaiOtomatis: () -> Unit,
-    onPesanTampil: () -> Unit,
 ) {
     val bolehSunting = !data.terkirim && data.terblokirPesan == null
     Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space5)) {
+        if (drafPulih != null && bolehSunting) {
+            PenandaDrafPulih(disimpanPadaMs = drafPulih, onBuang = onBuangDraf, enabled = !sibuk)
+        }
         BarisStatus(data)
         AngkaMinggu(data)
 
@@ -221,21 +277,6 @@ private fun IsiRingkasan(
             CatatanBlokir(data.terblokirPesan)
         }
 
-        // Pesan hasil aksi (sukses/409) — hilang sendiri seperti toast web.
-        if (pesan != null) {
-            Text(
-                text = pesan,
-                style = MkTypography.footnote,
-                color = LocalMkColors.current.ink2,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            LaunchedEffect(pesan) {
-                delay(4_000)
-                onPesanTampil()
-            }
-        }
     }
 }
 

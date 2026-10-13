@@ -98,8 +98,8 @@ class DtoFase1Test {
         )
         assertEquals("2026-10-06", dto.reportDateKey)
         assertTrue(dto.today)
-        assertEquals(4, dto.countdown.hours)
-        assertEquals(false, dto.countdown.passed)
+        assertEquals(4, dto.countdown!!.hours)
+        assertEquals(false, dto.countdown!!.passed)
         assertTrue(dto.canRequestUnlock)
         assertEquals(1, dto.openDays.size)
         assertEquals("2026-10-05", dto.openDays[0].date)
@@ -162,7 +162,7 @@ class DtoFase1Test {
         assertEquals("DISETUJUI", proyek.unlock?.status)
         assertNull(proyek.unlock?.unlockUntil)
         assertTrue(dto.locked)
-        assertTrue(dto.countdown.passed)
+        assertTrue(dto.countdown!!.passed)
     }
 
     // ---------------------------------------------------------- PUT daily-input

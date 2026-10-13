@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,26 +48,6 @@ import id.co.monitorkarya.designsystem.theme.tabular
 
 /* ---------- Nada seri data divisi ---------- */
 
-/** Seri data 1–6 tema terang — port `--data-1..6` dari tokens.css. */
-private val DataTerang = listOf(
-    Color(0xFF0A66D6), // --data-1 (Divisi Teknologi)
-    Color(0xFF1A7340), // --data-2 (Divisi Keuangan)
-    Color(0xFFC2255C), // --data-3 (Divisi Media)
-    Color(0xFF6E3FD8), // --data-4 (Divisi SDM)
-    Color(0xFFB84A00), // --data-5 (Divisi Operasional)
-    Color(0xFF0B7A7A), // --data-6 (Divisi Hukum)
-)
-
-/** Seri data 1–6 tema malam — blok `[data-theme="dark"]` tokens.css. */
-private val DataGelap = listOf(
-    Color(0xFF4DA3FF), // --data-1 (malam)
-    Color(0xFF3DD47A), // --data-2 (malam)
-    Color(0xFFFF6B9A), // --data-3 (malam)
-    Color(0xFFB79BFF), // --data-4 (malam)
-    Color(0xFFFF9F43), // --data-5 (malam)
-    Color(0xFF3CC9C9), // --data-6 (malam)
-)
-
 /**
  * Titik awal gradien tiap seri — padanan pasangan `--*-cerah` di web
  * (data-1→biru-cerah, data-2→hijau-cerah, data-4→ungu-cerah, data-5→oranye-cerah);
@@ -76,20 +56,20 @@ private val DataGelap = listOf(
 private val CerahTerang = listOf(
     Color(0xFF40C8FF), // --biru-cerah
     Color(0xFF34C759), // --hijau-cerah
-    DataTerang[2], // datar
+    Color(0xFFC2255C), // --data-3: datar
     Color(0xFFC969F5), // --ungu-cerah
     Color(0xFFFF9F0A), // --oranye-cerah
-    DataTerang[5], // datar
+    Color(0xFF0B7A7A), // --data-6: datar
 )
 
 /** Padanan [CerahTerang] untuk tema malam. */
 private val CerahGelap = listOf(
     Color(0xFF64D2FF), // --biru-cerah (malam)
     Color(0xFF30D158), // --hijau-cerah (malam)
-    DataGelap[2], // datar
+    Color(0xFFFF6B9A), // --data-3 (malam): datar
     Color(0xFFBF5AF2), // --ungu-cerah (malam)
     Color(0xFFFFB340), // --oranye-cerah (malam)
-    DataGelap[5], // datar
+    Color(0xFF3CC9C9), // --data-6 (malam): datar
 )
 
 /** Titik awal gradien keadaan "lebih" (nada late: merah-cerah → bahaya). */
@@ -109,8 +89,8 @@ private fun temaMalam(): Boolean = LocalMkColors.current.ink.luminance() > 0.5f
  */
 @Composable
 fun nadaDivisi(indeks: Int): Color {
-    val i = ((indeks % 6) + 6) % 6
-    return if (temaMalam()) DataGelap[i] else DataTerang[i]
+    val seri = LocalMkColors.current.data
+    return seri[((indeks % seri.size) + seri.size) % seri.size]
 }
 
 /**
@@ -201,7 +181,8 @@ fun MkDivisionBar(
             ) {
                 if (lebih) {
                     Icon(
-                        imageVector = Icons.Outlined.Warning,
+                        // Nada late = ikon jam (core.tsx `waktu`), sama dengan StatusBadge LATE.
+                        imageVector = Icons.Outlined.Schedule,
                         contentDescription = null,
                         tint = warna.statusLate,
                         modifier = Modifier.size(14.dp),
@@ -227,6 +208,7 @@ fun MkDivisionBar(
             akhir = nadaAkhir,
             target = target,
             deskripsi = deskripsiA11y(nama = nama, mentah = mentah, target = target),
+            nilaiSemantik = mentah / 100f,
             nilaiMaks = maxOf(100, mentah) / 100f,
         )
         if (meta != null) {
@@ -247,6 +229,7 @@ private fun TrekDivisionBar(
     akhir: Color,
     target: Int?,
     deskripsi: String,
+    nilaiSemantik: Float,
     nilaiMaks: Float,
 ) {
     val warna = LocalMkColors.current
@@ -257,7 +240,8 @@ private fun TrekDivisionBar(
             .fillMaxWidth()
             .height(ketebalan + julur * 2)
             .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(porsi, 0f..nilaiMaks)
+                // Nilai sebenarnya (bukan porsi visual yang dikunci 0..1): 150% dibacakan 150%.
+                progressBarRangeInfo = ProgressBarRangeInfo(nilaiSemantik, 0f..nilaiMaks)
                 contentDescription = deskripsi
             },
     ) {

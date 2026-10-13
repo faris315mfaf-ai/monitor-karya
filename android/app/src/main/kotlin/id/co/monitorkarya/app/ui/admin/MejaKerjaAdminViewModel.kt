@@ -12,6 +12,7 @@
 //    (saring nama divisi + pekan ISO, cocokkan divisionId).
 package id.co.monitorkarya.app.ui.admin
 
+import id.co.monitorkarya.core.domain.teks.labelPic
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -263,7 +264,9 @@ class MejaKerjaAdminViewModel @Inject constructor(
                     statusLabel = labelStatusHarian(laporan.status),
                     status = mkStatusHarian(laporan.status),
                     progres = laporan.progressPct,
-                    tanggal = laporan.reportDate,
+                    // E2E-2 BUG-10: tanggal WIB Indonesia ("Selasa, 13 Oktober 2026"),
+                    // bukan ISO UTC mentah (tengah malam WIB = 17.00Z hari sebelumnya).
+                    tanggal = tanggalPanjang(laporan.reportDate) ?: laporan.reportDate,
                     diserahkanIso = laporan.submittedAt,
                     diteruskanIso = laporan.forwardedAt,
                     capaian = laporan.achievementToday.takeIf { it.isNotBlank() },
@@ -431,7 +434,7 @@ private fun petaBarisHarian(d: InboxHarianDto): BarisPelapor = BarisPelapor(
     judul = d.name.ifBlank { d.code },
     sub = listOfNotNull(
         d.code.takeIf { it.isNotBlank() },
-        d.picName?.let { "PIC $it" },
+        d.picName?.let { labelPic(it) }, // BUG-14a: tanpa "PIC PIC …"
         jamWib(d.submittedAt)?.let { "dikirim $it WIB" },
         if (d.reportId != null) "${d.evidenceCount} bukti" else null,
     ).joinToString(" · "),

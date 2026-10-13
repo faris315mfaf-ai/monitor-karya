@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HANYA build debug: izinkan HTTP polos ke server dev lokal lewat
+     `adb reverse tcp:3100 tcp:3100` (uji alur di emulator). Build rilis
+     tidak memuat berkas ini sehingga tetap HTTPS saja. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

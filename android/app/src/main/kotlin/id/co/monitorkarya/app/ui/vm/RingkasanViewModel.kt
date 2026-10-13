@@ -8,6 +8,7 @@ package id.co.monitorkarya.app.ui.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.co.monitorkarya.core.network.ApiError
 import id.co.monitorkarya.core.network.api.RingkasanApi
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import retrofit2.HttpException
 
 /** Status UI Ringkasan: Memuat → Sukses(ringkas) atau Galat(pesan). */
 sealed interface RingkasanUiState {
@@ -61,13 +63,26 @@ class RingkasanViewModel @Inject constructor(
             _state.value = RingkasanUiState.Memuat
             _state.value = try {
                 val respons = api.ringkasan()
-                val isi = respons.body() ?: JsonObject(emptyMap())
-                RingkasanUiState.Sukses(parseRingkasan(isi))
+                if (respons.isSuccessful) {
+                    val isi = respons.body() ?: JsonObject(emptyMap())
+                    RingkasanUiState.Sukses(parseRingkasan(isi))
+                } else {
+                    // 401/403/5xx: Retrofit tidak melempar untuk Response<T>; tanpa
+                    // cabang ini galat server tampil sebagai ringkasan kosong yang "sukses".
+                    RingkasanUiState.Galat(ApiError.dari(HttpException(respons)).pesanTampil())
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Pesan generik — detail teknis tidak dibawa ke UI (padanan serverError web).
-                RingkasanUiState.Galat("Ringkasan belum bisa dimuat. Periksa koneksi Anda lalu coba lagi.")
+                // Detail teknis tidak dibawa ke UI (padanan serverError web); jaringan
+                // dan galat lain dibedakan lewat ApiError.
+                RingkasanUiState.Galat(
+                    if (e is java.io.IOException) {
+                        "Ringkasan belum bisa dimuat. Periksa koneksi Anda lalu coba lagi."
+                    } else {
+                        ApiError.dari(e).pesanTampil()
+                    },
+                )
             }
         }
     }

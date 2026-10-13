@@ -45,6 +45,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.SheetValue
+import androidx.compose.foundation.layout.safeDrawingPadding
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
 import id.co.monitorkarya.designsystem.theme.LocalReducedMotion
 import id.co.monitorkarya.designsystem.theme.MKTheme
@@ -62,11 +67,43 @@ private val LebarSheetSamping = 440.dp
 private val LebarLayarLebar = 840.dp
 
 /**
+ * Tinggi tersedia di bawah ini → kepala, isi, dan footer digulir bersama
+ * (lanskap ponsel + keyboard). Di atasnya kepala/footer menempel dan hanya isi
+ * yang digulir.
+ */
+internal val TinggiSheetRingkas = 420.dp
+
+/**
+ * Ragam tata letak sheet dari LEBAR JENDELA (bukan area tab pemanggil yang sudah
+ * dipotong bilah atas/bawah — E2E-1 #3): ≥840dp = panel samping 440dp.
+ */
+fun sheetSamping(lebarJendela: Dp): Boolean = lebarJendela >= LebarLayarLebar
+
+/** Kepala ikut digulir bersama isi bila tinggi tersedia pendek (lihat [TinggiSheetRingkas]). */
+fun sheetRingkas(tinggiTersedia: Dp): Boolean = tinggiTersedia != Dp.Infinity && tinggiTersedia < TinggiSheetRingkas
+
+/**
+ * E2E-R2-3 N5: footer TETAP menempel di lanskap ponsel (±350dp); hanya bila
+ * tinggi tersedia sangat pendek (keyboard terbuka di lanskap) footer ikut
+ * digulir supaya isian tidak terjepit ke tinggi 0.
+ */
+internal val TinggiSheetSangatPendek = 240.dp
+
+fun sheetFooterIkutGulir(tinggiTersedia: Dp): Boolean =
+    tinggiTersedia != Dp.Infinity && tinggiTersedia < TinggiSheetSangatPendek
+
+/**
  * Sheet detail (port Sheet web, docs/design/05 "Perangkat & navigasi"):
- * layar <840dp → ModalBottomSheet M3 dengan scrim token dan dragHandle kecil;
- * ≥840dp → dialog custom menempel kanan, lebar 440dp, tinggi mengikuti isi,
- * muncul lewat fade + skala 0.98 → 1 selama 250 ms (dur-base, ease-standard).
- * Reduced motion: tanpa slide/skala — panel langsung tampil.
+ * jendela <840dp → ModalBottomSheet M3 dengan scrim token dan dragHandle kecil;
+ * ≥840dp → dialog custom menempel kanan, lebar 440dp, tinggi mengikuti isi
+ * (maks 92% tinggi JENDELA dialog), muncul lewat fade + skala 0.98 → 1 selama
+ * 250 ms (dur-base, ease-standard). Reduced motion: panel langsung tampil.
+ *
+ * [bolehTutupGeser] false (mis. isian berubah dan belum disimpan): geser ke
+ * bawah, ketuk scrim, dan tombol Kembali TIDAK menutup sheet — pengguna menutup
+ * lewat tombol eksplisit (Batal/Simpan) sehingga perubahan tidak terbuang diam-diam.
+ * [galat] slot pesan galat yang menempel tepat di atas footer (tidak ikut
+ * tergulir) — selalu terlihat saat tombol aksi ditekan.
  */
 @Composable
 fun MkSheet(
@@ -76,27 +113,32 @@ fun MkSheet(
     judul: String,
     subjudul: String? = null,
     backLabel: String? = null,
+    bolehTutupGeser: Boolean = true,
+    galat: (@Composable () -> Unit)? = null,
     footer: @Composable RowScope.() -> Unit = {},
     konten: @Composable ColumnScope.() -> Unit,
 ) {
-    BoxWithConstraints(modifier) {
-        if (maxWidth >= LebarLayarLebar) {
-            if (visible) {
-                SheetSamping(
-                    onTutup = onTutup,
-                    judul = judul,
-                    subjudul = subjudul,
-                    footer = footer,
-                    konten = konten,
-                    tinggiMaks = maxHeight * 0.92f,
-                )
-            }
-        } else if (visible) {
+    val lebarJendela = LocalConfiguration.current.screenWidthDp.dp
+    Box(modifier) {
+        if (!visible) return@Box
+        if (sheetSamping(lebarJendela)) {
+            SheetSamping(
+                onTutup = onTutup,
+                judul = judul,
+                subjudul = subjudul,
+                bolehTutupGeser = bolehTutupGeser,
+                galat = galat,
+                footer = footer,
+                konten = konten,
+            )
+        } else {
             SheetBawah(
                 onTutup = onTutup,
                 judul = judul,
                 subjudul = subjudul,
                 backLabel = backLabel,
+                bolehTutupGeser = bolehTutupGeser,
+                galat = galat,
                 footer = footer,
                 konten = konten,
             )
@@ -110,9 +152,10 @@ private fun SheetSamping(
     onTutup: () -> Unit,
     judul: String,
     subjudul: String?,
+    bolehTutupGeser: Boolean,
+    galat: (@Composable () -> Unit)?,
     footer: @Composable RowScope.() -> Unit,
     konten: @Composable ColumnScope.() -> Unit,
-    tinggiMaks: Dp,
 ) {
     val warna = LocalMkColors.current
     val bolehGerak = !LocalReducedMotion.current
@@ -125,23 +168,38 @@ private fun SheetSamping(
             )
         }
     }
-    Dialog(onDismissRequest = onTutup, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
+    val tutupLuar: () -> Unit = { if (bolehTutupGeser) onTutup() }
+    Dialog(
+        onDismissRequest = tutupLuar,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = bolehTutupGeser,
+            dismissOnClickOutside = bolehTutupGeser,
+        ),
+    ) {
+        // Tinggi diambil dari JENDELA dialog (BoxWithConstraints di dalam Dialog),
+        // bukan dari area tab pemanggil — E2E-1 #3 / E2E-2 BUG-05.
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .background(color = warna.scrim.copy(alpha = warna.scrim.alpha * kemajuan.value))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onTutup,
-                ),
+                    onClick = tutupLuar,
+                )
+                .safeDrawingPadding(),
         ) {
+            val tinggiJendela = if (maxHeight != Dp.Infinity) maxHeight else LocalConfiguration.current.screenHeightDp.dp
             Box(
                 Modifier
                     .align(Alignment.CenterEnd)
-                    .fillMaxWidth()
+                    .padding(end = MkSpacing.space3)
+                    // widthIn SEBELUM fillMaxWidth: panel tepat 440dp (urutan
+                    // terbalik membuat panel selebar layar — E2E-2 BUG-05).
                     .widthIn(max = LebarSheetSamping)
-                    .heightIn(max = tinggiMaks)
+                    .fillMaxWidth()
+                    .heightIn(max = tinggiJendela * 0.92f)
                     .graphicsLayer {
                         val skala = 0.98f + 0.02f * kemajuan.value
                         scaleX = skala
@@ -160,6 +218,7 @@ private fun SheetSamping(
                     tombolTutup = onTutup,
                     judul = judul,
                     subjudul = subjudul,
+                    galat = galat,
                     footer = footer,
                     konten = konten,
                 )
@@ -175,13 +234,21 @@ private fun SheetBawah(
     judul: String,
     subjudul: String?,
     backLabel: String?,
+    bolehTutupGeser: Boolean,
+    galat: (@Composable () -> Unit)?,
     footer: @Composable RowScope.() -> Unit,
     konten: @Composable ColumnScope.() -> Unit,
 ) {
     val warna = LocalMkColors.current
+    // Nilai terbaru dibaca saat gestur terjadi (state sheet diingat sekali).
+    val bolehTutup by rememberUpdatedState(bolehTutupGeser)
     ModalBottomSheet(
-        onDismissRequest = onTutup,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = { if (bolehTutup) onTutup() },
+        sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            // E2E-1 #5: isian berubah → geser/scrim/Kembali tidak menutup.
+            confirmValueChange = { nilai -> nilai != SheetValue.Hidden || bolehTutup },
+        ),
         containerColor = warna.surface,
         scrimColor = warna.scrim,
         dragHandle = {
@@ -209,6 +276,7 @@ private fun SheetBawah(
                 tombolTutup = null,
                 judul = judul,
                 subjudul = subjudul,
+                galat = galat,
                 footer = footer,
                 konten = konten,
                 modifier = Modifier.padding(bottom = MkSpacing.space2),
@@ -217,13 +285,18 @@ private fun SheetBawah(
     }
 }
 
-/** Isi sheet yang dipakai dua ragam: kepala, konten (dapat digulir), dan footer. */
+/**
+ * Isi sheet yang dipakai dua ragam: kepala, konten (dapat digulir), galat, dan
+ * footer. Bila tinggi tersedia pendek ([sheetRingkas]) seluruhnya digulir
+ * bersama supaya isian tidak pernah terjepit ke tinggi 0.
+ */
 @Composable
 private fun IsiSheet(
     denganLatar: Boolean,
     tombolTutup: (() -> Unit)?,
     judul: String,
     subjudul: String?,
+    galat: (@Composable () -> Unit)?,
     footer: @Composable RowScope.() -> Unit,
     konten: @Composable ColumnScope.() -> Unit,
     modifier: Modifier = Modifier,
@@ -234,49 +307,80 @@ private fun IsiSheet(
     } else {
         Modifier
     }
-    Column(
-        modifier
-            .then(latar)
-            .padding(all = MkSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(MkSpacing.space6),
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = judul,
-                    style = MkTypography.title3,
-                    color = warna.ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.semantics { heading() },
-                )
-                if (subjudul != null) {
+    BoxWithConstraints(modifier.then(latar)) {
+        val ringkas = sheetRingkas(maxHeight)
+        val semuaGulir = sheetFooterIkutGulir(maxHeight)
+        val gulirIsi = rememberScrollState()
+        val jarak = if (ringkas) MkSpacing.space4 else MkSpacing.space6
+        val kepala: @Composable () -> Unit = {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        text = subjudul,
-                        style = MkTypography.footnote,
-                        color = warna.ink2,
+                        text = judul,
+                        style = MkTypography.title3,
+                        color = warna.ink,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier.semantics { heading() },
                     )
+                    if (subjudul != null) {
+                        Text(
+                            text = subjudul,
+                            style = MkTypography.footnote,
+                            color = warna.ink2,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
-            }
-            if (tombolTutup != null) {
-                IconButton(onClick = tombolTutup) {
-                    Icon(imageVector = Icons.Outlined.Close, contentDescription = "Tutup")
+                if (tombolTutup != null) {
+                    IconButton(onClick = tombolTutup) {
+                        Icon(imageVector = Icons.Outlined.Close, contentDescription = "Tutup")
+                    }
                 }
             }
         }
         Column(
             Modifier
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState()),
-            content = konten,
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(MkSpacing.space3),
-            content = footer,
-        )
+                .then(if (semuaGulir) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                .padding(all = jarak),
+            verticalArrangement = Arrangement.spacedBy(jarak),
+        ) {
+            when {
+                // Sangat pendek: semuanya satu gulir (isi tidak terjepit ke 0).
+                semuaGulir -> {
+                    kepala()
+                    Column(content = konten)
+                }
+                // Lanskap ponsel: kepala ikut gulir bersama isi, footer menempel.
+                ringkas -> Column(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(gulirIsi),
+                    verticalArrangement = Arrangement.spacedBy(jarak),
+                ) {
+                    kepala()
+                    Column(content = konten)
+                }
+                else -> {
+                    kepala()
+                    Column(
+                        Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(gulirIsi),
+                        content = konten,
+                    )
+                }
+            }
+            if (galat != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) { galat() }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(MkSpacing.space3),
+                content = footer,
+            )
+        }
     }
 }
 
@@ -290,6 +394,7 @@ private fun IsiSheetPreview() {
             IsiSheet(
                 denganLatar = true,
                 tombolTutup = {},
+                galat = null,
                 judul = "SIM RS Bhakti Rahayu",
                 subjudul = "Divisi Teknologi · PT Medcreatix",
                 footer = {

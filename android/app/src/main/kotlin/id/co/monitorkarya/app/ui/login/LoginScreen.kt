@@ -2,6 +2,8 @@
 // ke Compose. Satu-satunya jalur masuk: identifier (username atau email) + kata
 // sandi; tanpa jalan pintas demo (keputusan 10 Sep 2026). Layar murni state +
 // callback sehingga mudah diuji/dipratinjau tanpa ViewModel.
+// C3-S1/S2: kolom sandi bertipe Password + petunjuk autofill (username/
+// password), dan nilai sandi hanya di `remember` (tidak masuk Bundle tersimpan).
 package id.co.monitorkarya.app.ui.login
 
 import androidx.compose.foundation.layout.Arrangement
@@ -38,10 +40,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -67,7 +73,8 @@ fun LoginScreen(
     modifier: Modifier = Modifier,
 ) {
     var identifier by rememberSaveable { mutableStateOf("") }
-    var sandi by rememberSaveable { mutableStateOf("") }
+    // Sandi SENGAJA `remember`: Bundle state tersimpan ditulis ke disk (C3-S2).
+    var sandi by remember { mutableStateOf("") }
     var sandiTerlihat by rememberSaveable { mutableStateOf(false) }
     val c = LocalMkColors.current
     val fokusIdentifier = remember { FocusRequester() }
@@ -105,11 +112,14 @@ fun LoginScreen(
                     value = identifier,
                     onValueChange = { identifier = it },
                     label = "Nama pengguna atau email",
-                    modifier = Modifier.focusRequester(fokusIdentifier),
+                    modifier = Modifier
+                        .focusRequester(fokusIdentifier)
+                        .semantics { contentType = ContentType.Username },
                     enabled = !memuat,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
-                        autoCorrect = false,
+                        autoCorrectEnabled = false,
+                        keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next,
                     ),
                 )
@@ -117,9 +127,10 @@ fun LoginScreen(
                     value = sandi,
                     onValueChange = { sandi = it },
                     label = "Kata sandi",
+                    modifier = Modifier.semantics { contentType = ContentType.Password },
                     enabled = !memuat,
                     visualTransformation = if (sandiTerlihat) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = opsiKeyboardSandi(ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { kirim() }),
                     trailingIcon = {
                         IconButton(

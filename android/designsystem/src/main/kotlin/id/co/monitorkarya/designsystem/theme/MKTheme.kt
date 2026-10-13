@@ -17,13 +17,14 @@ import androidx.compose.runtime.CompositionLocalProvider
  *
  * @param darkTheme setara `data-theme="dark"`; bawaan mengikuti sistem.
  * @param accent setara `data-accent`; bawaan merah.
- * @param reducedMotion setara `prefers-reduced-motion`; bawaan false.
+ * @param reducedMotion setara `prefers-reduced-motion`; bawaan mengikuti setelan sistem
+ *   "Hapus animasi" ([gerakDikurangiSistem]) sehingga MainActivity tidak perlu meneruskannya.
  */
 @Composable
 fun MKTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     accent: MkAccent = MkAccent.MERAH,
-    reducedMotion: Boolean = false,
+    reducedMotion: Boolean = gerakDikurangiSistem(),
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) MkColorsGelap else MkColorsTerang
@@ -77,7 +78,7 @@ object MkTheme {
  * onPrimaryContainer/inversePrimary = accent · secondary = fill-1 (kontrol sekunder) ·
  * secondaryContainer = accent-soft · tertiary = sukses (statusOn) + sukses-soft ·
  * background/bg = bg · surface = surface · surfaceVariant = surface-2 ·
- * onSurfaceVariant = ink-2 · surfaceTint = accent-fill · error = bahaya (statusLate) ·
+ * onSurfaceVariant = ink-2 · surfaceContainer* = surface/surface-2 · surfaceTint = accent-fill · error = bahaya (statusLate) ·
  * errorContainer = bahaya-soft · outline = line-strong · outlineVariant = line ·
  * inverseSurface = ink · inverseOnSurface = bg · scrim = scrim.
  * Semua nilai dari token; slot on-error memakai putih (konvensi Material, token --putih).
@@ -104,6 +105,15 @@ private fun mkColorScheme(c: MkColors, a: MkAccentColors, darkTheme: Boolean): C
             onSurface = c.ink,
             surfaceVariant = c.surface2,
             onSurfaceVariant = c.ink2,
+            // E2E-2 BUG-07: wadah permukaan M3 (bilah navigasi, menu, dialog) dari
+            // token — tanpa ini M3 memakai lavender bawaannya.
+            surfaceBright = c.surface,
+            surfaceDim = c.bg,
+            surfaceContainerLowest = c.surface,
+            surfaceContainerLow = c.surface,
+            surfaceContainer = c.surface,
+            surfaceContainerHigh = c.surface2,
+            surfaceContainerHighest = c.surface2,
             surfaceTint = a.fill,
             inverseSurface = c.ink,
             inverseOnSurface = c.bg,
@@ -136,6 +146,15 @@ private fun mkColorScheme(c: MkColors, a: MkAccentColors, darkTheme: Boolean): C
             onSurface = c.ink,
             surfaceVariant = c.surface2,
             onSurfaceVariant = c.ink2,
+            // E2E-2 BUG-07: wadah permukaan M3 (bilah navigasi, menu, dialog) dari
+            // token — tanpa ini M3 memakai lavender bawaannya.
+            surfaceBright = c.surface,
+            surfaceDim = c.bg,
+            surfaceContainerLowest = c.surface,
+            surfaceContainerLow = c.surface,
+            surfaceContainer = c.surface,
+            surfaceContainerHigh = c.surface2,
+            surfaceContainerHighest = c.surface2,
             surfaceTint = a.fill,
             inverseSurface = c.ink,
             inverseOnSurface = c.bg,

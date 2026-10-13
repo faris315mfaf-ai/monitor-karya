@@ -70,7 +70,13 @@ class ProyekRepo @Inject constructor(private val dao: ProjectDao) {
         }
         // Simpan kunci status lowercase ("on"|"risk"|…) sama seperti web.
         val status = StatusProyek
-            .hitung(tenggat, terakhir, siklusHidup = lifecycle, perluEskalasi = latestReport?.needsEscalation ?: false)
+            .hitung(
+                tenggat,
+                terakhir,
+                siklusHidup = lifecycle,
+                perluEskalasi = latestReport?.needsEscalation ?: false,
+                tenggatInstan = isoKeInstanServer(targetEndDate),
+            )
             .name
             .lowercase()
         return ProjectEntity(

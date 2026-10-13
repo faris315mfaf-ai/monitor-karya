@@ -1,5 +1,12 @@
 // Port ROLE_TABS + ROLE_DUTIES dari src/lib/rbac.ts (PERSIS, urutan dipertahankan);
 // label tab dari NAV_TABS di src/lib/constants.ts.
+//
+// Satu-satunya pengecualian: NavTabId 'pesan' (Kotak masuk) TIDAK menjadi
+// TabId di Android. Web menaruhnya sebagai tab kedua untuk semua peran;
+// Android menampilkannya sebagai ikon Pesan di top bar (PesanIkon di MKShell)
+// yang membuka PesanLayar, supaya bilah bawah (maks 5 butir) tetap untuk
+// tab kerja. Jadi ROLE_TABS di sini = ROLE_TABS web dikurangi 'pesan'
+// (dijaga RoleTabsTest terhadap salinan literal ROLE_TABS web).
 package id.co.monitorkarya.core.domain.roles
 
 import id.co.monitorkarya.core.domain.model.Peran
@@ -8,6 +15,9 @@ import id.co.monitorkarya.core.domain.model.Peran
 enum class TabId(val label: String) {
     RINGKASAN("Ringkasan"),
     MEJA_KERJA("Meja kerja"),
+
+    /** NavTabId 'statistik' — kepatuhan per divisi + peta panas 10 hari (Admin PT). */
+    STATISTIK("Statistik"),
     LAPORAN_HARIAN("Laporan harian"),
     PROYEK("Proyek"),
     PEMBAGIAN_DIVISI("Divisi"),
@@ -28,9 +38,11 @@ val ROLE_TABS: Map<Peran, List<TabId>> = mapOf(
     ),
     Peran.KEPALA_DIVISI to listOf(
         TabId.RINGKASAN, TabId.MEJA_KERJA, TabId.CAPAIAN_MINGGUAN, TabId.PEMBAGIAN_DIVISI,
+        TabId.PROYEK,
     ),
+    // Web 9 Okt 2026: tab Penerimaan dihapus untuk Admin PT, Statistik jadi tab sendiri.
     Peran.ADMIN_PT to listOf(
-        TabId.RINGKASAN, TabId.MEJA_KERJA, TabId.PENERIMAAN, TabId.LAPORAN_HARIAN,
+        TabId.RINGKASAN, TabId.MEJA_KERJA, TabId.STATISTIK, TabId.LAPORAN_HARIAN,
         TabId.PROYEK, TabId.PEMBAGIAN_DIVISI, TabId.ESKALASI,
     ),
     Peran.DIREKTUR_ENTITAS to listOf(

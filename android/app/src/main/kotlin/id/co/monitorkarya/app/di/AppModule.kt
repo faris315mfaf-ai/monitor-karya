@@ -11,15 +11,19 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import id.co.monitorkarya.app.BuildConfig
+import id.co.monitorkarya.app.vm.SesiPeristiwaBus
 import id.co.monitorkarya.core.data.db.MkDatabase
 import id.co.monitorkarya.core.data.db.buatDb
 import id.co.monitorkarya.core.data.prefs.MkPrefs
 import id.co.monitorkarya.core.network.EncryptedAuthStore
+import id.co.monitorkarya.core.network.EncryptedProfilStore
 import id.co.monitorkarya.core.network.MkAuthStore
 import id.co.monitorkarya.core.network.MkClient
+import id.co.monitorkarya.core.network.MkProfilStore
 import id.co.monitorkarya.core.network.api.AuthApi
 import id.co.monitorkarya.core.network.api.AdminComplianceApi
 import id.co.monitorkarya.core.network.api.AkunApi
+import id.co.monitorkarya.core.network.api.AttendanceApi
 import id.co.monitorkarya.core.network.api.DailyInputApi
 import id.co.monitorkarya.core.network.api.DailyReportsApi
 import id.co.monitorkarya.core.network.api.EvidenceApi
@@ -51,10 +55,15 @@ object AppModule {
     @Singleton
     fun authStore(@ApplicationContext konteks: Context): MkAuthStore = EncryptedAuthStore(konteks)
 
+    /** Profil pengguna terakhir (terenkripsi) untuk mulai dingin luring (A1-LURING.md §1). */
     @Provides
     @Singleton
-    fun okHttpClient(authStore: MkAuthStore): OkHttpClient =
-        MkClient.okHttp(authStore, BuildConfig.DEBUG)
+    fun profilStore(@ApplicationContext konteks: Context): MkProfilStore = EncryptedProfilStore(konteks)
+
+    @Provides
+    @Singleton
+    fun okHttpClient(authStore: MkAuthStore, peristiwaSesi: SesiPeristiwaBus): OkHttpClient =
+        MkClient.okHttp(authStore, BuildConfig.DEBUG, saatPeristiwaSesi = peristiwaSesi::lapor)
 
     @Provides
     @Singleton
@@ -127,11 +136,9 @@ object AppModule {
     @Provides
     @Singleton
     fun akunApi(retrofit: Retrofit): AkunApi = retrofit.create(AkunApi::class.java)
-    /** Port meja-laporan JsonObject layar Laporan (T5-B5). */
     @Provides
     @Singleton
-    fun laporanDeskApi(retrofit: Retrofit): id.co.monitorkarya.app.ui.laporan.LaporanDeskApi =
-        retrofit.create(id.co.monitorkarya.app.ui.laporan.LaporanDeskApi::class.java)
+    fun attendanceApi(retrofit: Retrofit): AttendanceApi = retrofit.create(AttendanceApi::class.java)
     @Provides
     @Singleton
     fun mkDatabase(@ApplicationContext konteks: Context): MkDatabase = buatDb(konteks)

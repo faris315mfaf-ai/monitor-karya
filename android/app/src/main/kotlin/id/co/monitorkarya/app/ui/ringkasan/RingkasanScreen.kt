@@ -20,9 +20,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
 import id.co.monitorkarya.designsystem.theme.MkSpacing
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.MkStatus
@@ -42,7 +44,16 @@ fun RingkasanScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    RingkasanScreen(state = state, offline = offline, onUlang = vm::ulang, modifier = modifier)
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? RingkasanUiState.Sukses)
+    RingkasanScreen(
+        state = state,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
+        onUlang = vm::ulang,
+        modifier = modifier,
+    )
 }
 
 /** Versi state murni — mudah dipratinjau/diuji tanpa ViewModel. */
@@ -50,6 +61,8 @@ fun RingkasanScreen(
 fun RingkasanScreen(
     state: RingkasanUiState,
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
     onUlang: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -61,7 +74,7 @@ fun RingkasanScreen(
             .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (offline) MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
+        if (offline) BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = onUlang)
         when (state) {
             RingkasanUiState.Memuat -> repeat(3) { MkSkeleton(modifier = Modifier.fillMaxWidth().height(96.dp)) }
             is RingkasanUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = onUlang)

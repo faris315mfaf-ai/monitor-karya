@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- C3-S3 (Android 12+): allowBackup="false" TIDAK menghentikan transfer
+     antarperangkat (D2D). Kecualikan seluruh domain: cookie sesi + profil
+     (EncryptedSharedPreferences, kunci Keystore tidak ikut pindah), DataStore,
+     Room (laporan, outbox, cache_layar — tidak terenkripsi), berkas bukti
+     antrean, dan cache. Setelah pindah perangkat pengguna masuk ulang. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>

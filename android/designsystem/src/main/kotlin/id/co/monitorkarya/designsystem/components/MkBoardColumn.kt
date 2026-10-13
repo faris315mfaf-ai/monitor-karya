@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -50,6 +50,11 @@ data class MkKartuPapan(
     val status: MkStatus,
     /** Progres 0–100; ditampilkan sebagai trek tipis + angka tabular. */
     val progres: Int,
+    /**
+     * Kata status persis (mis. "N/A", "Berjalan"); null = label bawaan [status].
+     * E2E-1 #7: tanpa ini butir N/A tampil "Belum mulai" (label NEUTRAL).
+     */
+    val label: String? = null,
 )
 
 /**
@@ -65,6 +70,8 @@ fun MkBoardColumn(
     kartu: List<MkKartuPapan>,
     onNaik: ((indeks: Int) -> Unit)? = null,
     onTurun: ((indeks: Int) -> Unit)? = null,
+    /** Ketuk kartu → buka detailnya (id kartu); null = kartu statis. */
+    onBuka: ((id: String) -> Unit)? = null,
 ) {
     val warna = LocalMkColors.current
     Column(
@@ -106,6 +113,7 @@ fun MkBoardColumn(
                         bisaTurun = indeks < kartu.lastIndex,
                         onNaik = if (onNaik != null) ({ onNaik(indeks) }) else null,
                         onTurun = if (onTurun != null) ({ onTurun(indeks) }) else null,
+                        onBuka = if (onBuka != null) ({ onBuka(item.id) }) else null,
                     )
                 }
             }
@@ -125,6 +133,7 @@ private fun KartuPapan(
     bisaTurun: Boolean,
     onNaik: (() -> Unit)?,
     onTurun: (() -> Unit)?,
+    onBuka: (() -> Unit)? = null,
 ) {
     val warna = LocalMkColors.current
     Column(
@@ -133,6 +142,7 @@ private fun KartuPapan(
             .clip(MkShapes.kartu)
             .background(color = warna.surface2)
             .border(1.dp, warna.line, MkShapes.kartu)
+            .then(if (onBuka != null) Modifier.clickable(role = Role.Button, onClick = onBuka) else Modifier)
             .padding(all = MkSpacing.space3),
         verticalArrangement = Arrangement.spacedBy(MkSpacing.space2),
     ) {
@@ -165,7 +175,7 @@ private fun KartuPapan(
                 )
             }
         }
-        MkChip(label = kartu.status.label, status = kartu.status)
+        MkChip(label = kartu.label ?: kartu.status.label, status = kartu.status)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2),
@@ -195,7 +205,7 @@ private fun KartuPapan(
     }
 }
 
-/** Tombol ikon bulat 32dp untuk urut naik/turun; nonaktif meredup ke alpha 0.3. */
+/** Tombol ikon bulat 32dp (area sentuh 48dp) untuk urut naik/turun; nonaktif berikon ink-3. */
 @Composable
 private fun TombolUrut(
     ikon: ImageVector,
@@ -205,16 +215,16 @@ private fun TombolUrut(
 ) {
     Box(
         modifier = Modifier
+            .minimumInteractiveComponentSize()
             .size(32.dp)
             .clip(CircleShape)
-            .alpha(alpha = if (enabled) 1f else 0.3f)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = ikon,
             contentDescription = label,
-            tint = LocalMkColors.current.ink2,
+            tint = if (enabled) LocalMkColors.current.ink2 else LocalMkColors.current.ink3,
             modifier = Modifier.size(18.dp),
         )
     }

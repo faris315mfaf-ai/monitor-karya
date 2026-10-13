@@ -30,6 +30,17 @@ class MkPrefs(private val context: Context) {
 
     val uidTerakhir: Flow<String?> = context.pengaturan.data.map { it[UID_TERAKHIR] }
 
+    /**
+     * Uid sesi AKTIF (C5-T3): pengguna yang cookie-nya dipakai sekarang dan
+     * yang data akun lamanya SUDAH dibersihkan. Diisi tepat sebelum status Siap
+     * terbit; dikosongkan saat keluar, sesi berakhir, layar masuk, dan di awal
+     * proses masuk (sebelum cookie akun baru tersimpan). Pekerja sinkron hanya
+     * mengirim pesan antrean milik uid ini; potret layar (CacheLayar) dikunci
+     * per uid ini. Berbeda dari [uidTerakhir] yang sengaja bertahan setelah
+     * keluar (praisi layar masuk + deteksi ganti akun).
+     */
+    val uidSesi: Flow<String?> = context.pengaturan.data.map { it[UID_SESI] }
+
     suspend fun setAksen(nilai: String) {
         context.pengaturan.edit { it[AKSEN] = nilai }
     }
@@ -52,11 +63,18 @@ class MkPrefs(private val context: Context) {
         }
     }
 
+    suspend fun setUidSesi(nilai: String?) {
+        context.pengaturan.edit { prefs ->
+            if (nilai == null) prefs.remove(UID_SESI) else prefs[UID_SESI] = nilai
+        }
+    }
+
     private companion object {
         val AKSEN = stringPreferencesKey("aksen")
         val TEMA = stringPreferencesKey("tema")
         val PERNAH_MASUK = booleanPreferencesKey("pernahMasuk")
         val TERAKHIR_SINKRON = longPreferencesKey("terakhirSinkron")
         val UID_TERAKHIR = stringPreferencesKey("uidTerakhir")
+        val UID_SESI = stringPreferencesKey("uidSesi")
     }
 }

@@ -9,11 +9,21 @@
 // FORWARDED/NOT_CURRENT_WEEK ditampilkan pesannya); POST "unsend" menarik
 // kembali ke draf (hanya pengirim, jendela undoMinutes = 15 menit; di luar
 // itu 409 dengan pesan). Status TERKIRIM + waktu kirim selalu ditampilkan.
+// LURING (A1-LURING.md §6): simpan/kirim/tarik ringkasan TIDAK diantre — badan
+// PUT tidak membawa minggu sasaran (server memakai minggu berjalan saat terima,
+// jadi antrean melewati Senin menulis ke minggu yang salah), kirim memicu lonceng
+// Direktur, dan tarik hanya sah 15 menit setelah kirim.
+// G1 (keputusan pemilik 13 Okt 2026): poin yang disunting lalu Sheet ditutup
+// tanpa "Simpan draf"/kirim → draf otomatis LOKAL per (uid, divisi, minggu),
+// dipulihkan saat Sheet dibuka lagi dengan penanda "Draf dipulihkan" +
+// "Buang draf"; tanpa dialog. Draf lokal dibuang setelah simpan/kirim sukses.
 package id.co.monitorkarya.app.ui.tim
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.co.monitorkarya.app.ui.draf.PencatatDraf
+import id.co.monitorkarya.core.data.repo.DrafSunting
 import id.co.monitorkarya.core.network.ApiError
 import id.co.monitorkarya.core.network.api.KadivApi
 import id.co.monitorkarya.core.network.dto.KonflikDto
@@ -98,7 +108,19 @@ sealed interface RingkasanUiState {
 @HiltViewModel
 class RingkasanDirekturViewModel @Inject constructor(
     private val api: KadivApi,
+    draf: DrafSunting,
 ) : ViewModel() {
+
+    /** G1: draf otomatis poin (antrean tulis berurutan + jeda saat mengetik). */
+    private val pencatat = PencatatDraf(viewModelScope, draf)
+
+    /** Poin versi server saat termuat — pembanding "ada perubahan belum tersimpan". */
+    private var poinAwal: List<String> = emptyList()
+
+    private val _drafPulih = MutableStateFlow<Long?>(null)
+
+    /** G1: Sheet dibuka dengan draf lokal (epoch millis) — penanda "Draf dipulihkan". */
+    val drafPulih: StateFlow<Long?> = _drafPulih.asStateFlow()
 
     private val _state = MutableStateFlow<RingkasanUiState>(RingkasanUiState.Memuat)
 
@@ -130,16 +152,60 @@ class RingkasanDirekturViewModel @Inject constructor(
     /** Sedang PUT/POST — tombol footer dinonaktifkan. */
     val sibuk: StateFlow<Boolean> = _sibuk.asStateFlow()
 
-    init {
-        muat()
-    }
+    /** Divisi yang ringkasannya dibuka (null = divisi pertama yang dipimpin, pilihan server). */
+    private var divisiId: String? = null
 
-    /** Menarik ringkasan minggu berjalan; poin disunting diarahkan ulang dari tampilan. */
-    fun muat() {
+    /**
+     * Menarik ringkasan minggu berjalan; poin disunting diarahkan ulang dari
+     * tampilan. Dipanggil setiap kali Sheet dibuka dari tab Divisi (E2E-1 #1) —
+     * tidak di init, supaya tab Divisi tidak menembak GET yang belum dibutuhkan.
+     */
+    fun muat(divisi: String? = divisiId) {
+        divisiId = divisi
         viewModelScope.launch {
             _state.value = RingkasanUiState.Memuat
+            _drafPulih.value = null
             muatInternal(hapusPesan = true)
+            pulihkanDraf()
         }
+    }
+
+    /** G1: pasang draf lokal (bila ada dan berbeda dari poin server) pada ringkasan yang bisa disunting. */
+    private suspend fun pulihkanDraf() {
+        val data = (state.value as? RingkasanUiState.Siap)?.data ?: return
+        if (!bolehSuntingRingkasan(data)) return
+        val draf = pencatat.ambil(kunciDrafRingkasan(data))
+        val poin = poinDariJson(draf?.json)?.takeIf { it != poinAwal } ?: return
+        _poin.value = poin
+        _drafPulih.value = draf?.disimpanPada
+    }
+
+    /** Catat poin terkini sebagai draf (setelah jeda) atau buang bila kembali sama. */
+    private fun catatDraf(segera: Boolean = false): Boolean {
+        val data = (state.value as? RingkasanUiState.Siap)?.data ?: return false
+        val json = isiDrafRingkasan(_poin.value, poinAwal, bolehSuntingRingkasan(data))
+        val kunci = kunciDrafRingkasan(data)
+        if (segera) pencatat.segera(kunci, json) else pencatat.catat(kunci, json)
+        return json != null
+    }
+
+    /** Sheet ditutup (Tutup/geser/Kembali): perubahan poin belum tersimpan → draf lokal. */
+    fun tutup() {
+        catatDraf(segera = true)
+        _drafPulih.value = null
+    }
+
+    /** "Buang draf": poin kembali ke versi server, draf lokal dihapus. */
+    fun buangDraf() {
+        _poin.value = poinAwal
+        _drafPulih.value = null
+        catatDraf(segera = true)
+    }
+
+    /** Draf lokal Sheet ini dibuang (simpan/kirim sukses). */
+    private fun buangDrafLokal(data: RingkasanDirekturUi) {
+        pencatat.segera(kunciDrafRingkasan(data), null)
+        _drafPulih.value = null
     }
 
     /** Coba lagi setelah galat. */
@@ -151,11 +217,13 @@ class RingkasanDirekturViewModel @Inject constructor(
         _poin.value = _poin.value.toMutableList().apply {
             set(indeks, nilai.take(POIN_MAKS_HURUF))
         }
+        catatDraf()
     }
 
     /** Menambah baris poin kosong (maks 3). */
     fun tambahPoin() {
         if (_poin.value.size < POIN_MAKS) _poin.value = _poin.value + ""
+        catatDraf()
     }
 
     /** Menghapus satu baris poin (minimal 1). */
@@ -163,12 +231,14 @@ class RingkasanDirekturViewModel @Inject constructor(
         if (_poin.value.size > POIN_MIN) {
             _poin.value = _poin.value.filterIndexed { i, _ -> i != indeks }
         }
+        catatDraf()
     }
 
     /** "Pakai draf otomatis" — kembalikan poin ke draf server. */
     fun pakaiOtomatis() {
         val otomatis = (state.value as? RingkasanUiState.Siap)?.data?.poinOtomatis ?: return
         _poin.value = otomatis.ifEmpty { List(POIN_MIN) { "" } }
+        catatDraf()
     }
 
     /** Pesan sudah terbaca — bersihkan. */
@@ -192,6 +262,7 @@ class RingkasanDirekturViewModel @Inject constructor(
         aksi {
             val res = api.simpanRingkasan(WeeklySummarySaveRequest(divisionId = data.divisiId, points = bersih))
             if (res.isSuccessful) {
+                buangDrafLokal(data)
                 _pesan.value = "Draf ringkasan disimpan."
                 muatInternal(hapusPesan = false)
             } else {
@@ -220,6 +291,7 @@ class RingkasanDirekturViewModel @Inject constructor(
                 ),
             )
             if (res.isSuccessful) {
+                buangDrafLokal(data)
                 _konfirmasiPending.value = false
                 val isi = res.body()
                 val nama = isi?.directors?.joinToString(", ") { it.name }.orEmpty()
@@ -271,13 +343,14 @@ class RingkasanDirekturViewModel @Inject constructor(
         _konfirmasiPending.value = false
         _konfirmasiJumlah.value = 0
         _state.value = try {
-            val res = api.ringkasan()
+            val res = api.ringkasan(divisionId = divisiId)
             val isi = res.body()
             when {
                 res.isSuccessful && isi != null -> {
                     val data = isi.keRingkasanUi()
                     _poin.value = (data.poinTersimpan?.ifEmpty { null } ?: data.poinOtomatis)
                         .ifEmpty { List(POIN_MIN) { "" } }
+                    poinAwal = _poin.value
                     RingkasanUiState.Siap(data)
                 }
                 res.isSuccessful -> RingkasanUiState.Galat("Ringkasan mingguan belum termuat. Coba lagi.")

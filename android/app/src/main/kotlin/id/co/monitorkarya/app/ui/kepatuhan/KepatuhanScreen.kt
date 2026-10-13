@@ -5,7 +5,8 @@
 // Harian/Mingguan, daftar divisi (BatangDivisi persen + StatusBadge; bentang
 // → daftar belum lapor dengan "Ingatkan" per orang + "Ingatkan semua" per
 // divisi), dan banner kecil "Sudah lewat tenggat" dengan tombol nonaktif
-// setelah laporan harian terkunci 17.00 WIB.
+// setelah laporan harian terkunci. Teks tenggat mengikuti data server
+// (week.handoverBy + ReportSettings bila diketahui — TenggatKepatuhan.kt, BUG-11).
 //
 // MkDivisionBar/MkQueueItem designsystem belum tersedia saat tugas ini jalan,
 // jadi BatangDivisi + SeriDivisi di bawah adalah port LOKAL paket ini (nilai
@@ -14,6 +15,11 @@
 // docs/fase2/T6-C8-LAPORAN.md.
 package id.co.monitorkarya.app.ui.kepatuhan
 
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -26,6 +32,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,6 +66,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.designsystem.components.EmptyNote
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkBadgeSize
@@ -68,7 +78,6 @@ import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkCard
 import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkOpsi
 import id.co.monitorkarya.designsystem.components.MkSegmentedControl
 import id.co.monitorkarya.designsystem.components.MkSkeleton
@@ -100,8 +109,17 @@ fun KepatuhanScreen(
     vm: KepatuhanViewModel,
     offline: Boolean = false,
     modifier: Modifier = Modifier,
+    /** Aturan pelaporan PT bila diketahui (teks tenggat); null = tanpa jam. */
+    aturan: AturanTenggat? = null,
+    /** Isi di atas modul, ikut bergulir (mis. judul layar Statistik). */
+    kepala: @Composable ColumnScope.() -> Unit = {},
+    /** Isi di bawah modul, ikut bergulir (peta panas, aturan pelaporan). */
+    bawah: @Composable ColumnScope.() -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? KepatuhanUiState.Siap)
     val mode by vm.mode.collectAsStateWithLifecycle()
     val terbuka by vm.terbuka.collectAsStateWithLifecycle()
     val mengirim by vm.mengirim.collectAsStateWithLifecycle()
@@ -112,7 +130,8 @@ fun KepatuhanScreen(
         terbuka = terbuka,
         mengirim = mengirim,
         notifikasi = notifikasi,
-        offline = offline,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
         onUlang = vm::ulang,
         onPilihMode = vm::pilihMode,
         onBukaTutupDivisi = vm::bukaTutupDivisi,
@@ -120,6 +139,9 @@ fun KepatuhanScreen(
         onIngatkanDivisi = vm::ingatkanDivisi,
         onNotifikasiTampil = vm::notifikasiTampil,
         modifier = modifier,
+        aturan = aturan,
+        kepala = kepala,
+        bawah = bawah,
     )
 }
 
@@ -132,6 +154,8 @@ fun KepatuhanScreen(
     mengirim: String? = null,
     notifikasi: NotifikasiKepatuhan? = null,
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
     onUlang: () -> Unit = {},
     onPilihMode: (ModeKepatuhan) -> Unit = {},
     onBukaTutupDivisi: (String?) -> Unit = {},
@@ -139,6 +163,9 @@ fun KepatuhanScreen(
     onIngatkanDivisi: (String) -> Unit = {},
     onNotifikasiTampil: () -> Unit = {},
     modifier: Modifier = Modifier,
+    aturan: AturanTenggat? = null,
+    kepala: @Composable ColumnScope.() -> Unit = {},
+    bawah: @Composable ColumnScope.() -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(notifikasi?.id) {
@@ -147,17 +174,28 @@ fun KepatuhanScreen(
             onNotifikasiTampil()
         }
     }
+    val gulir = rememberScrollState()
+    val cakupan = rememberCoroutineScope()
+    // E2E-R2 N-02: posisi isi [bawah] (peta panas + Aturan pelaporan) dalam
+    // koordinat konten; dipakai menjangkar gulir saat isi di atasnya berubah tinggi.
+    val yBawahLama = remember { floatArrayOf(Float.NaN) }
+    // Nilai gulir terakhir SEBELUM tata letak berubah: ScrollState sudah
+    // mengekang nilainya ke maxValue baru saat onPlaced berjalan, jadi nilai
+    // lama dibaca dari snapshotFlow (terkumpul sesudah bingkai).
+    val gulirStabil = remember { intArrayOf(0) }
+    LaunchedEffect(gulir) { snapshotFlow { gulir.value }.collect { gulirStabil[0] = it } }
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(gulir)
                 // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
                 .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
         ) {
+            kepala()
             if (offline) {
-                MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
+                BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = onUlang)
             }
             when (state) {
                 KepatuhanUiState.Memuat -> repeat(4) { MkSkeleton(modifier = Modifier.fillMaxWidth().height(72.dp)) }
@@ -171,8 +209,30 @@ fun KepatuhanScreen(
                     onBukaTutupDivisi = onBukaTutupDivisi,
                     onIngatkanOrang = onIngatkanOrang,
                     onIngatkanDivisi = onIngatkanDivisi,
+                    aturan = aturan,
                 )
             }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onPlaced { c ->
+                        // E2E-R2 N-02: simpan Aturan pelaporan → kepatuhan dimuat ulang dan
+                        // tinggi modul di atas berubah (mis. banner terkunci muncul). Tanpa
+                        // jangkar, kartu aturan bergeser ratusan px dan ketukan berikut
+                        // mengenai chip lain. Bila bagian bawah sedang terlihat, gulir
+                        // digeser sebesar selisihnya sehingga target sentuh diam di tempat.
+                        val y = c.positionInParent().y
+                        val lama = yBawahLama[0]
+                        yBawahLama[0] = y
+                        val awal = gulirStabil[0]
+                        val terlihat = !lama.isNaN() && awal + gulir.viewportSize > lama
+                        if (terlihat && y != lama && awal > 0 && !gulir.isScrollInProgress) {
+                            val tujuan = (awal + (y - lama)).toInt()
+                            if (tujuan != gulir.value) cakupan.launch { gulir.scrollTo(tujuan) }
+                        }
+                    },
+                verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
+            ) { bawah() }
         }
         SnackbarHost(
             hostState = snackbar,
@@ -197,6 +257,7 @@ private fun IsiKepatuhan(
     onBukaTutupDivisi: (String?) -> Unit,
     onIngatkanOrang: (String) -> Unit,
     onIngatkanDivisi: (String) -> Unit,
+    aturan: AturanTenggat?,
 ) {
     val warna = LocalMkColors.current
 
@@ -204,7 +265,7 @@ private fun IsiKepatuhan(
     Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
         Text(text = "Kepatuhan laporan", style = MkTypography.title3, color = warna.ink)
         Text(text = kalimatJawaban(meja, mode), style = MkTypography.body, color = warna.ink)
-        teksPenunjang(meja, mode)?.let { Text(text = it, style = MkTypography.footnote, color = warna.ink2) }
+        teksPenunjang(meja, mode, aturan)?.let { Text(text = it, style = MkTypography.footnote, color = warna.ink2) }
     }
     MkSegmentedControl(
         options = listOf(
@@ -215,8 +276,8 @@ private fun IsiKepatuhan(
         onPilih = { nilai -> onPilihMode(nilai.dariNama()) },
     )
 
-    // Lewat tenggat harian 17.00 WIB: banner kecil + tombol Ingatkan nonaktif.
-    if (meja.terkunci) BannerTenggat()
+    // Lewat tenggat harian (jam batas PT) / ditutup: banner kecil + tombol Ingatkan nonaktif.
+    if (meja.terkunci) BannerTenggat(teks = teksBannerTerkunci(aturan))
 
     val divisiTampil = if (mode == ModeKepatuhan.MINGGUAN) {
         meja.divisi
@@ -261,6 +322,7 @@ private fun IsiKepatuhan(
                         mengirim = mengirim,
                         onIngatkanOrang = onIngatkanOrang,
                         onIngatkanDivisi = onIngatkanDivisi,
+                        aturan = aturan,
                     )
                 }
                 if (index < divisiTampil.lastIndex) MkDivider()
@@ -269,9 +331,9 @@ private fun IsiKepatuhan(
     }
 }
 
-/** Banner kecil "Sudah lewat tenggat" saat laporan harian terkunci 17.00 WIB. */
+/** Banner kecil "Sudah lewat tenggat" saat laporan harian terkunci (teks dari aturan PT). */
 @Composable
-private fun BannerTenggat() {
+private fun BannerTenggat(teks: String) {
     val warna = LocalMkColors.current
     Row(
         modifier = Modifier
@@ -284,7 +346,7 @@ private fun BannerTenggat() {
     ) {
         Icon(imageVector = Icons.Outlined.Schedule, contentDescription = null, tint = warna.statusLate)
         Text(
-            text = "Sudah lewat tenggat 17.00 WIB — tombol pengingat aktif lagi besok.",
+            text = teks,
             style = MkTypography.footnote,
             color = warna.statusLate,
         )
@@ -390,6 +452,7 @@ private fun DetailDivisi(
     mengirim: String?,
     onIngatkanOrang: (String) -> Unit,
     onIngatkanDivisi: (String) -> Unit,
+    aturan: AturanTenggat?,
 ) {
     val warna = LocalMkColors.current
     val bolehKirim = meja.bolehIngatkan && !meja.terkunci
@@ -419,7 +482,7 @@ private fun DetailDivisi(
                 Text(
                     text = divisi.diserahkanIso
                         ?.let { "Diserahkan ${relatifKecil(it)}" }
-                        ?: "Tenggat serah terima Kamis 17.00 WIB.",
+                        ?: teksTenggatMingguan(meja.tenggatSerahIso, aturan),
                     style = MkTypography.caption,
                     color = warna.ink2,
                 )
@@ -633,7 +696,7 @@ internal fun kalimatJawaban(meja: MejaKepatuhan, mode: ModeKepatuhan): String = 
 }
 
 /** Footnote penunjang di bawah kalimat jawaban. */
-internal fun teksPenunjang(meja: MejaKepatuhan, mode: ModeKepatuhan): String? = when (mode) {
+internal fun teksPenunjang(meja: MejaKepatuhan, mode: ModeKepatuhan, aturan: AturanTenggat? = null): String? = when (mode) {
     ModeKepatuhan.HARIAN -> when {
         meja.cuti > 0 && meja.tanpaDivisi > 0 ->
             "${meja.cuti} orang cuti/izin tidak dihitung · ${meja.tanpaDivisi} PIC belum masuk divisi mana pun."
@@ -641,7 +704,7 @@ internal fun teksPenunjang(meja: MejaKepatuhan, mode: ModeKepatuhan): String? = 
         meja.tanpaDivisi > 0 -> "${meja.tanpaDivisi} PIC belum masuk divisi mana pun."
         else -> null
     }
-    ModeKepatuhan.MINGGUAN -> "Tenggat serah terima Kamis 17.00 WIB."
+    ModeKepatuhan.MINGGUAN -> teksTenggatMingguan(meja.tenggatSerahIso, aturan)
 }
 
 /** Subjudul baris orang: "Manager · 2 jam lalu · SIM RS Bhakti Rahayu". */

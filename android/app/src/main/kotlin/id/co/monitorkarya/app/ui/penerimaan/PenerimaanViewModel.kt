@@ -8,8 +8,13 @@
 // menandai baris "Beku — perlu buka kunci" TANPA memutus loop teruskan semua;
 // sukses dengan undoToken ditawarkan "Urungkan" (Snackbar aksi) yang memanggil
 // UndoApi (POST /api/undo; tiket 15 menit, sekali pakai — kontrak T5-B1).
+// LURING (A1-LURING.md §6): "Teruskan" TIDAK diantre outbox — meneruskan adalah
+// pengesahan atas isi yang dilihat Admin PT saat itu dan membekukan laporan PIC;
+// bila terkirim belakangan, isi bisa sudah berubah. Tiket Urungkan 15 menit juga
+// hanya bermakna bila jawaban server diterima seketika. Luring = galat + coba lagi.
 package id.co.monitorkarya.app.ui.penerimaan
 
+import id.co.monitorkarya.core.domain.teks.labelPic
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.Module
@@ -395,7 +400,7 @@ private fun barisHarian(d: InboxHarianDto, bekuIds: Set<String>): AntreanItem {
     }
     val sub = listOfNotNull(
         d.code.takeIf { it.isNotBlank() },
-        d.picName?.let { "PIC $it" },
+        d.picName?.let { labelPic(it) }, // E2E-R2-3 N2: tanpa "PIC PIC …"
         jamWib(d.submittedAt)?.let { "dikirim $it WIB" },
         if (d.reportId != null) "${d.evidenceCount} bukti" else null,
         if (beku) "perlu buka kunci" else null,
@@ -457,7 +462,8 @@ private fun susunDukungan(isi: InboxResponse): String? {
         if (hitung == null || hitung.passed) {
             jamKunci?.let { "Kunci harian pukul $it WIB." }
         } else {
-            "Kunci harian ${hitung.hours} jam ${hitung.minutes} menit lagi (${jamKunci ?: "17.00"} WIB)."
+            // Jam dari dailyLockAt server (aturan pelaporan PT), tanpa jam tebakan.
+            "Kunci harian ${hitung.hours} jam ${hitung.minutes} menit lagi" + (jamKunci?.let { " ($it WIB)." } ?: ".")
         }
     }
     return listOfNotNull(bagianMasuk, bagianKunci).joinToString(" ").ifEmpty { null }

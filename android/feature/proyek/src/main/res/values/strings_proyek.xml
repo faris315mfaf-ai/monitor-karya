@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Teks tetap tab Proyek. Kalimat dinamis (jawaban, dukungan, status) disusun di domain/Tampilan.kt. -->
+<resources>
+    <string name="proyek_judul">Proyek</string>
+    <string name="proyek_konteks">Holding · anak perusahaan · proyek · laporan</string>
+    <string name="proyek_ajukan">Ajukan proyek</string>
+    <string name="proyek_cari_label">Cari proyek</string>
+    <string name="proyek_cari_placeholder">Cari nama proyek</string>
+    <string name="proyek_tahap_label">Tahap proyek</string>
+    <string name="proyek_semua_tahap">Semua tahap</string>
+    <string name="proyek_hapus_saringan">Hapus saringan</string>
+    <string name="proyek_antrean_judul">Menunggu keputusan Anda</string>
+    <string name="proyek_antrean_sub">Setujui di tempat, atau buka detail untuk membaca penjelasan dan menolak dengan alasan.</string>
+    <string name="proyek_daftar_judul">Daftar proyek</string>
+    <string name="proyek_lainnya_judul">Proyek lainnya</string>
+    <string name="proyek_muat_lagi">Muat lagi</string>
+    <string name="proyek_memuat">Memuat…</string>
+    <string name="proyek_setujui">Setujui</string>
+    <string name="proyek_tolak">Tolak</string>
+    <string name="proyek_batal">Batal</string>
+    <string name="proyek_menyimpan">Menyimpan…</string>
+    <string name="proyek_mengirim">Mengirim…</string>
+    <string name="proyek_kosong_pengajuan">Belum ada pengajuan yang menunggu.</string>
+    <string name="proyek_kosong_status">Belum ada proyek dengan status ini.</string>
+    <string name="proyek_kosong_saringan">Tidak ada proyek yang cocok dengan saringan ini.</string>
+    <string name="proyek_galat_daftar">Daftar proyek belum termuat.</string>
+    <string name="proyek_urungkan">Urungkan</string>
+
+    <!-- Detail -->
+    <string name="proyek_detail_kembali">Proyek</string>
+    <string name="proyek_ubah">Ubah proyek</string>
+    <string name="proyek_ajukan_ulang">Ajukan ulang</string>
+    <string name="proyek_setujui_pengajuan">Setujui pengajuan</string>
+    <string name="proyek_tolak_pengajuan">Tolak pengajuan</string>
+    <string name="proyek_alasan_penolakan">Alasan penolakan</string>
+    <string name="proyek_catatan_pengaju">Catatan untuk pengaju</string>
+    <string name="proyek_alasan_hint">Minimal 5 karakter agar pengaju tahu yang perlu diperbaiki.</string>
+    <string name="proyek_catatan_hint">Opsional.</string>
+    <string name="proyek_penjelasan">Penjelasan</string>
+    <string name="proyek_tujuan">Tujuan</string>
+    <string name="proyek_persetujuan">Persetujuan</string>
+    <string name="proyek_tanpa_persetujuan">Tanpa persetujuan</string>
+    <string name="proyek_laporan_terlambat">Laporan terlambat</string>
+    <string name="proyek_hapus">Hapus proyek</string>
+    <string name="proyek_hapus_ket">Proyek yang sudah punya laporan hanya bisa diarsipkan.</string>
+    <string name="proyek_menghapus">Menghapus…</string>
+    <string name="proyek_arsipkan">Arsipkan proyek</string>
+    <string name="proyek_arsipkan_judul">Arsipkan proyek ini?</string>
+    <string name="proyek_tahapan">Tahapan proyek</string>
+    <string name="proyek_atur_tahapan">Atur tahapan</string>
+    <string name="proyek_susun_tahapan">Susun tahapan</string>
+    <string name="proyek_tahapan_kosong">Belum ada tahapan bertanggal.</string>
+    <string name="proyek_usulkan_tenggat">Usulkan tenggat baru</string>
+    <string name="proyek_tarik_usulan">Tarik usulan</string>
+    <string name="proyek_riwayat">Riwayat laporan harian</string>
+    <string name="proyek_riwayat_kosong">Belum ada laporan harian.</string>
+    <string name="proyek_output">Output proyek</string>
+    <string name="proyek_output_kosong">Belum ada output untuk proyek ini.</string>
+    <string name="proyek_eskalasi">Eskalasi terkait</string>
+    <string name="proyek_eskalasi_kosong">Tidak ada eskalasi dari laporan proyek ini.</string>
+
+    <!-- Formulir -->
+    <string name="proyek_form_pt">PT pemilik proyek</string>
+    <string name="proyek_form_pilih_pt">Pilih PT</string>
+    <string name="proyek_form_nama">Nama proyek</string>
+    <string name="proyek_form_nama_hint">Minimal 5 karakter.</string>
+    <string name="proyek_form_nama_ph">mis. Pembangunan Gudang Distribusi Timur</string>
+    <string name="proyek_form_penjelasan_hint">Minimal 20 karakter agar penyetuju paham.</string>
+    <string name="proyek_form_penjelasan_ph">Apa yang dibangun atau dikerjakan, lingkupnya, dan perkiraan kebutuhan.</string>
+    <string name="proyek_form_tujuan">Tujuan atau manfaat</string>
+    <string name="proyek_form_tujuan_ph">Manfaat bagi PT, target yang ingin dicapai.</string>
+    <string name="proyek_form_fase">Tahap awal</string>
+    <string name="proyek_form_fase_kosong">Belum ditentukan (dianggap Inisiasi)</string>
+    <string name="proyek_form_pic">PIC atau manager proyek</string>
+    <string name="proyek_form_pic_kosong">Kosongkan, tentukan nanti</string>
+    <string name="proyek_form_divisi">Divisi pelaksana</string>
+    <string name="proyek_form_divisi_kosong">Ikuti divisi PIC</string>
+    <string name="proyek_form_mulai">Rencana mulai</string>
+    <string name="proyek_form_selesai">Target selesai</string>
+    <string name="proyek_form_terkait">PT yang berkaitan</string>
+    <string name="proyek_form_status">Status proyek</string>
+    <string name="proyek_form_lewati">Daftarkan tanpa persetujuan (tahap awal)</string>
+    <string name="proyek_form_simpan">Simpan perubahan</string>
+    <string name="proyek_form_buat">Buat proyek</string>
+    <string name="proyek_form_galat_opsi">Pilihan PT dan PIC belum termuat.</string>
+
+    <!-- Tahapan & tenggat -->
+    <string name="proyek_tahap_baru">Tahap baru</string>
+    <string name="proyek_tahap_ubah">Ubah tahap</string>
+    <string name="proyek_tahap_batal_ubah">Batal ubah</string>
+    <string name="proyek_tahap_nama">Nama tahap</string>
+    <string name="proyek_tahap_nama_ph">Mis. Uji coba gelombang 2</string>
+    <string name="proyek_tahap_mulai">Mulai</string>
+    <string name="proyek_tahap_selesai">Selesai</string>
+    <string name="proyek_tahap_status">Status</string>
+    <string name="proyek_tahap_catatan">Catatan</string>
+    <string name="proyek_tahap_alasan">Alasan tertahan</string>
+    <string name="proyek_tahap_tambah">Tambah tahap</string>
+    <string name="proyek_tahap_simpan">Simpan tahap</string>
+    <string name="proyek_tahap_hapus_judul">Hapus tahap ini?</string>
+    <string name="proyek_tahap_hapus">Hapus tahap</string>
+    <string name="proyek_usul_tanggal">Tenggat baru</string>
+    <string name="proyek_usul_alasan">Alasan</string>
+    <string name="proyek_usul_alasan_hint">Tulis faktanya: apa yang menggeser jadwal dan berapa lama.</string>
+    <string name="proyek_usul_kirim">Kirim usulan</string>
+    <string name="proyek_usul_setujui">Setujui usulan</string>
+    <string name="proyek_usul_tolak">Tolak usulan</string>
+    <string name="proyek_form_tanpa_kandidat">Belum ada akun manager proyek di PT ini.</string>
+    <string name="proyek_form_tanpa_pt_lain">Tidak ada PT lain.</string>
+    <string name="proyek_form_pilih_pt_dulu">Pilih PT pemilik dulu.</string>
+    <string name="proyek_form_terkait_jumlah">Proyek ini akan tampil juga di daftar proyek %1$d PT terkait.</string>
+    <string name="proyek_form_terkait_hint">Boleh lebih dari satu. Proyek ikut tampil di daftar PT yang dipilih.</string>
+    <string name="proyek_tanggal_pilih">Pilih</string>
+    <string name="proyek_tanggal_kosongkan">Kosongkan</string>
+</resources>

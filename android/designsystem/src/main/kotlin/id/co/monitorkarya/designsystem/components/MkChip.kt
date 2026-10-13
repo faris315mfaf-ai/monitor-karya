@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,7 +31,7 @@ import id.co.monitorkarya.designsystem.theme.MkTypography
 import id.co.monitorkarya.designsystem.theme.PreviewGanda
 
 /**
- * Chip filter kapsul (port Chip web): tinggi 36dp, latar fill1; yang terpilih
+ * Chip filter kapsul (port Chip web): tinggi visual 36dp (area sentuh 48dp bila bisa diketuk), latar fill1; yang terpilih
  * berlatar ink dengan teks surface agar tidak bersaing dengan tombol primer.
  * Titik warna status opsional dan lencana jumlah kecil (angka selalu tampil, termasuk 0).
  * Tekan mengecilkan ke 0.96; hormati LocalReducedMotion.
@@ -49,9 +50,17 @@ fun MkChip(
     val interactionSource = remember { MutableInteractionSource() }
     val skala = mkTekanSkala(interactionSource, 0.96f)
     val latar = if (selected) warna.ink else warna.fill1
-    val isi = if (selected) warna.surface else warna.ink
+    // Nonaktif eksplisit: teks ink-2 (>=4.5:1 di fill-1); chip statis (onClick null) tetap normal.
+    val isi = when {
+        selected -> warna.surface
+        !enabled -> warna.ink2
+        else -> warna.ink
+    }
+    val dapatDiklik = onClick != null
     Row(
         modifier = modifier
+            // Area sentuh >=48dp untuk chip yang bisa diketuk; ukuran visual tetap 36dp.
+            .then(if (dapatDiklik) Modifier.minimumInteractiveComponentSize() else Modifier)
             .height(36.dp)
             .clip(MkShapes.penuh)
             .graphicsLayer {
@@ -59,6 +68,7 @@ fun MkChip(
                 scaleY = skala
             }
             .background(latar, MkShapes.penuh)
+            .mkCincinFokus(interactionSource, MkShapes.penuh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

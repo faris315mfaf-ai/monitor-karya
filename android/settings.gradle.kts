@@ -25,4 +25,12 @@ include(
     ":core:data",
     ":core:domain",
     ":core:testing",
+    ":feature:proyek",
+    ":feature:eskalasi",
+    ":feature:persetujuan",
+    ":feature:notifikasi",
+    ":feature:entitas",
+    ":feature:audit",
+    ":feature:ringkasangrup",
+    ":feature:pesan",
 )

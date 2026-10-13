@@ -42,9 +42,11 @@ class LaporanRepo @Inject constructor(private val dao: DailyReportDao) {
      * Jujur daring: jawaban server final; saat luring balik [HasilKirim.Luring]
      * dan TIDAK ada yang ditulis lokal sebagai "terkirim". Baris Room dibiarkan
      * apa adanya — penyegaran terjadi lewat [tarik] (SyncWorker atau tarik ulang).
+     * [kunciIdempotensi] (gelombang E): ulangan dibalas jawaban pertama sehingga
+     * `submittedAt` tidak bergeser ke waktu ulangan.
      */
-    suspend fun kirim(api: DailyInputApi, permintaan: DailyInputRequest): HasilKirim =
-        tulisApi({ api.simpan(permintaan) }) { /* tidak ada yang ditimpa lokal */ }
+    suspend fun kirim(api: DailyInputApi, permintaan: DailyInputRequest, kunciIdempotensi: String? = null): HasilKirim =
+        tulisApi({ api.simpan(permintaan, kunciIdempotensi) }) { /* tidak ada yang ditimpa lokal */ }
 
     private fun DailyReportRowDto.keEntity(tersinkronPada: Long): DailyReportEntity? {
         // Kolom tanggal kanonik: epoch millis tengah malam WIB (Wib.keEpochMillis).

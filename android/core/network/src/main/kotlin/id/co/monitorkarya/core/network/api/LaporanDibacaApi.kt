@@ -5,7 +5,7 @@ import id.co.monitorkarya.core.network.dto.LaporanDibacaResponse
 import id.co.monitorkarya.core.network.dto.OkResponse
 import retrofit2.Response
 import retrofit2.http.Body
-import retrofit2.http.DELETE
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 
 /**
@@ -24,6 +24,9 @@ interface LaporanDibacaApi {
     @POST("api/ringkasan/laporan-dibaca")
     suspend fun tandaiDibaca(@Body body: LaporanDibacaRequest): Response<LaporanDibacaResponse>
 
-    @DELETE("api/ringkasan/laporan-dibaca")
+    // D1: Retrofit menolak `@DELETE` + `@Body` ("Non-body HTTP method cannot
+    // contain @Body") saat dipanggil — pakai @HTTP(hasBody = true). Route web
+    // DELETE membaca `req.json()` (src/app/api/ringkasan/laporan-dibaca/route.ts).
+    @HTTP(method = "DELETE", path = "api/ringkasan/laporan-dibaca", hasBody = true)
     suspend fun batalTandai(@Body body: LaporanDibacaRequest): Response<OkResponse>
 }

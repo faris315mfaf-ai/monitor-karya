@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -25,7 +26,8 @@ import id.co.monitorkarya.designsystem.theme.PreviewGanda
 
 /**
  * Tombol ikon bulat 44dp transparan untuk aksi yang sudah dikenal (cari, notifikasi, tutup).
- * Ikon 20dp; tekan mengecilkan ke 0.94 (hormati LocalReducedMotion).
+ * Ikon 20dp; tekan mengecilkan ke 0.94 (hormati LocalReducedMotion). Area sentuh 48dp,
+ * cincin fokus 2dp `--focus`, nonaktif berikon ink-3 (token teks/ikon nonaktif).
  * Parameter [label] wajib — dibacakan pembaca layar.
  */
 @Composable
@@ -41,12 +43,14 @@ fun MkIconBtn(
     val skala = mkTekanSkala(interactionSource, 0.94f)
     Box(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .size(44.dp)
             .clip(CircleShape)
             .graphicsLayer {
                 scaleX = skala
                 scaleY = skala
             }
+            .mkCincinFokus(interactionSource, CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -59,7 +63,7 @@ fun MkIconBtn(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = warna.ink,
+            tint = if (enabled) warna.ink else warna.ink3,
             modifier = Modifier.size(20.dp),
         )
     }

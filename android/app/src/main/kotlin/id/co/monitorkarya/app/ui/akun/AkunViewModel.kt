@@ -11,19 +11,30 @@
 //        rute daftar: GET /api/companies/users hanya mengembalikan keanggotaan
 //        divisi SATU akun (T6-C2). Respons membawa me, scope, manageableRoles,
 //        dan users per perusahaan — sama seperti yang dipakai web.
-//   PATCH /api/companies/users        — isActive (aktif/nonaktif) dan password
+//   POST  /api/companies/users        — tambah akun (wizard BUG-03, FormAkun.kt);
+//        sandi awal acak dibuat klien, dikirim, lalu diserahkan sekali.
+//   PATCH /api/companies/users        — isActive (aktif/nonaktif), password
 //        (setel ulang; server memaksa pemiliknya mengganti saat masuk
-//        berikutnya, F1-C).
+//        berikutnya, F1-C), dan "Ubah data akun" (nama/username/email/
+//        jabatan/telepon/posisi + tautan divisi/proyek).
 //   GET   /api/companies/users/activation?id= — boleh menerbitkan tautan?
 //   POST  /api/companies/users/activation     — terbitkan ulang tautan
 //        aktivasi (24 jam, sekali pakai; 20/pengelola dan 5/akun per 15 menit).
 //
-// Keamanan: kata sandi TIDAK PERNAH ditampilkan, disimpan, atau dicatat —
-// setel ulang mengirim sandi acak yang hanya hidup di dalam permintaan PATCH
-// lalu dibuang. Tautan aktivasi hanya ditampilkan di sheet untuk disalin;
-// tidak ada panggilan Log dengan tautan/token di berkas ini.
+// Keamanan (C3-T1): setel ulang membuat sandi acak, mengirimnya lewat PATCH,
+// lalu menampilkannya SEKALI di sheet (salin bertanda sensitif) supaya Admin PT
+// bisa menyerahkannya langsung — pola serah terima feature/entitas. Nilai hanya
+// hidup di MEMORI ViewModel ([Rahasia], toString disamarkan), tidak masuk
+// SavedStateHandle/Bundle/log, dan dibuang saat sheet ditutup atau akun lain
+// dibuka. Tautan aktivasi diperlakukan sama.
+// LURING (A1-LURING.md §6): semua aksi meja akun (aktif/nonaktif, setel ulang
+// sandi, terbitkan aktivasi) TIDAK diantre — menyangkut keamanan akses dan
+// tautan/sandi sekali tampil harus diterima seketika. Luring = galat + coba lagi.
 package id.co.monitorkarya.app.ui.akun
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,6 +46,7 @@ import id.co.monitorkarya.core.network.dto.TerbitkanAktivasiRequest
 import java.security.SecureRandom
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -88,7 +100,18 @@ data class AkunBaris(
     /** false = belum pernah diatur -> menunggu aktivasi / wajib ganti sandi. */
     val punyaSandi: Boolean = true,
     val pernahMasukIso: String? = null,
+    /** Telepon (phone) — dipakai formulir "Ubah data akun". */
+    val telepon: String? = null,
+    /** Divisi yang dipimpin (kepala divisi) / proyek yang dipegang (PIC). */
+    val namaDivisiDipimpin: String? = null,
+    val namaProyekDipegang: String? = null,
 )
+
+/** Divisi aktif PT (GET /api/companies companies[].divisions). */
+data class DivisiPt(val id: String, val nama: String, val namaKepala: String? = null)
+
+/** Proyek DIUSULKAN/AKTIF PT (companies[].projects). */
+data class ProyekPt(val id: String, val nama: String, val namaPic: String? = null)
 
 /** Meja akun PT sendiri beserta batas wewenang pemegangnya. */
 data class MejaAkun(
@@ -97,6 +120,12 @@ data class MejaAkun(
     /** manageableRoles dari server; cadangannya ADMIN_PT_MANAGED_ROLES rbac.ts. */
     val peranKelola: Set<String>,
     val akun: List<AkunBaris>,
+    /** Id PT meja ini — dikirim sebagai entityId saat menambah akun. */
+    val idPt: String? = null,
+    /** "PT" / "HOLDING". */
+    val tipePt: String? = null,
+    val divisi: List<DivisiPt> = emptyList(),
+    val proyek: List<ProyekPt> = emptyList(),
 ) {
 
     /** Akun sendiri: tidak bisa dinonaktifkan dari sini (server juga menolak 409). */
@@ -124,6 +153,19 @@ data class JumlahAkun(
     val kepalaDivisi: Int = 0,
     val picProyek: Int = 0,
 )
+
+/**
+ * Nilai rahasia (kata sandi) di memori. toString disamarkan agar tidak bocor
+ * ke log/laporan crash lewat toString data class pembungkusnya.
+ */
+class Rahasia(val nilai: String) {
+    override fun toString(): String = "Rahasia(***)"
+    override fun equals(other: Any?): Boolean = other is Rahasia && other.nilai == nilai
+    override fun hashCode(): Int = nilai.hashCode()
+}
+
+/** Sandi hasil setel ulang untuk diserahkan; [sandi] = yang BENAR-BENAR terkirim. */
+data class SandiBaru(val idAkun: String, val username: String?, val sandi: Rahasia)
 
 /** Tautan aktivasi sekali pakai hasil POST activation; hanya hidup di UI. */
 data class TautanAktivasi(
@@ -156,6 +198,8 @@ data class SheetAkun(
     /** GET activation?id= — true = boleh menerbitkan; null = belum dicek. */
     val aktivasiTersedia: Boolean? = null,
     val tautan: TautanAktivasi? = null,
+    /** Sandi hasil setel ulang — tampil sekali sampai sheet ditutup (C3-T1). */
+    val sandiBaru: SandiBaru? = null,
     val galat: String? = null,
     val aksi: AksiBerjalan? = null,
 )
@@ -257,6 +301,7 @@ class AkunViewModel @Inject constructor(
                 namaPt = meja.namaPt,
                 aktivasiTersedia = e.aktivasiTersedia,
                 tautan = e.tautan,
+                sandiBaru = e.sandiBaru?.takeIf { it.idAkun == akun.id },
                 galat = e.galat,
                 aksi = e.aksi,
             )
@@ -268,19 +313,70 @@ class AkunViewModel @Inject constructor(
     /** Snackbar satu-kali hasil aksi (aktifkan/nonaktifkan/setel ulang sandi). */
     val notifikasi: StateFlow<NotifAkun?> = _notifikasi.asStateFlow()
 
+    private val _menyegarkan = MutableStateFlow(false)
+
+    /** Tarik-untuk-muat-ulang sedang berjalan (daftar tetap tampil). */
+    val menyegarkan: StateFlow<Boolean> = _menyegarkan.asStateFlow()
+
+    /**
+     * Wizard tambah/ubah akun (BUG-03). State Compose di memori ViewModel —
+     * isian langsung sinkron dengan medan teks, bertahan saat rotasi, dan
+     * sandi awal tidak pernah masuk Bundle/SavedStateHandle/log. null = tertutup.
+     */
+    var wizard by mutableStateOf<WizardAkunUi?>(null)
+        private set
+
+    /** Pemuatan daftar yang sedang berjalan (cegah muat ganda saat layar tampil). */
+    private var jobMuat: Job? = null
+
+    /** Permintaan buat/ubah akun yang sedang berjalan (wizard baru ditahan sampai selesai). */
+    private var jobKirim: Job? = null
+
     init {
         muat()
     }
 
     /** Menarik meja akun; status kembali ke Memuat agar layar menampilkan kerangka. */
     fun muat() {
-        viewModelScope.launch {
+        jobMuat = viewModelScope.launch {
             _state.value = AkunUiState.Memuat
             muatInternal()
         }
     }
 
     fun ulang() = muat()
+
+    /**
+     * BUG-12: dipanggil setiap kali Meja akun tampil lagi (ViewModel terikat
+     * entri NavHost tab, jadi init tidak terulang). Bila daftar sudah ada,
+     * muat ulang diam-diam tanpa kerangka; galat muat ulang diam tidak
+     * menghapus daftar yang sudah tampil.
+     */
+    fun saatTampil() {
+        if (jobMuat?.isActive == true) return
+        if (_state.value is AkunUiState.Siap) {
+            jobMuat = viewModelScope.launch { segarkanDiam() }
+        } else {
+            muat()
+        }
+    }
+
+    /** Tarik-untuk-muat-ulang: daftar tetap tampil; galat lewat snackbar. */
+    fun segarkan() {
+        if (_menyegarkan.value) return
+        if (_state.value !is AkunUiState.Siap) {
+            muat()
+            return
+        }
+        _menyegarkan.value = true
+        jobMuat = viewModelScope.launch {
+            try {
+                segarkanDiam()?.let { galat -> _notifikasi.value = NotifAkun(System.nanoTime(), galat) }
+            } finally {
+                _menyegarkan.value = false
+            }
+        }
+    }
 
     fun setCari(teks: String) {
         _cari.value = teks
@@ -344,30 +440,33 @@ class AkunViewModel @Inject constructor(
     }
 
     /**
-     * Setel ulang kata sandi (PATCH password). Sandi acak dibuat lokal, hanya
-     * dikirim di dalam permintaan, lalu dibuang — tidak pernah disimpan di
-     * state, ditampilkan, atau dicatat. Route ini belum mengembalikan tautan
-     * aktivasi, jadi setelah sukses kelayakan aktivasi dicek ulang: bila akun
-     * bisa diaktifkan, sheet menawarkan "Terbitkan tautan aktivasi" supaya
-     * pemegang akun membuat kata sandinya sendiri (serah terima tautan).
+     * Setel ulang kata sandi (PATCH password) — DESTRUKTIF: sandi lama berhenti
+     * berlaku, jadi layar WAJIB meminta konfirmasi sebelum memanggil ini.
+     * Sandi acak dibuat lokal, dikirim, lalu ditampilkan sekali di sheet
+     * ([SheetAkun.sandiBaru]) untuk diserahkan; tanpa itu pemegang akun yang
+     * sudah pernah masuk terkunci (server tidak menerbitkan aktivasi untuknya).
      */
     fun setelUlangSandi(akun: AkunBaris) {
+        // Pagar klik ganda: ditandai sinkron sebelum launch.
         if (_ekstra.value.aksi != null) return
+        _ekstra.update {
+            it.copy(aksi = AksiBerjalan(AksiMeja.SETEL_ULANG_SANDI, akun.id), galat = null, sandiBaru = null)
+        }
         viewModelScope.launch {
-            _ekstra.update { it.copy(aksi = AksiBerjalan(AksiMeja.SETEL_ULANG_SANDI, akun.id), galat = null) }
             try {
-                val res = api.ubah(AkunUbahRequest(id = akun.id, password = sandiAcak()))
+                val sandi = Rahasia(sandiAcak())
+                val res = api.ubah(AkunUbahRequest(id = akun.id, password = sandi.nilai))
                 if (res.isSuccessful) {
+                    // Sheet bisa sudah ditutup/berpindah akun selama permintaan
+                    // berjalan: sandi hanya disimpan untuk sheet akun yang sama.
+                    if (_terpilih.value == akun.id) {
+                        _ekstra.update { it.copy(sandiBaru = SandiBaru(akun.id, akun.username, sandi)) }
+                    }
                     muatInternal()
-                    val bisaAktivasi = cekAktivasiSuspen(akun.id)
-                    _ekstra.update { it.copy(aktivasiTersedia = bisaAktivasi) }
+                    segarkanAktivasi(akun)
                     _notifikasi.value = NotifAkun(
                         id = System.nanoTime(),
-                        pesan = if (bisaAktivasi) {
-                            "Kata sandi diatur ulang. Terbitkan tautan aktivasi supaya pemegang akun membuat kata sandinya sendiri."
-                        } else {
-                            "Kata sandi baru sudah berlaku. Pemegang akun wajib menggantinya saat masuk berikutnya."
-                        },
+                        pesan = "Kata sandi ${akun.nama} diatur ulang. Salin lalu sampaikan langsung ke pemegang akun.",
                     )
                 } else {
                     _ekstra.update { it.copy(galat = ApiError.dari(HttpException(res)).pesanTampil()) }
@@ -418,6 +517,159 @@ class AkunViewModel @Inject constructor(
     }
 
     // ------------------------------------------------------------------
+    // Wizard tambah akun / ubah data akun (BUG-03)
+    // ------------------------------------------------------------------
+
+    private fun mejaSiap(): MejaAkun? = (_state.value as? AkunUiState.Siap)?.meja
+
+    /** Buka wizard "Tambah akun"; sandi awal acak dibuat SEKALI di sini. */
+    fun bukaTambahAkun() {
+        val meja = mejaSiap() ?: return
+        if (wizard != null || jobKirim?.isActive == true) return
+        pilih(null)
+        wizard = WizardAkunUi(
+            form = FormAkun(peran = posisiBoleh(meja.peranKelola).firstOrNull()?.peran.orEmpty()),
+            sandi = Rahasia(sandiAcak()),
+        )
+    }
+
+    /** Buka wizard "Ubah data akun" untuk akun yang boleh dikelola. */
+    fun bukaUbahAkun(akun: AkunBaris) {
+        val meja = mejaSiap() ?: return
+        if (wizard != null || jobKirim?.isActive == true || !meja.bisaKelola(akun)) return
+        pilih(null)
+        wizard = WizardAkunUi(form = formDariAkun(akun))
+    }
+
+    /** Ubah isian; galat server lama dibuang karena isian sudah berubah. */
+    fun ubahFormAkun(ubah: (FormAkun) -> FormAkun) {
+        val w = wizard ?: return
+        if (w.sibuk || w.hasil != null) return
+        val baru = ubah(w.form)
+        if (baru != w.form) wizard = w.copy(form = baru, galat = null)
+    }
+
+    fun lanjutWizard() {
+        val w = wizard ?: return
+        val meja = mejaSiap() ?: return
+        if (w.sibuk || w.hasil != null) return
+        wizard = w.copy(form = lanjut(w.form, meja.peranKelola))
+    }
+
+    fun kembaliWizard() {
+        val w = wizard ?: return
+        if (w.sibuk || w.hasil != null) return
+        wizard = w.copy(form = kembali(w.form))
+    }
+
+    /**
+     * Tutup wizard. Bila permintaan buat akun masih berjalan, hasilnya tetap
+     * ditampilkan saat selesai (sheet dibuka lagi) supaya sandi awal tidak hilang.
+     */
+    fun tutupWizard() {
+        wizard = null
+    }
+
+    /**
+     * Kirim wizard (POST tambah / PATCH ubah). Hanya daring: [luring] = true
+     * langsung ditolak dengan pesan — tidak ada antrean (A1-LURING.md §6).
+     */
+    fun kirimWizard(luring: Boolean) {
+        val w = wizard ?: return
+        val meja = mejaSiap() ?: return
+        if (w.sibuk || w.hasil != null) return
+        val salah = langkahSalahPertama(w.form, meja.peranKelola)
+        if (salah != null) {
+            wizard = w.copy(form = w.form.copy(langkah = salah, dicoba = w.form.dicoba + salah))
+            return
+        }
+        if (luring) {
+            wizard = w.copy(galat = PESAN_AKUN_LURING)
+            return
+        }
+        when (w.form.mode) {
+            ModeFormAkun.BARU -> kirimBaru(w, meja)
+            ModeFormAkun.UBAH -> kirimUbah(w, meja)
+        }
+    }
+
+    private fun kirimBaru(w: WizardAkunUi, meja: MejaAkun) {
+        val sandi = w.sandi ?: Rahasia(sandiAcak())
+        val req = keRequestBaru(w.form, sandi.nilai, meja.idPt)
+        wizard = w.copy(sibuk = true, galat = null, sandi = sandi)
+        jobKirim = viewModelScope.launch {
+            try {
+                val res = api.tambah(req)
+                val akun = res.body()?.account
+                if (res.isSuccessful) {
+                    val hasil = HasilAkunBaru(
+                        idAkun = akun?.id.orEmpty(),
+                        nama = akun?.name ?: req.name,
+                        username = akun?.username ?: req.username.orEmpty(),
+                        peran = akun?.role ?: req.role,
+                        sandi = sandi,
+                    )
+                    // Ditampilkan walau sheet sempat ditutup selama proses.
+                    _terpilih.value = null
+                    wizard = WizardAkunUi(form = w.form, sandi = sandi, hasil = hasil)
+                    muatInternal()
+                } else {
+                    gagalKirim(ApiError.dari(HttpException(res)).pesanTampil())
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                gagalKirim(pesanGalatKirimAkun(e))
+            }
+        }
+    }
+
+    private fun kirimUbah(w: WizardAkunUi, meja: MejaAkun) {
+        val asal = meja.akun.firstOrNull { it.id == w.form.idAkun }
+        if (asal == null) {
+            wizard = w.copy(galat = "Akun tidak ditemukan. Muat ulang daftar akun.")
+            return
+        }
+        val req = keRequestUbah(w.form, asal)
+        if (!adaPerubahan(req)) {
+            wizard = w.copy(galat = "Belum ada perubahan untuk disimpan.")
+            return
+        }
+        wizard = w.copy(sibuk = true, galat = null)
+        jobKirim = viewModelScope.launch {
+            try {
+                val res = api.ubah(req)
+                if (res.isSuccessful) {
+                    if (wizard?.form?.idAkun == asal.id) wizard = null
+                    muatInternal()
+                    _notifikasi.value = NotifAkun(
+                        id = System.nanoTime(),
+                        pesan = "Data akun ${w.form.nama.trim().ifEmpty { asal.nama }} tersimpan.",
+                    )
+                } else {
+                    gagalKirim(ApiError.dari(HttpException(res)).pesanTampil())
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                gagalKirim(pesanGalatKirimAkun(e))
+            }
+        }
+    }
+
+    /** Galat kirim: tampil di dekat tombol aksi, wizard pindah ke langkah yang perlu dibetulkan. */
+    private fun gagalKirim(pesan: String) {
+        val w = wizard
+        if (w == null) {
+            // Sheet sudah ditutup selama proses: galat tetap disampaikan.
+            _notifikasi.value = NotifAkun(System.nanoTime(), pesan)
+            return
+        }
+        val ke = langkahUntukGalatServer(pesan) ?: w.form.langkah
+        wizard = w.copy(sibuk = false, galat = pesan, form = w.form.copy(langkah = ke))
+    }
+
+    // ------------------------------------------------------------------
     // Internal
     // ------------------------------------------------------------------
 
@@ -425,6 +677,7 @@ class AkunViewModel @Inject constructor(
     private data class SheetEkstra(
         val aktivasiTersedia: Boolean? = null,
         val tautan: TautanAktivasi? = null,
+        val sandiBaru: SandiBaru? = null,
         val galat: String? = null,
         val aksi: AksiBerjalan? = null,
     )
@@ -443,6 +696,26 @@ class AkunViewModel @Inject constructor(
         } catch (e: Exception) {
             AkunUiState.Galat(ApiError.dari(e).pesanTampil())
         }
+    }
+
+    /** Muat ulang tanpa mengganti daftar bila gagal; mengembalikan pesan galat atau null. */
+    private suspend fun segarkanDiam(): String? = try {
+        val res = listApi.meja()
+        if (res.isSuccessful) {
+            val hasil = parseMeja(res.body() ?: JsonObject(emptyMap()))
+            if (hasil is AkunUiState.Siap) {
+                _state.value = hasil
+                null
+            } else {
+                (hasil as? AkunUiState.Galat)?.pesan
+            }
+        } else {
+            ApiError.dari(HttpException(res)).pesanTampil()
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        ApiError.dari(e).pesanTampil()
     }
 
     /** Cek kelayakan aktivasi untuk sheet yang masih terbuka pada akun ini. */
@@ -472,21 +745,19 @@ class AkunViewModel @Inject constructor(
     /** URL penuh tautan: origin = BASE_URL (berakhiran "/") + path dari server. */
     private fun urlAktivasi(path: String): String = BuildConfig.BASE_URL.trimEnd('/') + path
 
-    /**
-     * Sandi acak 14 karakter, alfabet tanpa huruf/angka mudah tertukar — sama
-     * dengan generatePassword web (src/lib/password-policy.ts, minimal 8).
-     * Nilainya hanya dipakai sebagai isi permintaan PATCH lalu dibuang.
-     */
-    private fun sandiAcak(): String {
-        val alfabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        val acak = SecureRandom()
-        return buildString { repeat(PANJANG_SANDI_ACAK) { append(alfabet[acak.nextInt(alfabet.length)]) } }
-    }
-
-    private companion object {
-        const val PANJANG_SANDI_ACAK = 14
-    }
 }
+
+/** Alfabet sandi acak tanpa huruf/angka mudah tertukar (generatePassword web). */
+internal const val ALFABET_SANDI = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+internal const val PANJANG_SANDI_ACAK = 14
+
+/**
+ * Sandi acak 14 karakter dari [ALFABET_SANDI] — sama dengan generatePassword
+ * web (src/lib/password-policy.ts, minimal 8).
+ */
+internal fun sandiAcak(acak: SecureRandom = SecureRandom()): String =
+    buildString { repeat(PANJANG_SANDI_ACAK) { append(ALFABET_SANDI[acak.nextInt(ALFABET_SANDI.length)]) } }
 
 // ------------------------------------------------------------------
 // Pencarian
@@ -504,6 +775,7 @@ internal fun parseMeja(root: JsonObject): AkunUiState {
     // companies wajib ada di respons sah; tanpa itu anggap badan rusak.
     val perusahaan = root.larik("companies")
     if (root["companies"] == null) return AkunUiState.Galat("Meja akun belum termuat. Coba lagi.")
+    val ptPertama = perusahaan.firstNotNullOfOrNull { it.objek() }
     val namaPt = perusahaan
         .firstNotNullOfOrNull { it.objek()?.teks("name") }
         ?: "perusahaan Anda"
@@ -524,6 +796,18 @@ internal fun parseMeja(root: JsonObject): AkunUiState {
                 ?.takeIf { it.isNotEmpty() }
                 ?: PERAN_KELOLA_CADANGAN,
             akun = akun,
+            idPt = ptPertama?.teks("id"),
+            tipePt = ptPertama?.teks("type"),
+            divisi = ptPertama?.larik("divisions").orEmpty().mapNotNull { el ->
+                val d = el.objek() ?: return@mapNotNull null
+                val id = d.teks("id") ?: return@mapNotNull null
+                DivisiPt(id = id, nama = d.teks("name") ?: id, namaKepala = d.teks("headName"))
+            },
+            proyek = ptPertama?.larik("projects").orEmpty().mapNotNull { el ->
+                val p = el.objek() ?: return@mapNotNull null
+                val id = p.teks("id") ?: return@mapNotNull null
+                ProyekPt(id = id, nama = p.teks("name") ?: id, namaPic = p.teks("picName"))
+            },
         ),
     )
 }
@@ -538,6 +822,9 @@ private fun parseAkun(u: JsonObject): AkunBaris = AkunBaris(
     aktif = u.flag("isActive") ?: true,
     punyaSandi = u.flag("hasPassword") ?: true,
     pernahMasukIso = u.teks("lastLoginAt"),
+    telepon = u.teks("phone"),
+    namaDivisiDipimpin = u.teks("divisionName"),
+    namaProyekDipegang = u.teks("projectName"),
 )
 
 private fun JsonObject.larik(kunci: String): List<JsonElement> = (this[kunci] as? JsonArray) ?: emptyList()

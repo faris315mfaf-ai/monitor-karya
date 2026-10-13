@@ -14,12 +14,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,7 +40,10 @@ import id.co.monitorkarya.designsystem.theme.PreviewGanda
 /** Varian tombol: PRIMARY isian aksen (maks. satu per kartu/layar), SECONDARY bergaris, PLAIN teks aksen. */
 enum class MkButtonVariant { PRIMARY, SECONDARY, PLAIN }
 
-/** Ukuran tombol: M tinggi 44dp (bawaan), S tinggi 36dp. */
+/**
+ * Ukuran visual tombol: M tinggi 44dp (bawaan), S tinggi 36dp. Area sentuh selalu
+ * minimal 48dp (minimumInteractiveComponentSize) tanpa mengubah ukuran visual.
+ */
 enum class MkButtonSize(val tinggi: Dp) { M(44.dp), S(36.dp) }
 
 /**
@@ -62,8 +65,11 @@ internal fun mkTekanSkala(interactionSource: InteractionSource, skalaTekan: Floa
 /**
  * Tombol kapsul Monitor Karya (port Button web).
  * PRIMARY: isian aksen (accent-fill) + teks on-accent. SECONDARY: surface + garis 1dp line.
- * PLAIN: transparan + teks aksen. Label 15sp semibold (bodyStrong); tekan mengecil ke 0.97;
- * enabled=false meredupkan ke alpha 0.4 tanpa klik.
+ * PLAIN: transparan + teks aksen. Label 15sp semibold (bodyStrong); tekan mengecil ke 0.97.
+ * enabled=false (C4 P1-1): seluruh tombol tampil nonaktif — latar fill-1 (PLAIN tetap
+ * transparan), tanpa garis dan tanpa aksen, teks ink-2 (>=4.5:1 di fill-1/surface kedua
+ * tema), tanpa klik. Dulu alpha dipasang SESUDAH background sehingga latar aksen tetap
+ * pekat dan hanya teks yang redup (putih 40% di atas aksen, ~1.9:1).
  */
 @Composable
 fun MkButton(
@@ -78,33 +84,30 @@ fun MkButton(
     val aksen = LocalAccent.current
     val interactionSource = remember { MutableInteractionSource() }
     val skala = mkTekanSkala(interactionSource, 0.97f)
-    val latar = when (variant) {
-        MkButtonVariant.PRIMARY -> aksen.fill
-        MkButtonVariant.SECONDARY -> warna.surface
-        MkButtonVariant.PLAIN -> Color.Transparent
+    val latar = when {
+        variant == MkButtonVariant.PLAIN -> Color.Transparent
+        !enabled -> warna.fill1
+        variant == MkButtonVariant.PRIMARY -> aksen.fill
+        else -> warna.surface
     }
-    val isi = when (variant) {
-        MkButtonVariant.PRIMARY -> aksen.on
-        MkButtonVariant.SECONDARY -> warna.ink
-        MkButtonVariant.PLAIN -> aksen.text
+    val isi = when {
+        !enabled -> warna.ink2
+        variant == MkButtonVariant.PRIMARY -> aksen.on
+        variant == MkButtonVariant.SECONDARY -> warna.ink
+        else -> aksen.text
     }
+    val bergaris = enabled && variant == MkButtonVariant.SECONDARY
     Box(
         modifier = modifier
+            .minimumInteractiveComponentSize()
             .height(size.tinggi)
-            .clip(MkShapes.penuh)
             .graphicsLayer {
                 scaleX = skala
                 scaleY = skala
             }
+            .clip(MkShapes.penuh)
             .background(latar, MkShapes.penuh)
-            .then(
-                if (variant == MkButtonVariant.SECONDARY) {
-                    Modifier.border(1.dp, warna.line, MkShapes.penuh)
-                } else {
-                    Modifier
-                }
-            )
-            .alpha(if (enabled) 1f else 0.4f)
+            .then(if (bergaris) Modifier.border(1.dp, warna.line, MkShapes.penuh) else Modifier)
             .clickable(
                 interactionSource = interactionSource,
                 enabled = enabled,

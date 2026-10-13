@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Teks statis dashboard pemantau grup. Prefiks rg_ supaya unik saat digabung ke :app. -->
+<resources>
+    <string name="rg_judul">Ringkasan</string>
+    <string name="rg_eyebrow">Status hari ini</string>
+    <string name="rg_muat_ulang">Muat ulang ringkasan</string>
+    <string name="rg_bukan_pemantau">Ringkasan grup hanya untuk peran pemantau. Buka tab Ringkasan peran Anda.</string>
+    <string name="rg_ditolak">Bagian ini tidak tersedia untuk peran Anda.</string>
+    <string name="rg_galat_ringkasan">Ringkasan belum termuat.</string>
+
+    <string name="rg_kpi_progres">Rata-rata progres</string>
+    <string name="rg_kpi_tepat">Tepat waktu 30 hari</string>
+    <string name="rg_kpi_harian">Laporan hari ini</string>
+    <string name="rg_kpi_keputusan">Menunggu keputusan</string>
+
+    <string name="rg_laporan_perusahaan">Laporan per perusahaan</string>
+    <string name="rg_kosong_proyek">Belum ada proyek untuk ditampilkan.</string>
+
+    <string name="rg_status_proyek">Status proyek</string>
+    <string name="rg_status_proyek_tanya">Bagaimana komposisi status proyek?</string>
+    <string name="rg_tren_minggu">Laporan harian 8 minggu</string>
+    <string name="rg_tren_minggu_tanya">Minggu mana yang paling banyak laporan masuk?</string>
+    <string name="rg_kosong_tren_minggu">Belum ada laporan dalam 8 minggu terakhir.</string>
+    <string name="rg_kinerja_divisi">Kinerja divisi</string>
+    <string name="rg_kinerja_divisi_tanya" formatted="false">Tepat waktu per divisi · target 85%</string>
+    <string name="rg_tepat_perusahaan">Tepat waktu per perusahaan</string>
+    <string name="rg_tepat_perusahaan_tanya" formatted="false">Laporan harian 30 hari · target 85%</string>
+    <string name="rg_kosong_tepat">Belum ada laporan dalam 30 hari terakhir.</string>
+    <string name="rg_aktivitas">Aktivitas terbaru</string>
+    <string name="rg_kosong_aktivitas">Belum ada aktivitas kerja.</string>
+
+    <string name="rg_grafik_judul">Grafik kepatuhan grup</string>
+    <string name="rg_grafik_catatan">Semua skor memakai skala 0–100. Target kepatuhan 75; di bawah itu entitas perlu perhatian.</string>
+    <string name="rg_tren_kpi">Arah kepatuhan 6 bulan</string>
+    <string name="rg_tren_kpi_tanya">Apakah grup membaik atau memburuk?</string>
+    <string name="rg_kosong_tren_kpi">Belum ada riwayat kepatuhan.</string>
+    <string name="rg_status_harian">Status laporan hari ini</string>
+    <string name="rg_status_harian_tanya">Bagaimana kondisi pelaporan hari ini?</string>
+    <string name="rg_kosong_status_harian">Belum ada laporan hari ini. Grafik terisi setelah PIC mengirim laporan.</string>
+    <string name="rg_sub_holding">Kepatuhan per sub-holding</string>
+    <string name="rg_sub_holding_tanya">Bagian grup mana yang tertinggal?</string>
+    <string name="rg_kosong_sub_holding">Belum ada skor kepatuhan bulan ini.</string>
+    <string name="rg_umur_eskalasi">Eskalasi menunggu keputusan</string>
+    <string name="rg_umur_eskalasi_tanya">Apa yang tertahan, dan sudah berapa lama?</string>
+    <string name="rg_eskalasi_aman">Seluruh eskalasi terbuka masih dalam batas SLA.</string>
+    <string name="rg_mingguan">Penyerahan mingguan</string>
+    <string name="rg_mingguan_tanya">Divisi mana yang belum menyerahkan capaian?</string>
+    <string name="rg_peta">Peta kepatuhan</string>
+    <string name="rg_peta_tanya">PT mana yang tertinggal bulan ini?</string>
+    <string name="rg_kosong_peta">Belum ada skor kepatuhan bulan ini.</string>
+    <string name="rg_pt_terendah">10 PT dengan kepatuhan terendah</string>
+    <string name="rg_pt_terendah_tanya">Di mana intervensi paling mendesak?</string>
+    <string name="rg_kosong_pt_terendah">Belum ada PT yang perlu diintervensi.</string>
+    <string name="rg_insiden">Keterlambatan berulang</string>
+    <string name="rg_insiden_tanya">PT mana yang berulang kali terlambat lapor?</string>
+    <string name="rg_kosong_insiden">Tidak ada keterlambatan berulang.</string>
+
+    <string name="rg_kembali_perusahaan">Kembali ke perusahaan</string>
+    <string name="rg_lapor_14">Lapor 14 hari</string>
+    <string name="rg_laporan_terbaru">Laporan harian terbaru</string>
+    <string name="rg_kosong_laporan">Belum ada laporan harian pada proyek ini.</string>
+    <string name="rg_eskalasi_proyek">Perlu perhatian dan eskalasi</string>
+    <string name="rg_kosong_eskalasi">Belum ada eskalasi pada proyek ini.</string>
+</resources>

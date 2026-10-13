@@ -28,6 +28,10 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".dev"
+            // Uji alur lokal: ./gradlew :app:assembleDebug -Pmk.baseUrl=http://127.0.0.1:3100/
+            // (emulator + adb reverse tcp:3100 tcp:3100). Tanpa properti = produksi.
+            val urlLokal = providers.gradleProperty("mk.baseUrl").orNull
+            if (urlLokal != null) buildConfigField("String", "BASE_URL", "\"$urlLokal\"")
             // Rancangan §6: debug memakai staging — URL staging belum tersedia;
             // saat ada, timpa di sini: buildConfigField("String", "BASE_URL", "\"https://staging…/\"")
         }
@@ -68,6 +72,15 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:domain"))
     implementation(project(":core:network"))
+    // Modul fitur — layar per tab (dipasang di navigation/MKShell.kt).
+    implementation(project(":feature:proyek"))
+    implementation(project(":feature:eskalasi"))
+    implementation(project(":feature:persetujuan"))
+    implementation(project(":feature:notifikasi"))
+    implementation(project(":feature:entitas"))
+    implementation(project(":feature:audit"))
+    implementation(project(":feature:ringkasangrup"))
+    implementation(project(":feature:pesan"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

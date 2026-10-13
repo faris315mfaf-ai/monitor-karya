@@ -15,9 +15,15 @@ import androidx.room.RoomDatabase
         // Fase 2 (T6-C3):
         MingguanLaporanEntity::class,
         MingguanButirEntity::class,
-        PenerimaanEntity::class
+        PenerimaanEntity::class,
+        // Fase 3 B2 (v4): potret layar PIC untuk baca luring.
+        CacheLayarEntity::class,
+        // C5-T1 (v6): peta id lokal entri luring → id server.
+        PetaIdLokalEntity::class,
+        // G1 (v7): draf otomatis Sheet sunting yang ditinggalkan.
+        DrafSuntingEntity::class
     ],
-    version = 2,
+    version = MigrasiMk.VERSI,
     exportSchema = true
 )
 abstract class MkDatabase : RoomDatabase() {
@@ -29,4 +35,7 @@ abstract class MkDatabase : RoomDatabase() {
     abstract fun mingguanLaporanDao(): MingguanLaporanDao
     abstract fun mingguanButirDao(): MingguanButirDao
     abstract fun penerimaanDao(): PenerimaanDao
+    abstract fun cacheLayarDao(): CacheLayarDao
+    abstract fun petaIdLokalDao(): PetaIdLokalDao
+    abstract fun drafSuntingDao(): DrafSuntingDao
 }

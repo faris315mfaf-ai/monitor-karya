@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Padanan gelap tema jendela tanpa ActionBar (lihat values/themes.xml). -->
+<resources>
+    <style name="Theme.MonitorKarya" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

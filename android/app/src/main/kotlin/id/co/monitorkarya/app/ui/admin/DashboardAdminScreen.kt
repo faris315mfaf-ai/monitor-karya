@@ -36,13 +36,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.app.ui.penerimaan.AntreanItem
 import id.co.monitorkarya.app.ui.penerimaan.JenisLaporan
 import id.co.monitorkarya.app.ui.penerimaan.StatusAntrean
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.StatTile
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
@@ -59,6 +61,9 @@ fun DashboardAdminScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? DashboardAdminUiState.Siap)
     val aktivitas by vm.aktivitas.collectAsStateWithLifecycle()
     DashboardAdminScreen(
         state = state,
@@ -67,7 +72,8 @@ fun DashboardAdminScreen(
         onTeruskanSemua = vm::teruskanSemua,
         onUrungkan = vm::urungkan,
         onNotifikasiTampil = vm::notifikasiTampil,
-        offline = offline,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
         modifier = modifier,
     )
 }
@@ -82,6 +88,8 @@ fun DashboardAdminScreen(
     onUrungkan: () -> Unit = {},
     onNotifikasiTampil: () -> Unit = {},
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     var konfirmasi by rememberSaveable { mutableStateOf(false) }
@@ -113,7 +121,7 @@ fun DashboardAdminScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (offline) {
-                    MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
+                    BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = onUlang)
                 }
                 when (state) {
                     DashboardAdminUiState.Memuat -> KerangkaDasbor()

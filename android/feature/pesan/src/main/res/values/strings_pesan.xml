@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Teks statis Kotak masuk. Prefiks pesan_ supaya unik saat digabung ke :app. -->
+<resources>
+    <string name="pesan_judul">Kotak masuk</string>
+    <string name="pesan_konteks">Pengingat, keputusan, dan komentar untuk Anda</string>
+    <string name="pesan_tutup">Tutup kotak masuk</string>
+    <string name="pesan_muat_ulang">Muat ulang pesan</string>
+    <string name="pesan_tandai_semua">Tandai semua dibaca</string>
+    <string name="pesan_menandai">Menandai…</string>
+    <string name="pesan_saring_semua">Semua</string>
+    <string name="pesan_saring_belum">Belum dibaca</string>
+    <string name="pesan_kosong">Belum ada pesan.</string>
+    <string name="pesan_kosong_belum">Semua pesan sudah dibaca.</string>
+    <string name="pesan_galat">Pesan belum termuat.</string>
+    <string name="pesan_bagian_pesan">Pesan</string>
+    <string name="pesan_tanpa_isi">Pesan ini tidak memuat isi tambahan.</string>
+    <string name="pesan_bagian_waktu">Waktu</string>
+    <string name="pesan_bagian_status">Status</string>
+    <string name="pesan_sudah_dibaca">Sudah dibaca</string>
+    <string name="pesan_belum_dibaca">Belum dibaca</string>
+    <string name="pesan_bagian_tindak">Tindak lanjut</string>
+    <string name="pesan_ikon">Kotak masuk</string>
+    <string name="pesan_ikon_belum">%1$s, %2$d pesan belum dibaca</string>
+    <string name="pesan_baris_label">%1$s: %2$s, %3$s. Buka detail</string>
+    <string name="pesan_baris_label_belum">%1$s: %2$s, %3$s, belum dibaca. Buka detail</string>
+    <string name="pesan_tindak_tab">Buka tab %1$s untuk menindaklanjuti pesan ini.</string>
+</resources>

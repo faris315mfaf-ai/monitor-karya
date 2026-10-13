@@ -1,0 +1,679 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "f8d2f7e1b8bf0396aa67b1713e38d701",
+    "entities": [
+      {
+        "tableName": "proyek",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `phase` TEXT NOT NULL, `lifecycle` TEXT NOT NULL, `entityName` TEXT NOT NULL, `picName` TEXT, `status` TEXT NOT NULL, `progress` INTEGER NOT NULL, `targetEndDate` INTEGER, `lastReportAt` INTEGER, `divisionName` TEXT, `tersinkronPada` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phase",
+            "columnName": "phase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lifecycle",
+            "columnName": "lifecycle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityName",
+            "columnName": "entityName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "picName",
+            "columnName": "picName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progress",
+            "columnName": "progress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetEndDate",
+            "columnName": "targetEndDate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastReportAt",
+            "columnName": "lastReportAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "divisionName",
+            "columnName": "divisionName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tersinkronPada",
+            "columnName": "tersinkronPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "daily_report",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `proyek_id` TEXT NOT NULL, `tanggal` INTEGER NOT NULL, `status` TEXT NOT NULL, `progressPct` INTEGER NOT NULL, `capaian` TEXT NOT NULL, `kendala` TEXT, `dikirimPada` INTEGER, `diteruskanPada` INTEGER, `terlambat` INTEGER NOT NULL, `jumlahBukti` INTEGER NOT NULL, `tersinkronPada` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proyekId",
+            "columnName": "proyek_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tanggal",
+            "columnName": "tanggal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressPct",
+            "columnName": "progressPct",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capaian",
+            "columnName": "capaian",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kendala",
+            "columnName": "kendala",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dikirimPada",
+            "columnName": "dikirimPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "diteruskanPada",
+            "columnName": "diteruskanPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "terlambat",
+            "columnName": "terlambat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jumlahBukti",
+            "columnName": "jumlahBukti",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tersinkronPada",
+            "columnName": "tersinkronPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_daily_report_proyek_id",
+            "unique": false,
+            "columnNames": [
+              "proyek_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_daily_report_proyek_id` ON `${TABLE_NAME}` (`proyek_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "tugas",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `proyekId` TEXT NOT NULL, `tanggalKerja` INTEGER NOT NULL, `judul` TEXT NOT NULL, `status` TEXT NOT NULL, `progressPct` INTEGER NOT NULL, `cakupan` TEXT NOT NULL, `urutan` INTEGER NOT NULL, `tersinkronPada` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proyekId",
+            "columnName": "proyekId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tanggalKerja",
+            "columnName": "tanggalKerja",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "judul",
+            "columnName": "judul",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressPct",
+            "columnName": "progressPct",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cakupan",
+            "columnName": "cakupan",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "urutan",
+            "columnName": "urutan",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tersinkronPada",
+            "columnName": "tersinkronPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tugas_proyekId",
+            "unique": false,
+            "columnNames": [
+              "proyekId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tugas_proyekId` ON `${TABLE_NAME}` (`proyekId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "eskalasi",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `proyekId` TEXT, `namaEntitas` TEXT NOT NULL, `ringkasan` TEXT NOT NULL, `dibutuhkan` TEXT NOT NULL, `status` TEXT NOT NULL, `diajukanPada` INTEGER NOT NULL, `umurHari` INTEGER NOT NULL, `lewatSla` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proyekId",
+            "columnName": "proyekId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "namaEntitas",
+            "columnName": "namaEntitas",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ringkasan",
+            "columnName": "ringkasan",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dibutuhkan",
+            "columnName": "dibutuhkan",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diajukanPada",
+            "columnName": "diajukanPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "umurHari",
+            "columnName": "umurHari",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lewatSla",
+            "columnName": "lewatSla",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `jenis` TEXT NOT NULL, `payloadJson` TEXT NOT NULL, `dibuatPada` INTEGER NOT NULL, `status` TEXT NOT NULL, `percobaan` INTEGER NOT NULL, `pesanGalat` TEXT, `kunci` TEXT, `label` TEXT, `berikutnyaPada` INTEGER NOT NULL DEFAULT 0, `kunciIdempotensi` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jenis",
+            "columnName": "jenis",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dibuatPada",
+            "columnName": "dibuatPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "percobaan",
+            "columnName": "percobaan",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pesanGalat",
+            "columnName": "pesanGalat",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kunci",
+            "columnName": "kunci",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "berikutnyaPada",
+            "columnName": "berikutnyaPada",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "kunciIdempotensi",
+            "columnName": "kunciIdempotensi",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "mingguan_laporan",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `divisiId` TEXT NOT NULL, `entitasNama` TEXT NOT NULL, `isoTahun` INTEGER NOT NULL, `isoMinggu` INTEGER NOT NULL, `statusHeader` TEXT NOT NULL, `diserahkanPada` INTEGER, `disetujuiPada` INTEGER, `diteruskanPada` INTEGER, `butirJumlah` INTEGER NOT NULL, `butirSelesai` INTEGER NOT NULL, `tersinkronPada` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "divisiId",
+            "columnName": "divisiId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entitasNama",
+            "columnName": "entitasNama",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isoTahun",
+            "columnName": "isoTahun",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isoMinggu",
+            "columnName": "isoMinggu",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "statusHeader",
+            "columnName": "statusHeader",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diserahkanPada",
+            "columnName": "diserahkanPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "disetujuiPada",
+            "columnName": "disetujuiPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "diteruskanPada",
+            "columnName": "diteruskanPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "butirJumlah",
+            "columnName": "butirJumlah",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "butirSelesai",
+            "columnName": "butirSelesai",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tersinkronPada",
+            "columnName": "tersinkronPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mingguan_laporan_divisiId",
+            "unique": false,
+            "columnNames": [
+              "divisiId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mingguan_laporan_divisiId` ON `${TABLE_NAME}` (`divisiId`)"
+          },
+          {
+            "name": "index_mingguan_laporan_isoTahun_isoMinggu",
+            "unique": false,
+            "columnNames": [
+              "isoTahun",
+              "isoMinggu"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mingguan_laporan_isoTahun_isoMinggu` ON `${TABLE_NAME}` (`isoTahun`, `isoMinggu`)"
+          }
+        ]
+      },
+      {
+        "tableName": "mingguan_butir",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `laporanMingguanId` TEXT NOT NULL, `aspek` TEXT NOT NULL, `pekerjaan` TEXT NOT NULL, `target` TEXT NOT NULL, `status` TEXT NOT NULL, `progres` INTEGER NOT NULL, `tanggalKerja` INTEGER, `urutan` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "laporanMingguanId",
+            "columnName": "laporanMingguanId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aspek",
+            "columnName": "aspek",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pekerjaan",
+            "columnName": "pekerjaan",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "target",
+            "columnName": "target",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progres",
+            "columnName": "progres",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tanggalKerja",
+            "columnName": "tanggalKerja",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "urutan",
+            "columnName": "urutan",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mingguan_butir_laporanMingguanId",
+            "unique": false,
+            "columnNames": [
+              "laporanMingguanId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mingguan_butir_laporanMingguanId` ON `${TABLE_NAME}` (`laporanMingguanId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "penerimaan",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `jenis` TEXT NOT NULL, `laporanId` TEXT, `judul` TEXT NOT NULL, `entitasNama` TEXT NOT NULL, `status` TEXT NOT NULL, `diteruskanPada` INTEGER, `undoToken` TEXT, `tersinkronPada` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jenis",
+            "columnName": "jenis",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "laporanId",
+            "columnName": "laporanId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "judul",
+            "columnName": "judul",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entitasNama",
+            "columnName": "entitasNama",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diteruskanPada",
+            "columnName": "diteruskanPada",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "undoToken",
+            "columnName": "undoToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tersinkronPada",
+            "columnName": "tersinkronPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "cache_layar",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`kunci` TEXT NOT NULL, `json` TEXT NOT NULL, `disimpanPada` INTEGER NOT NULL, PRIMARY KEY(`kunci`))",
+        "fields": [
+          {
+            "fieldPath": "kunci",
+            "columnName": "kunci",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "disimpanPada",
+            "columnName": "disimpanPada",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "kunci"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f8d2f7e1b8bf0396aa67b1713e38d701')"
+    ]
+  }
+}

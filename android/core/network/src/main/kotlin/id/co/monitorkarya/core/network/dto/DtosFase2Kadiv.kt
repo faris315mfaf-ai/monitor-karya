@@ -1,5 +1,9 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package id.co.monitorkarya.core.network.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -279,15 +283,15 @@ data class WeeklyItemSaveRequest(
     val priorityId: String,
     val targetDate: String? = null,
     val workDate: String? = null,
-    val tags: List<String> = emptyList(),
-    val subtasks: List<WeeklySubtaskInputDto> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val tags: List<String> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val subtasks: List<WeeklySubtaskInputDto> = emptyList(),
 )
 
 /** Subtask pada badan simpan butir: hanya judul dan tanda selesai. */
 @Serializable
 data class WeeklySubtaskInputDto(
     val title: String,
-    val isDone: Boolean = false,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val isDone: Boolean = false,
 )
 
 /** Respons PUT /api/weekly-input. */

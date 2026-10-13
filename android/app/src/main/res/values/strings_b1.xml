@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- String gelombang B1 (celah peran × tab). Bahasa Indonesia, "Anda",
+     sentence case, tanpa tanda seru/emoji. -->
+<resources>
+    <string name="b1_pengaturan">Pengaturan</string>
+    <string name="b1_pengaturan_sub">Akun pengguna perusahaan Anda</string>
+    <string name="b1_kembali">Kembali</string>
+    <string name="b1_akun_pengguna">Akun &amp; pengguna</string>
+    <string name="b1_akun_pengguna_isi">Buat akun untuk perusahaan Anda lengkap dengan username, kata sandi, nama, dan jabatan. Ubah, setel ulang kata sandi, nonaktifkan, atau hapus akun Admin PT, kepala divisi, dan manager proyek di PT Anda. Akun direktur perusahaan dan akun tingkat grup diatur Super Admin.</string>
+    <string name="b1_tab_statistik">Statistik</string>
+</resources>

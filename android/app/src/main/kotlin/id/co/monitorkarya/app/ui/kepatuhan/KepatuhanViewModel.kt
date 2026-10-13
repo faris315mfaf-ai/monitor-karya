@@ -2,25 +2,23 @@
 // src/components/admin/compliance.tsx + rute src/app/api/admin/compliance(+remind).
 //
 // Satu GET /api/admin/compliance memberi seluruh meja: totals, divisi (wajib/
-// sudah/belum + remindedAt hari ini + mingguan), kunci 17.00 WIB, dan
-// canRemind. POST remind mengingatkan satu orang / satu divisi; respons
+// sudah/belum + remindedAt hari ini + mingguan + riwayat 10 hari), kunci
+// harian, dan canRemind. Kunci harian & tenggat mingguan mengikuti ReportSettings PT
+// (server; teks lihat TenggatKepatuhan.kt — BUG-11). POST remind mengingatkan satu orang / satu divisi; respons
 // {people, sent, skipped} dipakai menandai orang bersangkutan di data lokal
 // (tanpa muat ulang) lalu snackbar "x orang diingatkan". Galat 409 membawa
 // {error, locked} (lewat tenggat) atau {error, remindedAt} (sudah diingatkan
 // hari ini) — keduanya diurai dari GalatDto agar UI ikut bergerak.
 //
-// AdminComplianceApi (T6-C2) sudah ada di :core-network tetapi belum
-// disediakan AppModule; KepatuhanModule di bawah menyediakannya dari Retrofit
-// tunggal — hapus saat penyediaannya dipusatkan (lihat docs/fase2/T6-C8-LAPORAN.md).
+// AdminComplianceApi (T6-C2) disediakan AppModule dari Retrofit tunggal.
+// LURING (A1-LURING.md §6): "Ingatkan" TIDAK diantre — pengingat bernilai waktu
+// (batas jam lapor); terkirim terlambat menyesatkan penerima dan server menolak
+// ulang (409 sudah diingatkan/terkunci). Luring = galat + coba lagi.
 package id.co.monitorkarya.app.ui.kepatuhan
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.components.SingletonComponent
 import id.co.monitorkarya.core.network.ApiError
 import id.co.monitorkarya.core.network.api.AdminComplianceApi
 import id.co.monitorkarya.core.network.dto.DivisiKepatuhanDto
@@ -35,7 +33,6 @@ import id.co.monitorkarya.core.network.mkJson
 import id.co.monitorkarya.designsystem.components.MkStatus
 import java.time.Instant
 import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,9 +40,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import retrofit2.Response
-import retrofit2.Retrofit
 
-/** Module penyedia AdminComplianceApi dari Retrofit tunggal AppModule — hapus saat dipusatkan di AppModule. */
 // ------------------------------------------------------------------
 // Model tampilan
 // ------------------------------------------------------------------
@@ -92,6 +87,8 @@ data class DivisiKepatuhan(
     val diserahkanIso: String?,
     val disetujuiIso: String?,
     val diteruskanIso: String?,
+    /** Persen lapor per hari kerja (urutan = MejaKepatuhan.hari); null = tidak ada yang wajib. */
+    val riwayat: List<Int?> = emptyList(),
 ) {
     /** Persen lapor harian (pctOf admin-compliance.ts). */
     val persen: Int get() = if (wajib > 0) Math.round(sudah * 100f / wajib) else 0
@@ -105,7 +102,7 @@ data class DivisiKepatuhan(
 
 /** Meja kepatuhan satu hari hasil GET /api/admin/compliance. */
 data class MejaKepatuhan(
-    /** Laporan hari ini sudah dikunci pukul 17.00 WIB — tombol Ingatkan mati. */
+    /** Laporan hari ini sudah dikunci (jam batas/ditutup ReportSettings) — tombol Ingatkan mati. */
     val terkunci: Boolean,
     /** Akun ini boleh mengirim pengingat (terikat satu PT). */
     val bolehIngatkan: Boolean,
@@ -118,9 +115,13 @@ data class MejaKepatuhan(
     val tanpaDivisi: Int,
     /** Nomor minggu ISO pekan berjalan (M41). */
     val isoMinggu: Int,
-    /** Tenggat serah terima mingguan (Kamis 17.00) sudah lewat. */
+    /** Tenggat serah terima mingguan (week.handoverBy) sudah lewat. */
     val serahLewat: Boolean,
     val divisi: List<DivisiKepatuhan>,
+    /** Hari kerja peta panas (≤10, lama → baru), ISO tengah malam WIB. */
+    val hari: List<String> = emptyList(),
+    /** Tenggat serah terima mingguan dari server (ISO); null = tidak diketahui. */
+    val tenggatSerahIso: String? = null,
 )
 
 /** Lencana status satu divisi — status selalu warna + ikon + kata. */
@@ -174,11 +175,17 @@ class KepatuhanViewModel @Inject constructor(
         muat()
     }
 
-    /** Menarik meja kepatuhan; status kembali ke Memuat agar layar menampilkan kerangka. */
-    fun muat() {
+    /**
+     * Menarik meja kepatuhan. [diam] = true (muat ulang setelah simpan aturan):
+     * bila meja sudah tampil, isinya TIDAK diganti kerangka Memuat — tinggi
+     * konten dan posisi gulir tetap, sehingga ketukan berikut tidak salah
+     * sasaran (E2E-R2 N-02). Galat muat diam mempertahankan meja lama.
+     */
+    fun muat(diam: Boolean = false) {
         viewModelScope.launch {
-            _state.value = KepatuhanUiState.Memuat
-            _state.value = try {
+            val lama = _state.value as? KepatuhanUiState.Siap
+            if (!diam || lama == null) _state.value = KepatuhanUiState.Memuat
+            val baru = try {
                 val res = api.kepatuhan()
                 if (res.isSuccessful) {
                     KepatuhanUiState.Siap(petaMeja(res.body() ?: mejaKosongDto()))
@@ -190,6 +197,7 @@ class KepatuhanViewModel @Inject constructor(
             } catch (e: Exception) {
                 KepatuhanUiState.Galat(ApiError.dari(e).pesanTampil())
             }
+            _state.value = if (diam && lama != null && baru !is KepatuhanUiState.Siap) lama else baru
         }
     }
 
@@ -234,7 +242,7 @@ class KepatuhanViewModel @Inject constructor(
                     )
                 } else {
                     val galat = bacaGalat(res)
-                    // 409 terkunci: hari ini sudah lewat 17.00 — kunci meja lokal
+                    // 409 terkunci: hari ini sudah lewat jam batas — kunci meja lokal
                     // agar banner + tombol nonaktif muncul tanpa menunggu muat ulang.
                     if (galat.locked == true) tandaiTerkunci()
                     // 409 "sudah diingatkan": tandai orang itu agar lencana ikut bergerak.
@@ -324,6 +332,8 @@ internal fun petaMeja(r: KepatuhanResponse): MejaKepatuhan = MejaKepatuhan(
     isoMinggu = r.week.isoWeek,
     serahLewat = r.week.handoverPassed,
     divisi = r.divisions.map(::petaDivisi),
+    hari = r.days,
+    tenggatSerahIso = r.week.handoverBy.ifBlank { null },
 )
 
 private fun petaDivisi(d: DivisiKepatuhanDto): DivisiKepatuhan = DivisiKepatuhan(
@@ -345,15 +355,23 @@ private fun petaDivisi(d: DivisiKepatuhanDto): DivisiKepatuhan = DivisiKepatuhan
             proyek = o.projects,
         )
     },
-    mingguan = when (d.weekly.state) {
-        MingguanDivisiDto.STATE_MASUK -> StatusMingguan.MASUK
-        MingguanDivisiDto.STATE_TERLAMBAT -> StatusMingguan.TERLAMBAT
-        else -> StatusMingguan.BELUM
-    },
+    mingguan = statusMingguan(d.weekly),
     diserahkanIso = d.weekly.submittedAt,
     disetujuiIso = d.weekly.approvedAt,
     diteruskanIso = d.weekly.forwardedAt,
+    riwayat = d.history,
 )
+
+/**
+ * Status serah terima mingguan. Server (weeklyState) hanya membaca submittedAt;
+ * laporan yang sudah DISETUJUI/DITERUSKAN tanpa submittedAt (data lama/seed)
+ * jelas sudah diserahkan — jangan tampil "Belum masuk · disetujui" (BUG-14e).
+ */
+internal fun statusMingguan(w: MingguanDivisiDto): StatusMingguan = when (w.state) {
+    MingguanDivisiDto.STATE_MASUK -> StatusMingguan.MASUK
+    MingguanDivisiDto.STATE_TERLAMBAT -> StatusMingguan.TERLAMBAT
+    else -> if (w.approvedAt != null || w.forwardedAt != null) StatusMingguan.MASUK else StatusMingguan.BELUM
+}
 
 private fun sekarangIso(): String = Instant.now().toString()
 
@@ -372,7 +390,7 @@ internal fun lencanaHarian(d: DivisiKepatuhan, terkunci: Boolean): LencanaDivisi
     }
 }
 
-/** Lencana mingguan: Masuk / Terlambat / Belum masuk (Belum jadi Terlambat setelah tenggat Kamis). */
+/** Lencana mingguan: Masuk / Terlambat / Belum masuk (Belum jadi Terlambat setelah tenggat serah). */
 internal fun lencanaMingguan(d: DivisiKepatuhan, serahLewat: Boolean): LencanaDivisi {
     val status = when (d.mingguan) {
         StatusMingguan.MASUK -> MkStatus.DONE

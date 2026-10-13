@@ -5,6 +5,8 @@ package id.co.monitorkarya.core.domain.status
 import id.co.monitorkarya.core.domain.model.LaporanHarian
 import id.co.monitorkarya.core.domain.model.MkStatusDomain
 import id.co.monitorkarya.core.domain.time.Wib
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.time.ZonedDateTime
@@ -45,22 +47,39 @@ object StatusProyek {
         sekarang: ZonedDateTime = ZonedDateTime.now(Wib.ZONA),
         siklusHidup: String? = null,
         perluEskalasi: Boolean = false,
-    ): MkStatusDomain = hitungLengkap(tenggat, terakhir, sekarang, siklusHidup, perluEskalasi).status
+        tenggatInstan: Instant? = null,
+    ): MkStatusDomain = hitungLengkap(tenggat, terakhir, sekarang, siklusHidup, perluEskalasi, tenggatInstan).status
 
-    /** Port lengkap deriveProjectStatus (status, alasan, progres). */
+    /**
+     * Port lengkap deriveProjectStatus (status, alasan, progres).
+     *
+     * [tenggatInstan] = targetEndDate persis seperti dikirim server (instan, mis.
+     * "2026-10-12T00:00:00.000Z" = 07.00 WIB). project-status.ts membandingkan
+     * INSTAN (`targetEndDate < now`), jadi proyek yang tenggatnya hari ini sudah
+     * "Terlambat" sejak jam itu; perbandingan per tanggal kalender WIB baru
+     * menyatakan terlambat esok harinya. Bila diisi, ia menggantikan [tenggat].
+     */
     fun hitungLengkap(
         tenggat: LocalDate?,
         terakhir: LaporanHarian?,
         sekarang: ZonedDateTime = ZonedDateTime.now(Wib.ZONA),
         siklusHidup: String? = null,
         perluEskalasi: Boolean = false,
+        tenggatInstan: Instant? = null,
     ): Hasil {
         val progres = (terakhir?.progresPct ?: 0).coerceIn(0, 100)
         if (siklusHidup == "DITUTUP" || terakhir?.status == "SELESAI" || progres >= 100) {
             return Hasil(MkStatusDomain.DONE, null, if (terakhir != null) progres else 100)
         }
         val hariIni = sekarang.toLocalDate()
-        if (tenggat != null && tenggat.isBefore(hariIni)) {
+        if (tenggatInstan != null) {
+            val kini = sekarang.toInstant()
+            if (tenggatInstan.isBefore(kini)) {
+                // floor(selisih ms / hari), minimal 1 — sama dengan Math.floor(.../DAY) di TS.
+                val hari = maxOf(1L, Duration.between(tenggatInstan, kini).toDays())
+                return Hasil(MkStatusDomain.LATE, "Lewat tenggat $hari hari", progres)
+            }
+        } else if (tenggat != null && tenggat.isBefore(hariIni)) {
             val hari = maxOf(1L, ChronoUnit.DAYS.between(tenggat, hariIni))
             return Hasil(MkStatusDomain.LATE, "Lewat tenggat $hari hari", progres)
         }

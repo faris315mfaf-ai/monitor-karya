@@ -17,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
@@ -56,6 +58,8 @@ fun MkSkeleton(
         modifier
             .then(if (lebar == null) Modifier.fillMaxWidth() else Modifier.width(width = lebar))
             .height(height = tinggi)
+            // Pembaca layar tidak diam saat memuat (C4 P3-10).
+            .semantics { contentDescription = "Memuat" }
             .alpha(alpha = alphaNilai)
             .clip(shape = MkShapes.sm)
             .background(color = LocalMkColors.current.fill1),

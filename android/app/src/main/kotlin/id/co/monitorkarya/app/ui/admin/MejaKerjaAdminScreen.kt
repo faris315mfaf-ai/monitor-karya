@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.app.ui.penerimaan.JenisLaporan
 import id.co.monitorkarya.app.ui.penerimaan.StatusAntrean
 import id.co.monitorkarya.app.ui.penerimaan.jamWib
@@ -59,7 +62,6 @@ import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkLampiranRow
 import id.co.monitorkarya.designsystem.components.MkListRow
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSheet
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.StatusBadge
@@ -83,6 +85,9 @@ fun MejaKerjaAdminScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? MejaKerjaAdminUiState.Siap)
     val terpilih by vm.terpilih.collectAsStateWithLifecycle()
     val rincian by vm.rincian.collectAsStateWithLifecycle()
     MejaKerjaAdminScreen(
@@ -92,7 +97,8 @@ fun MejaKerjaAdminScreen(
         onUlang = vm::ulang,
         onBukaRincian = vm::bukaRincian,
         onTutupRincian = vm::tutupRincian,
-        offline = offline,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
         modifier = modifier,
     )
 }
@@ -107,6 +113,8 @@ fun MejaKerjaAdminScreen(
     onBukaRincian: (BarisPelapor) -> Unit = {},
     onTutupRincian: () -> Unit = {},
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     // Kedua akordeon TERBUKA OTOMATIS saat layar pertama tampil.
@@ -123,7 +131,7 @@ fun MejaKerjaAdminScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (offline) {
-                MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
+                BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = onUlang)
             }
             when (state) {
                 MejaKerjaAdminUiState.Memuat -> KerangkaMeja()

@@ -122,8 +122,10 @@ class MingguanRepo @Inject constructor(
                         tersinkronPada = tersinkronPada,
                         divisiId = divisiId,
                         entitasNama = entitasNama,
-                        isoTahun = isi.angka("isoYear"),
-                        isoMinggu = isi.angka("isoWeek"),
+                        // isoYear/isoWeek ada di objek `week` papan (WeeklyPekanDto), bukan di
+                        // akar respons; bentuk akar dipertahankan sebagai cadangan.
+                        isoTahun = isi["week"].sebagaiObjek()?.angka("isoYear") ?: isi.angka("isoYear"),
+                        isoMinggu = isi["week"].sebagaiObjek()?.angka("isoWeek") ?: isi.angka("isoWeek"),
                     )
                 }
                 HasilBaca.Sukses(Unit)

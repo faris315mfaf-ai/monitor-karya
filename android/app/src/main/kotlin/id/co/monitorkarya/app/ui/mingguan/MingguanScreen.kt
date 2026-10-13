@@ -15,6 +15,10 @@
 // layar lain).
 package id.co.monitorkarya.app.ui.mingguan
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,12 +33,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -50,17 +55,21 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -77,10 +86,17 @@ import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkCard
-import id.co.monitorkarya.designsystem.components.MkFAB
 import id.co.monitorkarya.designsystem.components.MkField
 import id.co.monitorkarya.designsystem.components.MkKartuPapan
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
+import id.co.monitorkarya.designsystem.components.MkLampiranRow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.DaftarAntreanOtomatis
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.draf.PenandaDrafPulih
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
+import id.co.monitorkarya.core.data.sync.KunciOutbox
 import id.co.monitorkarya.designsystem.components.MkOpsi
 import id.co.monitorkarya.designsystem.components.MkPilih
 import id.co.monitorkarya.designsystem.components.MkSegmentedControl
@@ -119,6 +135,10 @@ fun MingguanScreen(
     val sibuk by vm.sibuk.collectAsStateWithLifecycle()
     val notifikasi by vm.notifikasi.collectAsStateWithLifecycle()
     val versiForm by vm.versiForm.collectAsStateWithLifecycle()
+    val buktiSibuk by vm.buktiSibuk.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? MingguanUiState.Sukses)
     MingguanScreen(
         state = state,
         divisiTerpilih = divisiTerpilih,
@@ -128,12 +148,20 @@ fun MingguanScreen(
         sibuk = sibuk,
         notifikasi = notifikasi,
         versiForm = versiForm,
-        offline = offline,
+        buktiSibuk = buktiSibuk,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
+        menungguKirim = luring.menungguKirim,
+        antrean = { DaftarAntreanOtomatis(kunciAwalan = KunciOutbox.AWALAN_MINGGUAN) },
         onUlang = vm::ulang,
         onPilihDivisi = vm::pilihDivisi,
+        onPilihEntitas = vm::pilihEntitas,
         onBukaTambah = vm::bukaTambah,
         onBukaUbah = vm::bukaUbah,
+        onBukaBukti = vm::bukaBukti,
         onTutupSheet = vm::tutupSheet,
+        onCatatIsian = vm::catatIsian,
+        onBuangDraf = vm::buangDraf,
         onSimpanButir = vm::simpanButir,
         onHapusButir = vm::hapusButir,
         onPindah = vm::pindah,
@@ -143,6 +171,9 @@ fun MingguanScreen(
         onNotifikasiTampil = vm::notifikasiTampil,
         onGalatAksiTampil = vm::galatAksiTampil,
         onAjukanBukaKunci = onAjukanBukaKunci,
+        onUnggahBukti = vm::unggahBukti,
+        onHapusBukti = vm::hapusBukti,
+        urlBukti = vm::urlBukti,
         modifier = modifier,
     )
 }
@@ -159,12 +190,23 @@ fun MingguanScreen(
     sibuk: Boolean = false,
     notifikasi: NotifikasiMingguan? = null,
     versiForm: Int = 0,
+    /** "unggah" / id bukti yang sedang dihapus; null = bebas. */
+    buktiSibuk: String? = null,
     offline: Boolean = false,
+    /** Kapan data papan dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
+    menungguKirim: Int = 0,
+    /** Slot daftar tulisan "Menunggu kirim"/"Gagal kirim" (outbox mingguan). */
+    antrean: @Composable () -> Unit = {},
     onUlang: () -> Unit = {},
     onPilihDivisi: (String) -> Unit = {},
+    onPilihEntitas: (String) -> Unit = {},
     onBukaTambah: () -> Unit = {},
     onBukaUbah: (String) -> Unit = {},
+    onBukaBukti: (String) -> Unit = onBukaUbah,
     onTutupSheet: () -> Unit = {},
+    onCatatIsian: (IsianButir) -> Unit = {},
+    onBuangDraf: () -> Unit = {},
     onSimpanButir: (IsianButir) -> Unit = {},
     onHapusButir: (String) -> Unit = {},
     onPindah: (String, ArahPindah) -> Unit = { _, _ -> },
@@ -174,6 +216,9 @@ fun MingguanScreen(
     onNotifikasiTampil: () -> Unit = {},
     onGalatAksiTampil: () -> Unit = {},
     onAjukanBukaKunci: (String) -> Unit = {},
+    onUnggahBukti: (butirId: String, uri: Uri) -> Unit = { _, _ -> },
+    onHapusBukti: (String) -> Unit = {},
+    urlBukti: suspend (String) -> String? = { null },
     modifier: Modifier = Modifier,
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -206,13 +251,19 @@ fun MingguanScreen(
                     end = MkSpacing.space3,
                     top = MkSpacing.space4,
                     // Ruang untuk footer sticky + FAB agar isi terakhir tak tertutup.
-                    bottom = if (tampilFooter) 148.dp else if (bisaTulisPapan) 96.dp else MkSpacing.space6,
+                    bottom = if (tampilFooter) 112.dp else MkSpacing.space6,
                 ),
             verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
         ) {
             if (offline) {
-                MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
+                BannerLuring(
+                    modifier = Modifier.fillMaxWidth(),
+                    tersimpanPadaMs = tersimpanPadaMs,
+                    menungguKirim = menungguKirim,
+                    onCobaLagi = onUlang,
+                )
             }
+            antrean()
             when (state) {
                 MingguanUiState.Memuat -> repeat(3) { MkSkeleton(modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)) }
                 is MingguanUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = onUlang)
@@ -221,10 +272,13 @@ fun MingguanScreen(
                     divisi = divisi,
                     galatAksi = galatAksi,
                     onPilihDivisi = onPilihDivisi,
+                    onPilihEntitas = onPilihEntitas,
                     onBukaUbah = onBukaUbah,
                     onPindah = onPindah,
                     onGalatAksiTampil = onGalatAksiTampil,
                     onAjukanBukaKunci = onAjukanBukaKunci,
+                    onBukaTambah = onBukaTambah,
+                    onBukaBukti = onBukaBukti,
                 )
             }
         }
@@ -243,17 +297,9 @@ fun MingguanScreen(
             )
         }
 
-        // FAB "Tambah butir" — hanya saat papan boleh ditulis (DRAFT).
-        if (bisaTulisPapan) {
-            MkFAB(
-                label = "Tambah butir",
-                ikon = Icons.Outlined.Add,
-                onClick = onBukaTambah,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = MkSpacing.space3, bottom = if (tampilFooter) 92.dp else MkSpacing.space5),
-            )
-        }
+        // E2E-R2 N8: "Tambah butir" tidak lagi FAB melayang (menutupi persen
+        // progres kartu butir pertama di atas footer) — kini tombol sebaris di
+        // atas papan (IsiPapan), footer tetap memegang aksi primer.
 
         SnackbarHost(
             hostState = snackbar,
@@ -273,10 +319,19 @@ fun MingguanScreen(
             galatSheet = galatSheet,
             sibuk = sibuk,
             bolehEdit = bisaTulisPapan,
+            // Bukti boleh dikelola selama baris laporan masih bisa ditulis — juga
+            // saat MENUNGGU_PERSETUJUAN (Setujui ditolak 422 bila butir tanpa bukti).
+            bolehBukti = divisi.bisaTulis && statusHeader != "DISETUJUI",
+            buktiSibuk = buktiSibuk,
             onTutup = onTutupSheet,
+            onCatatIsian = onCatatIsian,
+            onBuangDraf = onBuangDraf,
             onSimpan = onSimpanButir,
             onHapus = onHapusButir,
             onAjukanBukaKunci = onAjukanBukaKunci,
+            onUnggahBukti = onUnggahBukti,
+            onHapusBukti = onHapusBukti,
+            urlBukti = urlBukti,
         )
     }
 }
@@ -292,15 +347,17 @@ private fun IsiPapan(
     divisi: DivisiMingguan?,
     galatAksi: GalatAksi?,
     onPilihDivisi: (String) -> Unit,
+    onPilihEntitas: (String) -> Unit,
     onBukaUbah: (String) -> Unit,
     onPindah: (String, ArahPindah) -> Unit,
     onGalatAksiTampil: () -> Unit,
     onAjukanBukaKunci: (String) -> Unit,
+    onBukaTambah: () -> Unit = {},
+    onBukaBukti: (String) -> Unit = onBukaUbah,
 ) {
     val warna = LocalMkColors.current
     val statusHeader = divisi?.laporan?.statusHeader.orEmpty()
     val butir = divisi?.laporan?.butir.orEmpty()
-    val selesai = butir.count { it.status == "SELESAI" }
     val bisaTulisPapan = divisi != null && divisi.bisaTulis && statusHeader in setOf("", "DRAFT")
 
     // Kepala layar: minggu ke-n + StatusBadge statusHeader + kalimat ringkas.
@@ -314,15 +371,23 @@ private fun IsiPapan(
         )
         StatusBadge(status = mkStatusHeader(statusHeader), text = labelStatusHeader(statusHeader))
         Text(
-            text = if (butir.isEmpty()) {
-                "Belum ada butir capaian minggu ini."
-            } else {
-                "$selesai dari ${butir.size} butir selesai"
-            },
+            // E2E-1 #9: N/A tidak dihitung (sama dengan Meja kerja dan Ringkasan).
+            text = teksHitungButir(butir),
             style = MkTypography.body,
             color = warna.ink,
         )
         Text(text = papan.teksSerah, style = MkTypography.footnote, color = warna.ink2)
+    }
+
+    // D1: TI/Super Admin memilih PT (web DivisionWeeklyDesk); peran berlingkup terpaku.
+    if (!papan.entitasTerpaku && papan.entitas.size > 1) {
+        val opsiPt = papan.entitas.map { MkOpsi(value = it.id, label = it.label) }
+        MkPilih(
+            pilihan = opsiPt,
+            terpilih = opsiPt.firstOrNull { it.value == papan.entitasId },
+            onPilih = { onPilihEntitas(it.value) },
+            label = "Entitas yang dilaporkan",
+        )
     }
 
     // Divisi yang dipimpin lebih dari satu: pilih papannya (GET membawa semuanya).
@@ -338,6 +403,13 @@ private fun IsiPapan(
 
     // Galat aksi (serah/setujui/pindah/hapus) — setara role="alert" web.
     KotakGalatAksi(galat = galatAksi, onTutup = onGalatAksiTampil, onAjukanBukaKunci = onAjukanBukaKunci)
+
+    // E2E-1 #2: butir berjalan/selesai/terkendala tanpa bukti akan ditolak 422
+    // saat Serahkan/Setujui — beri tahu lebih dulu, ketuk untuk melampirkan.
+    val tanpaBukti = butirTanpaBukti(butir)
+    if (divisi?.bisaTulis == true && statusHeader != "DISETUJUI" && tanpaBukti.isNotEmpty()) {
+        CatatanTanpaBukti(butir = tanpaBukti, onBuka = onBukaBukti)
+    }
 
     when {
         // Laporan sudah disetujui — papan dibaca saja, tanpa tombol tulis.
@@ -356,6 +428,17 @@ private fun IsiPapan(
                 ikon = Icons.Outlined.Lock,
             )
         }
+    }
+
+    // Tombol tambah butir sebaris (pengganti FAB, E2E-R2 N8).
+    if (bisaTulisPapan) {
+        MkButton(
+            label = "Tambah butir",
+            onClick = onBukaTambah,
+            variant = MkButtonVariant.SECONDARY,
+            size = MkButtonSize.S,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 
     if (butir.isEmpty()) {
@@ -445,6 +528,8 @@ private fun KotakGalatAksi(galat: GalatAksi?, onTutup: () -> Unit, onAjukanBukaK
             )
             Box(
                 modifier = Modifier
+                    // C3-R3: target sentuh minimal 48dp (ikon tetap 24dp).
+                    .minimumInteractiveComponentSize()
                     .size(24.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onTutup),
@@ -493,19 +578,16 @@ private fun PapanButir(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(MkSpacing.space3),
             ) {
-                KolomPapan("Belum", kolom.getValue("belum"), semua, bisaEdit, onBukaUbah, onPindah, Modifier.weight(1f))
-                KolomPapan("Berjalan", kolom.getValue("berjalan"), semua, bisaEdit, onBukaUbah, onPindah, Modifier.weight(1f))
-                KolomPapan("Selesai", kolom.getValue("selesai"), semua, bisaEdit, onBukaUbah, onPindah, Modifier.weight(1f))
+                kolom.forEach { (kunci, isi) ->
+                    KolomPapan(labelKolom(kunci), isi, semua, bisaEdit, onBukaUbah, onPindah, Modifier.weight(1f))
+                }
             }
         } else {
             var terpilih by rememberSaveable { mutableStateOf(kolomAwal(kolom)) }
+            if (terpilih !in kolom) terpilih = kolomAwal(kolom)
             Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space3)) {
                 MkSegmentedControl(
-                    options = listOf(
-                        MkOpsi(value = "belum", label = "Belum", count = kolom.getValue("belum").size),
-                        MkOpsi(value = "berjalan", label = "Berjalan", count = kolom.getValue("berjalan").size),
-                        MkOpsi(value = "selesai", label = "Selesai", count = kolom.getValue("selesai").size),
-                    ),
+                    options = kolom.map { (kunci, isi) -> MkOpsi(value = kunci, label = labelKolom(kunci), count = isi.size) },
                     terpilih = terpilih,
                     onPilih = { terpilih = it },
                 )
@@ -518,6 +600,49 @@ private fun PapanButir(
                     onPindah = onPindah,
                 )
             }
+        }
+    }
+}
+
+/** Tautan "Lampirkan bukti" paling banyak di catatan (sisanya lewat papan). */
+private const val MAKS_TAUTAN_BUKTI = 3
+
+/** Daftar butir yang belum berbukti — ketuk untuk membuka dan melampirkan bukti. */
+@Composable
+private fun CatatanTanpaBukti(butir: List<ButirMingguan>, onBuka: (String) -> Unit) {
+    val warna = LocalMkColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MkShapes.md)
+            .background(color = warna.statusRiskSoft)
+            .padding(MkSpacing.space3),
+        verticalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+    ) {
+        Text(
+            text = "${butir.size} butir belum berbukti",
+            style = MkTypography.bodyStrong,
+            color = warna.ink,
+        )
+        Text(
+            text = "Butir berjalan, terkendala, atau selesai wajib punya minimal 1 bukti sebelum laporan diserahkan atau disetujui.",
+            style = MkTypography.footnote,
+            color = warna.ink2,
+        )
+        butir.take(MAKS_TAUTAN_BUKTI).forEach { b ->
+            MkButton(
+                label = "Lampirkan bukti · ${b.pekerjaan.take(40)}",
+                variant = MkButtonVariant.PLAIN,
+                size = MkButtonSize.S,
+                onClick = { onBuka(b.id) },
+            )
+        }
+        if (butir.size > MAKS_TAUTAN_BUKTI) {
+            Text(
+                text = "${butir.size - MAKS_TAUTAN_BUKTI} butir lain: buka dari papan di bawah.",
+                style = MkTypography.footnote,
+                color = warna.ink2,
+            )
         }
     }
 }
@@ -539,8 +664,16 @@ private fun KolomPapan(
             modifier = modifier,
             judul = judul,
             kartu = butir.map {
-                MkKartuPapan(id = it.id, judul = it.pekerjaan, status = mkStatusButir(it.status), progres = it.progres)
+                MkKartuPapan(
+                    id = it.id,
+                    judul = it.pekerjaan,
+                    status = mkStatusButir(it.status),
+                    progres = it.progres,
+                    label = labelStatusButir(it.status),
+                )
             },
+            // Papan baca-saja tetap bisa dibuka (detail + bukti) — tanpa menyunting isian.
+            onBuka = onBukaUbah,
         )
         return
     }
@@ -675,6 +808,8 @@ private fun TombolArah(ikon: ImageVector, label: String, enabled: Boolean, onCli
     val warna = LocalMkColors.current
     Box(
         modifier = Modifier
+            // C3-R3: target sentuh minimal 48dp (lingkaran tetap 32dp).
+            .minimumInteractiveComponentSize()
             .size(32.dp)
             .clip(CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
@@ -761,60 +896,90 @@ private fun ButirSheet(
     onSimpan: (IsianButir) -> Unit,
     onHapus: (String) -> Unit,
     onAjukanBukaKunci: (String) -> Unit,
+    bolehBukti: Boolean = false,
+    buktiSibuk: String? = null,
+    onUnggahBukti: (String, Uri) -> Unit = { _, _ -> },
+    onHapusBukti: (String) -> Unit = {},
+    urlBukti: suspend (String) -> String? = { null },
+    onCatatIsian: (IsianButir) -> Unit = {},
+    onBuangDraf: () -> Unit = {},
 ) {
     val butir = buka.butir
+    // Bukti dibaca dari papan TERBARU (unggah/hapus memuat ulang papan tanpa
+    // mengikat ulang isian), bukan dari potret butir saat Sheet dibuka.
+    val buktiKini = butir?.let { b -> divisi.laporan?.butir?.firstOrNull { it.id == b.id }?.bukti ?: b.bukti }.orEmpty()
 
-    // Isian diikat ke (versiForm, id butir) — setelah 409 beku + muat ulang,
-    // isian diambil ulang dari butir termuat dan penanda kotor ikut reset.
-    val kunci = "${versiForm}:${butir?.id ?: "baru"}"
-    var aspekId by remember(kunci) { mutableStateOf(butir?.aspekId.orEmpty()) }
-    var prioritasId by remember(kunci) { mutableStateOf(butir?.prioritasId.orEmpty()) }
-    var pekerjaan by remember(kunci) { mutableStateOf(butir?.pekerjaan.orEmpty()) }
-    var target by remember(kunci) { mutableStateOf(butir?.target.orEmpty()) }
-    var picNama by remember(kunci) { mutableStateOf(butir?.picNama.orEmpty()) }
-    var status by remember(kunci) { mutableStateOf(butir?.status ?: "BELUM_MULAI") }
-    var progresTeks by remember(kunci) { mutableStateOf((butir?.progres ?: 0).toString()) }
-    var capaian by remember(kunci) { mutableStateOf(butir?.capaian.orEmpty()) }
-    var kendala by remember(kunci) { mutableStateOf(butir?.kendala.orEmpty()) }
-    var tindakLanjut by remember(kunci) { mutableStateOf(butir?.tindakLanjut.orEmpty()) }
-    var kotor by remember(kunci) { mutableStateOf(false) }
+    // Isian diikat ke (versiForm, id butir, draf) — setelah 409 beku + muat
+    // ulang, isian diambil ulang dari butir termuat. G1: Sheet yang dibuka dengan draf otomatis memakai isian draf;
+    // "Buang draf" menghapus draf sehingga isian kembali ke butir tersimpan.
+    val kunci = "${versiForm}:${butir?.id ?: "baru"}:${buka.drafPada ?: 0}"
+    val awal = buka.draf ?: isianAwalButir(butir)
+    var aspekId by remember(kunci) { mutableStateOf(awal.aspekId) }
+    var prioritasId by remember(kunci) { mutableStateOf(awal.prioritasId) }
+    var pekerjaan by remember(kunci) { mutableStateOf(awal.pekerjaan) }
+    var target by remember(kunci) { mutableStateOf(awal.target) }
+    var picNama by remember(kunci) { mutableStateOf(awal.picNama) }
+    var status by remember(kunci) { mutableStateOf(awal.status) }
+    var progresTeks by remember(kunci) { mutableStateOf(awal.progres.toString()) }
+    var capaian by remember(kunci) { mutableStateOf(awal.capaian) }
+    var kendala by remember(kunci) { mutableStateOf(awal.kendala) }
+    var tindakLanjut by remember(kunci) { mutableStateOf(awal.tindakLanjut) }
     var periksa by remember(kunci) { mutableStateOf(false) }
-    var konfirmasiTutup by remember { mutableStateOf(false) }
     var konfirmasiHapus by remember { mutableStateOf(false) }
+    var konfirmasiHapusBukti by remember { mutableStateOf<BuktiButir?>(null) }
+    val pilihFoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null && butir != null) onUnggahBukti(butir.id, uri)
+    }
+    val pilihBerkas = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && butir != null) onUnggahBukti(butir.id, uri)
+    }
+    val cakupan = rememberCoroutineScope()
+    val pembuka = LocalUriHandler.current
 
     val wajibKendala = status == "TERKENDALA"
 
-    fun ubah(nilai: String): String {
-        kotor = true
-        return nilai
-    }
+    // Perubahan dideteksi dengan membandingkan isian (draf otomatis G1), bukan penanda kotor.
+    fun ubah(nilai: String): String = nilai
 
     fun cekSekarang() = cekIsian(aspekId, prioritasId, pekerjaan, target, picNama, status, capaian, kendala)
+
+    fun isianSekarang() = IsianButir(
+        aspekId = aspekId,
+        prioritasId = prioritasId,
+        pekerjaan = pekerjaan,
+        target = target,
+        picNama = picNama,
+        status = status,
+        progres = progresTeks.toIntOrNull()?.coerceIn(0, 100) ?: 0,
+        capaian = capaian,
+        kendala = kendala,
+        tindakLanjut = tindakLanjut,
+    )
 
     fun kirim() {
         if (cekSekarang().ada()) {
             periksa = true
         } else {
-            onSimpan(
-                IsianButir(
-                    aspekId = aspekId,
-                    prioritasId = prioritasId,
-                    pekerjaan = pekerjaan,
-                    target = target,
-                    picNama = picNama,
-                    status = status,
-                    progres = progresTeks.toIntOrNull()?.coerceIn(0, 100) ?: 0,
-                    capaian = capaian,
-                    kendala = kendala,
-                    tindakLanjut = tindakLanjut,
-                ),
-            )
+            onSimpan(isianSekarang())
+        }
+    }
+
+    // G1: setiap perubahan isian dilaporkan ke ViewModel (draf otomatis).
+    if (bolehEdit) {
+        LaunchedEffect(kunci) {
+            snapshotFlow { isianSekarang() }.collect { onCatatIsian(it) }
         }
     }
 
     MkSheet(
         visible = true,
-        onTutup = { if (kotor) konfirmasiTutup = true else onTutup() },
+        onTutup = onTutup,
+        // G1 (menggantikan E2E-1 #5): geser/scrim/Kembali boleh menutup walau
+        // isian berubah — perubahan disimpan sebagai draf otomatis dan dipulihkan
+        // saat Sheet dibuka lagi. Konfirmasi dialog hanya untuk hapus.
+        bolehTutupGeser = !sibuk,
+        // Galat PUT/unggah menempel di atas tombol Simpan (E2E-1 #10).
+        galat = slotGalatSheet(galatSheet, onAjukanBukaKunci),
         judul = butir?.pekerjaan?.takeIf { it.isNotBlank() } ?: "Butir capaian baru",
         subjudul = buildString {
             append(divisi.nama)
@@ -839,10 +1004,15 @@ private fun ButirSheet(
                     modifier = Modifier.weight(1f),
                     onClick = ::kirim,
                 )
+            } else {
+                MkButton(label = "Tutup", modifier = Modifier.weight(1f), onClick = onTutup)
             }
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space4)) {
+            buka.drafPada?.takeIf { buka.draf != null && bolehEdit }?.let { pada ->
+                PenandaDrafPulih(disimpanPadaMs = pada, onBuang = onBuangDraf, enabled = !sibuk)
+            }
             PilihOpsi(
                 label = "Aspek",
                 opsi = papan.aspek.map { MkOpsi(value = it.id, label = it.label) },
@@ -938,29 +1108,41 @@ private fun ButirSheet(
                 baris = 2,
                 enabled = bolehEdit,
             )
-            if (butir != null && butir.jumlahBukti > 0) {
-                Text(
-                    text = "${butir.jumlahBukti} bukti terlampir pada butir ini.",
-                    style = MkTypography.footnote,
-                    color = LocalMkColors.current.ink2,
-                )
+            // E2E-R2 N6: dibuka dari tautan "Lampirkan bukti" → gulir ke sini.
+            val keBukti = remember { BringIntoViewRequester() }
+            LaunchedEffect(butir?.id, buka.keBukti) {
+                if (buka.keBukti) {
+                    delay(350) // tunggu Sheet selesai tata letak/animasi masuk
+                    keBukti.bringIntoView()
+                }
             }
-            KotakGalatSheet(galat = galatSheet, onAjukanBukaKunci = onAjukanBukaKunci)
+            BagianBukti(
+                modifier = Modifier.bringIntoViewRequester(keBukti),
+                butirTersimpan = butir != null,
+                wajib = butirWajibBukti(status),
+                bukti = buktiKini,
+                boleh = bolehBukti,
+                buktiSibuk = buktiSibuk,
+                onFoto = { pilihFoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                onBerkas = { pilihBerkas.launch(MIME_BUKTI) },
+                onBuka = { b -> cakupan.launch { urlBukti(b.id)?.let { runCatching { pembuka.openUri(it) } } } },
+                onHapus = { konfirmasiHapusBukti = it },
+            )
         }
 
-        if (konfirmasiTutup) {
+        konfirmasiHapusBukti?.let { b ->
             AlertDialog(
-                onDismissRequest = { konfirmasiTutup = false },
-                title = { Text(text = "Buang perubahan?") },
-                text = { Text(text = "Isian yang belum disimpan akan dibuang.") },
+                onDismissRequest = { konfirmasiHapusBukti = null },
+                title = { Text(text = "Hapus bukti ini?") },
+                text = { Text(text = "${b.nama} dihapus dari butir dan tidak bisa dikembalikan.") },
                 confirmButton = {
                     TextButton(onClick = {
-                        konfirmasiTutup = false
-                        onTutup()
-                    }) { Text(text = "Buang perubahan") }
+                        konfirmasiHapusBukti = null
+                        onHapusBukti(b.id)
+                    }) { Text(text = "Hapus bukti") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { konfirmasiTutup = false }) { Text(text = "Lanjut mengisi") }
+                    TextButton(onClick = { konfirmasiHapusBukti = null }) { Text(text = "Batal") }
                 },
             )
         }
@@ -981,6 +1163,105 @@ private fun ButirSheet(
             )
         }
     }
+}
+
+/** Jenis berkas yang ditawarkan pemilih dokumen (MIME_DIIZINKAN server). */
+private val MIME_BUKTI = arrayOf(
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    "text/csv",
+    "image/*",
+)
+
+/**
+ * Bagian "Bukti" butir (EvidencePanel WEEKLY_ITEM web): daftar lampiran
+ * (ketuk = buka, ikon = hapus), unggah foto/berkas. Butir baru: bukti setelah
+ * butir tersimpan. [wajib] = status selain Belum mulai/N/A.
+ */
+@Suppress("LongParameterList")
+@Composable
+private fun BagianBukti(
+    butirTersimpan: Boolean,
+    wajib: Boolean,
+    bukti: List<BuktiButir>,
+    boleh: Boolean,
+    buktiSibuk: String?,
+    onFoto: () -> Unit,
+    onBerkas: () -> Unit,
+    onBuka: (BuktiButir) -> Unit,
+    onHapus: (BuktiButir) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val warna = LocalMkColors.current
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+        ) {
+            Text(text = "Bukti", style = MkTypography.callout, color = warna.ink)
+            if (wajib) Text(text = "Wajib minimal 1", style = MkTypography.caption, color = warna.statusLate)
+        }
+        when {
+            !butirTersimpan -> Text(
+                text = "Foto dan dokumen dapat dilampirkan setelah butir disimpan.",
+                style = MkTypography.footnote,
+                color = warna.ink2,
+            )
+            bukti.isEmpty() -> Text(
+                text = if (wajib) {
+                    "Belum ada bukti. Status ini butuh minimal 1 bukti sebelum laporan diserahkan."
+                } else {
+                    "Belum ada bukti."
+                },
+                style = MkTypography.footnote,
+                color = if (wajib) warna.statusLate else warna.ink2,
+            )
+        }
+        bukti.forEach { b ->
+            MkLampiranRow(
+                modifier = Modifier.clickable { onBuka(b) },
+                namaBerkas = b.nama,
+                ukuranLabel = ukuranBukti(b.ukuran),
+                sedangUnggah = buktiSibuk == b.id,
+                onHapus = if (boleh && buktiSibuk == null) ({ onHapus(b) }) else null,
+            )
+        }
+        if (buktiSibuk == UNGGAH) MkLampiranRow(namaBerkas = "Bukti baru", ukuranLabel = "", sedangUnggah = true)
+        if (butirTersimpan && boleh) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
+                MkButton(
+                    label = if (buktiSibuk == UNGGAH) "Mengunggah…" else "Lampirkan foto",
+                    size = MkButtonSize.S,
+                    enabled = buktiSibuk == null,
+                    onClick = onFoto,
+                )
+                MkButton(
+                    label = "Lampirkan berkas",
+                    variant = MkButtonVariant.PLAIN,
+                    size = MkButtonSize.S,
+                    enabled = buktiSibuk == null,
+                    onClick = onBerkas,
+                )
+            }
+            Text(
+                text = "Foto dikompres otomatis (sisi terpanjang 2048 px). Berkas maksimal 20 MB.",
+                style = MkTypography.caption,
+                color = warna.ink2,
+            )
+        }
+    }
+}
+
+/** "1,2 MB" / "340 KB" — ukuran lampiran. */
+internal fun ukuranBukti(bait: Int): String = when {
+    bait >= 1024 * 1024 -> String.format(java.util.Locale.forLanguageTag("id-ID"), "%.1f MB", bait / 1048576.0)
+    bait >= 1024 -> "${bait / 1024} KB"
+    bait > 0 -> "$bait B"
+    else -> "Berkas"
 }
 
 /** MkPilih + label "Wajib" + baris kesalahan (padanan pola MkPilih LaporanHarian). */
@@ -1045,6 +1326,10 @@ private fun MedanProgres(nilai: String, enabled: Boolean, onUbah: (String) -> Un
     )
 }
 
+/** Slot galat MkSheet (menempel di atas footer); null bila tidak ada galat. */
+private fun slotGalatSheet(galat: GalatSheet?, onAjukanBukaKunci: (String) -> Unit): (@Composable () -> Unit)? =
+    if (galat == null) null else ({ KotakGalatSheet(galat = galat, onAjukanBukaKunci = onAjukanBukaKunci) })
+
 /** Galat PUT terakhir di dalam sheet (409/422/lainnya). */
 @Composable
 private fun KotakGalatSheet(galat: GalatSheet?, onAjukanBukaKunci: (String) -> Unit) {
@@ -1093,12 +1378,13 @@ private val STATUS_BUTIR = listOf("BELUM_MULAI", "ON_PROGRESS", "SELESAI", "TERK
 internal fun labelKolom(key: String): String = when (key) {
     "berjalan" -> "Berjalan"
     "selesai" -> "Selesai"
+    "na" -> "N/A"
     else -> "Belum"
 }
 
 /** Kolom segmen mula-mula: yang isinya paling relevan (berjalan → belum → selesai). */
 internal fun kolomAwal(kolom: Map<String, List<ButirMingguan>>): String =
-    listOf("berjalan", "belum", "selesai").firstOrNull { !kolom[it].isNullOrEmpty() } ?: "berjalan"
+    listOf("berjalan", "belum", "selesai", "na").firstOrNull { !kolom[it].isNullOrEmpty() } ?: "berjalan"
 
 /** "Aspek · Prioritas · Kam" — meta baris kartu; hari hanya bila butir berhari. */
 internal fun metaButir(b: ButirMingguan): String = buildString {

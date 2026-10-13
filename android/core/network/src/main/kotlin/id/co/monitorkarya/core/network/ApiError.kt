@@ -1,6 +1,7 @@
 package id.co.monitorkarya.core.network
 
 import java.io.IOException
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -61,6 +62,11 @@ sealed class ApiError {
                 if (offlineDeteksi) "Anda sedang luring. Periksa koneksi internet Anda, lalu coba lagi."
                 else "Anda sedang luring atau server tak terjangkau."
             )
+            // Jawaban server tidak cocok dengan kontrak klien (mis. kolom wajib
+            // hilang/null): pesan teknis kotlinx.serialization tidak untuk pengguna.
+            is SerializationException -> Lainnya(
+                "Jawaban server tidak dikenali. Muat ulang, atau perbarui aplikasi bila berulang.",
+            )
             else -> Lainnya(t.message ?: "Terjadi galat yang tidak diketahui.")
         }
 
@@ -88,6 +94,9 @@ sealed class ApiError {
                         ?: t.response()?.headers()?.get("Retry-After")?.toLongOrNull()
                         ?: 0L
                 )
+                // Batas berkas 20 MB (evidence/upload) ditegakkan proxy/server; badannya
+                // sering bukan JSON sehingga pesan server kosong.
+                413 -> Lainnya(pesan ?: "Berkas atau isian terlalu besar untuk dikirim.")
                 400, 422 -> Validasi(pesan = pesan ?: "Permintaan tidak valid.", errors = obj.daftar("errors"))
                 in 500..599 -> Server(pesan ?: "Server sedang bermasalah. Coba lagi nanti.")
                 else -> Lainnya(pesan ?: "Terjadi galat (HTTP $kode).")

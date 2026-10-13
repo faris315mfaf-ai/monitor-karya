@@ -28,6 +28,10 @@
     <string name="umum_memuat">Memuat…</string>
     <string name="umum_coba_lagi">Coba lagi</string>
     <string name="umum_keluar">Keluar</string>
+    <string name="tab_lainnya">Lainnya</string>
+    <string name="keluar_antrean_judul">Keluar sekarang?</string>
+    <string name="keluar_antrean_isi">%1$d perubahan belum terkirim ke server dan akan hilang bila Anda keluar.</string>
+    <string name="umum_batal_keluar">Tetap masuk</string>
     <string name="umum_ganti_sandi">Ganti kata sandi</string>
     <string name="umum_luring">Anda sedang luring. Periksa koneksi internet Anda, lalu coba lagi.</string>
 

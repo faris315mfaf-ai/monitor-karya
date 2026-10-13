@@ -4,8 +4,6 @@ import id.co.monitorkarya.core.data.db.OutboxDao
 import id.co.monitorkarya.core.data.db.OutboxEntity
 import id.co.monitorkarya.core.data.repo.HasilKirim
 import id.co.monitorkarya.core.network.ApiError
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -49,41 +47,8 @@ import org.junit.Test
  */
 class OutboxProsesTest {
 
-    /** OutboxDao berbasis MutableList — cukup untuk aturan antrean. */
-    private class FakeOutboxDao : OutboxDao {
-        val baris = mutableListOf<OutboxEntity>()
-
-        private fun snapshotMenunggu(): List<OutboxEntity> =
-            baris.filter { it.status == OutboxEntity.STATUS_MENUNGGU }.sortedBy { it.id }
-
-        override suspend fun simpan(satu: OutboxEntity): Long {
-            val id = if (satu.id == 0L) (baris.maxOfOrNull { it.id } ?: 0L) + 1 else satu.id
-            val baru = satu.copy(id = id)
-            baris.removeAll { it.id == id }
-            baris.add(baru)
-            return id
-        }
-
-        override fun antrian(): Flow<List<OutboxEntity>> = flowOf(snapshotMenunggu())
-
-        override suspend fun tandai(id: Long, status: String, pesan: String?, percobaan: Int) {
-            val i = baris.indexOfFirst { it.id == id }
-            if (i >= 0) baris[i] = baris[i].copy(status = status, pesanGalat = pesan, percobaan = percobaan)
-        }
-
-        override suspend fun hapusBerhasil() {
-            baris.removeAll { it.status == OutboxEntity.STATUS_BERHASIL }
-        }
-
-        override suspend fun hapusKedaluwarsa(sebelum: Long) {
-            baris.removeAll { it.dibuatPada < sebelum }
-        }
-
-        override fun jumlahMenunggu(): Flow<Int> = flowOf(snapshotMenunggu().size)
-    }
-
     private fun pesanBaru(jenis: String = "KIRIM_LAPORAN", payloadJson: String = "{}"): OutboxEntity =
-        OutboxEntity(jenis = jenis, payloadJson = payloadJson, dibuatPada = 1_000L)
+        OutboxEntity(jenis = jenis, payloadJson = payloadJson, dibuatPada = System.currentTimeMillis())
 
     private fun daoDengan(vararg pesan: OutboxEntity): FakeOutboxDao {
         val dao = FakeOutboxDao()

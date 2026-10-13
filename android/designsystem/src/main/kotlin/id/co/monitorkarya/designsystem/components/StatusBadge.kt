@@ -12,8 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Circle
-import androidx.compose.material.icons.outlined.Error
-import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
@@ -35,18 +34,20 @@ import id.co.monitorkarya.designsystem.theme.PreviewGanda
 
 /**
  * Status kerja Monitor Karya — warna, ikon, dan kata selalu bersama.
- * Port enum Status web: on/risk/late/done/info/neutral dengan kosakata tetap.
+ * Port `STATUS` web (src/components/mk/core.tsx): on/done = centang, risk = segitiga
+ * (`peringatan`), late = jam (`waktu`), info = "Informasi" (`info`), neutral = titik.
+ * Kata lain untuk INFO (mis. "Diingatkan") diberikan pemanggil lewat `text`.
  */
 enum class MkStatus(
     val label: String,
     val ikon: ImageVector,
 ) {
     ON("Sesuai jadwal", Icons.Outlined.CheckCircle),
-    RISK("Perlu perhatian", Icons.Outlined.Error),
-    LATE("Terlambat", Icons.Outlined.Warning),
+    RISK("Perlu perhatian", Icons.Outlined.Warning),
+    LATE("Terlambat", Icons.Outlined.Schedule),
     DONE("Selesai", Icons.Outlined.CheckCircle),
     NEUTRAL("Belum mulai", Icons.Outlined.Circle),
-    INFO("Diingatkan", Icons.Outlined.NotificationsActive),
+    INFO("Informasi", Icons.Outlined.Info),
 }
 
 /** Ukuran lencana: MD tinggi 28dp (bawaan), SM tinggi 24dp untuk tabel/baris. */

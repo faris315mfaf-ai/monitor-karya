@@ -7,6 +7,8 @@
 // sukses mengumpulkan undoToken untuk snackbar "Urungkan" (UndoApi, tiket 15
 // menit sekali pakai). Penerusan harian sekaligus membekukan laporannya,
 // karena itu tombol dikonfirmasi lewat dialog sebelum loop berjalan.
+// LURING (A1-LURING.md §6): "Teruskan laporan ke Direksi" TIDAK diantre — sama
+// dengan Penerimaan: pengesahan isi saat itu + jendela Urungkan 15 menit.
 package id.co.monitorkarya.app.ui.admin
 
 import androidx.lifecycle.ViewModel
@@ -192,6 +194,9 @@ class DashboardAdminViewModel @Inject constructor(
             }
             muatInternal()
             val pesan = when {
+                // BUG-13: tiket campuran harian + mingguan — pesan server tiket
+                // terakhir ("Penerusan capaian mingguan diurungkan.") menyesatkan.
+                gagal == 0 && berhasil > 1 -> "Penerusan $berhasil laporan ke Direksi diurungkan."
                 gagal == 0 -> pesanSukses ?: "Penerusan diurungkan."
                 berhasil > 0 -> listOfNotNull("$berhasil diurungkan, $gagal gagal.", pesanGagal).joinToString(" ")
                 else -> pesanGagal ?: "Tindakan belum bisa diurungkan. Coba lagi."

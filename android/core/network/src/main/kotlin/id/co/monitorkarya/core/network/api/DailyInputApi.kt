@@ -1,5 +1,6 @@
 package id.co.monitorkarya.core.network.api
 
+import id.co.monitorkarya.core.network.Idempotensi
 import id.co.monitorkarya.core.network.dto.DailyInputGetResponse
 import id.co.monitorkarya.core.network.dto.DailyInputPutResponse
 import id.co.monitorkarya.core.network.dto.DailyInputRequest
@@ -8,6 +9,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PUT
 import retrofit2.http.Query
 
@@ -27,7 +29,10 @@ interface DailyInputApi {
 
     /** Simpan draf (action "save") atau kirim (action "submit"). */
     @PUT("api/daily-input")
-    suspend fun simpan(@Body body: DailyInputRequest): Response<DailyInputPutResponse>
+    suspend fun simpan(
+        @Body body: DailyInputRequest,
+        @Header(Idempotensi.HEADER) kunciIdempotensi: String? = null,
+    ): Response<DailyInputPutResponse>
 
     /** Hapus laporan (bawaan hari ini) selama belum diteruskan ke holding. */
     @DELETE("api/daily-input")
@@ -35,4 +40,19 @@ interface DailyInputApi {
         @Query("projectId") projectId: String,
         @Query("date") tanggal: String? = null,
     ): Response<OkResponse>
+}
+
+/**
+ * Kirim/simpan laporan harian gabungan entri (A1, 13 Okt 2026). Rute sama
+ * dengan [DailyInputApi.simpan]; responsnya dibaca sebagai
+ * [id.co.monitorkarya.core.network.dto.DailyInputKirimResponse] (dengan
+ * undoToken opsional). Antarmuka terpisah agar kontrak lama tidak berubah.
+ */
+interface LaporanPicApi {
+
+    @PUT("api/daily-input")
+    suspend fun kirim(
+        @Body body: DailyInputRequest,
+        @Header(Idempotensi.HEADER) kunciIdempotensi: String? = null,
+    ): Response<id.co.monitorkarya.core.network.dto.DailyInputKirimResponse>
 }

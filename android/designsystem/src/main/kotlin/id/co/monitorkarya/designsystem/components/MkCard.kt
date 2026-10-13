@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
@@ -50,6 +51,7 @@ fun MkCard(
         Column(
             modifier = dasar.clickable(
                 interactionSource = interactionSource,
+                role = Role.Button,
                 onClick = onClick,
             ).padding(padding),
             content = content,

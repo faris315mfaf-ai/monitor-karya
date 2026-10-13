@@ -6,6 +6,27 @@
 package id.co.monitorkarya.app.ui.tim
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.hilt.navigation.compose.hiltViewModel
+import id.co.monitorkarya.designsystem.components.MkButtonSize
+import id.co.monitorkarya.designsystem.components.MkButtonVariant
+import id.co.monitorkarya.designsystem.components.MkChip
+import id.co.monitorkarya.designsystem.theme.MkShapes
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +43,10 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.TarikSegarkan
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.designsystem.components.EmptyNote
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkBadgeSize
@@ -29,7 +54,6 @@ import id.co.monitorkarya.designsystem.components.MkButton
 import id.co.monitorkarya.designsystem.components.MkCard
 import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkListRow
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSheet
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.MkStatus
@@ -51,53 +75,136 @@ fun TimScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Penanda offline-first bersama (app/ui/luring, A1-LURING.md §5).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? TimUiState.Siap)
     val terpilih by vm.terpilih.collectAsStateWithLifecycle()
+    val sibuk by vm.sibuk.collectAsStateWithLifecycle()
+    val pesan by vm.pesan.collectAsStateWithLifecycle()
+    val menyegarkan by vm.menyegarkan.collectAsStateWithLifecycle()
+    // E2E-R2 N3: tab Divisi tampil lagi → muat ulang diam-diam.
+    LaunchedEffect(vm) { vm.saatTampil() }
+    // Ringkasan mingguan untuk Direktur (E2E-1 #1): VM baru dibuat saat Sheet
+    // pertama kali dibuka, dan memuat ulang setiap kali dibuka.
+    var ringkasanTerbuka by rememberSaveable { mutableStateOf(false) }
     TimScreen(
         state = state,
         terpilih = terpilih,
-        offline = offline,
+        offline = offline || luring.luring,
+        tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
+        sibuk = sibuk,
+        pesan = pesan,
         onUlang = vm::ulang,
         onPilih = vm::pilih,
+        onIngatkan = vm::ingatkan,
+        onTandaiDibaca = vm::tandaiDibaca,
+        onAturKehadiran = vm::aturKehadiran,
+        onUrungkan = vm::urungkan,
+        onPesanTampil = vm::pesanTampil,
+        onBukaRingkasan = { ringkasanTerbuka = true },
+        menyegarkan = menyegarkan,
+        onSegarkan = vm::segarkan,
         modifier = modifier,
     )
+    if (ringkasanTerbuka) {
+        val divisiId = (state as? TimUiState.Siap)?.tim?.divisiId
+        val rvm: RingkasanDirekturViewModel = hiltViewModel()
+        LaunchedEffect(Unit) { rvm.muat(divisiId) }
+        RingkasanDirekturSheet(vm = rvm, terlihat = true, onTutup = { ringkasanTerbuka = false })
+    }
 }
 
 /** Versi status murni — mudah dipratinjau/diuji tanpa ViewModel. */
+@Suppress("LongParameterList")
 @Composable
 fun TimScreen(
     state: TimUiState,
     terpilih: String? = null,
     offline: Boolean = false,
+    /** Kapan data layar dimuat — banner "Luring · data tersimpan HH.MM". */
+    tersimpanPadaMs: Long? = null,
+    sibuk: String? = null,
+    pesan: PesanTim? = null,
     onUlang: () -> Unit = {},
     onPilih: (String?) -> Unit = {},
+    onIngatkan: (String) -> Unit = {},
+    onTandaiDibaca: (String) -> Unit = {},
+    onAturKehadiran: (String, String) -> Unit = { _, _ -> },
+    onUrungkan: (UrungkanTim) -> Unit = {},
+    onPesanTampil: () -> Unit = {},
+    onBukaRingkasan: () -> Unit = {},
+    menyegarkan: Boolean = false,
+    onSegarkan: () -> Unit = onUlang,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
-            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
-        verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
-    ) {
-        if (offline) MkOfflineBanner(modifier = Modifier.fillMaxWidth(), terlihat = true, onCobaLagi = onUlang)
-        when (state) {
-            TimUiState.Memuat -> repeat(4) { MkSkeleton(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) }
-            is TimUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = onUlang)
-            is TimUiState.Siap -> IsiTim(tim = state.tim, terpilih = terpilih, onPilih = onPilih)
+    val snackbar = remember { SnackbarHostState() }
+    val sheetTerbuka = (state as? TimUiState.Siap)?.tim?.anggota?.any { it.id == terpilih } == true
+    // Pesan tampil sebagai snackbar saat Sheet tertutup; saat Sheet terbuka pesan
+    // ditampilkan di dalam Sheet (snackbar layar tertutup jendela Sheet).
+    LaunchedEffect(pesan?.id, sheetTerbuka) {
+        val p = pesan ?: return@LaunchedEffect
+        if (sheetTerbuka) return@LaunchedEffect
+        val hasil = snackbar.showSnackbar(
+            message = p.teks,
+            actionLabel = if (p.urungkan != null) "Urungkan" else null,
+            duration = if (p.urungkan != null) SnackbarDuration.Long else SnackbarDuration.Short,
+        )
+        if (hasil == SnackbarResult.ActionPerformed) p.urungkan?.let(onUrungkan)
+        onPesanTampil()
+    }
+    Box(modifier = modifier.fillMaxSize()) {
+        // E2E-R2 N3: tarik ke bawah memuat ulang meja tim.
+        TarikSegarkan(menyegarkan = menyegarkan, onSegarkan = onSegarkan) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space4),
+            verticalArrangement = Arrangement.spacedBy(MkSpacing.space4),
+        ) {
+            if (offline) BannerLuring(modifier = Modifier.fillMaxWidth(), tersimpanPadaMs = tersimpanPadaMs, onCobaLagi = onUlang)
+            when (state) {
+                TimUiState.Memuat -> repeat(4) { MkSkeleton(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) }
+                is TimUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = onUlang)
+                is TimUiState.Siap -> IsiTim(
+                    tim = state.tim,
+                    terpilih = terpilih,
+                    sibuk = sibuk,
+                    pesan = pesan.takeIf { sheetTerbuka },
+                    onPilih = onPilih,
+                    onIngatkan = onIngatkan,
+                    onTandaiDibaca = onTandaiDibaca,
+                    onAturKehadiran = onAturKehadiran,
+                    onUrungkan = onUrungkan,
+                    onPesanTampil = onPesanTampil,
+                    onBukaRingkasan = onBukaRingkasan,
+                )
+            }
         }
+        }
+        SnackbarHost(hostState = snackbar, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
 // ------------------------------------------------------------------
-// Tingkat 1 — kartu "Laporan harian tim"
+// Tingkat 1 — kartu "Laporan harian tim" + kartu ringkasan Direktur
 // ------------------------------------------------------------------
 
+@Suppress("LongParameterList")
 @Composable
 private fun IsiTim(
     tim: TimUi,
     terpilih: String?,
+    sibuk: String?,
+    pesan: PesanTim?,
     onPilih: (String?) -> Unit,
+    onIngatkan: (String) -> Unit,
+    onTandaiDibaca: (String) -> Unit,
+    onAturKehadiran: (String, String) -> Unit,
+    onUrungkan: (UrungkanTim) -> Unit,
+    onPesanTampil: () -> Unit,
+    onBukaRingkasan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (tim.divisiId == null) {
@@ -134,10 +241,43 @@ private fun IsiTim(
             }
         }
     }
-    SheetAnggota(tim = tim, terpilih = terpilih, onTutup = { onPilih(null) })
+    KartuRingkasanDirektur(onBuka = onBukaRingkasan)
+    SheetAnggota(
+        tim = tim,
+        terpilih = terpilih,
+        sibuk = sibuk,
+        pesan = pesan,
+        onTutup = { onPilih(null) },
+        onIngatkan = onIngatkan,
+        onTandaiDibaca = onTandaiDibaca,
+        onAturKehadiran = onAturKehadiran,
+        onUrungkan = onUrungkan,
+        onPesanTampil = onPesanTampil,
+    )
 }
 
-/** Judul + subjudul kartu: "x dari y masuk · tenggat 17.00". */
+/** Jalur ke ringkasan mingguan untuk Direktur (WeeklySummaryCard web). */
+@Composable
+private fun KartuRingkasanDirektur(onBuka: () -> Unit) {
+    val warna = LocalMkColors.current
+    MkCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
+            Text(text = "Laporan mingguan untuk Direktur", style = MkTypography.title3, color = warna.ink)
+            Text(
+                text = "Disusun otomatis dari laporan harian dan output. Periksa 1–3 poin capaian, lalu kirim ke Direktur.",
+                style = MkTypography.footnote,
+                color = warna.ink2,
+            )
+            MkButton(
+                label = "Buka ringkasan untuk Direktur",
+                variant = MkButtonVariant.PRIMARY,
+                onClick = onBuka,
+            )
+        }
+    }
+}
+
+/** Judul + subjudul kartu: "x dari y masuk · tenggat 17.00 WIB" (label dari server). */
 @Composable
 private fun KolomKepalaKartu(tim: TimUi, modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(MkSpacing.space1)) {
@@ -146,13 +286,8 @@ private fun KolomKepalaKartu(tim: TimUi, modifier: Modifier = Modifier) {
             style = MkTypography.title3,
             color = LocalMkColors.current.ink,
         )
-        val masuk = if (tim.wajibLapor > 0) {
-            "${tim.sudahMasuk} dari ${tim.wajibLapor} masuk · "
-        } else {
-            ""
-        }
         Text(
-            text = "${masuk}tenggat ${tim.tenggatLabel ?: "17.00"} WIB",
+            text = teksTenggatTim(tim),
             style = MkTypography.footnote,
             color = LocalMkColors.current.ink2,
         )
@@ -211,37 +346,120 @@ internal fun lencanaLaporan(anggota: AnggotaUi, terkunci: Boolean): Pair<MkStatu
 }
 
 // ------------------------------------------------------------------
-// Tingkat 2 — sheet ringkas per orang (opsional, baca-saja)
+// Tingkat 2 — sheet per orang (aksi: ingatkan, tandai dibaca, kehadiran)
 // ------------------------------------------------------------------
 
-/** Sheet ringkas satu anggota: laporan hari ini, capaian, kendala, beban kerja. */
+/** Sheet satu anggota (member-sheet.tsx): laporan, kehadiran, beban, isi hari ini + aksi. */
+@Suppress("LongParameterList")
 @Composable
 private fun SheetAnggota(
     tim: TimUi,
     terpilih: String?,
+    sibuk: String?,
+    pesan: PesanTim?,
     onTutup: () -> Unit,
+    onIngatkan: (String) -> Unit,
+    onTandaiDibaca: (String) -> Unit,
+    onAturKehadiran: (String, String) -> Unit,
+    onUrungkan: (UrungkanTim) -> Unit,
+    onPesanTampil: () -> Unit,
 ) {
     val anggota = tim.anggota.firstOrNull { it.id == terpilih }
+    val slotPesan: (@Composable () -> Unit)? = if (pesan == null) {
+        null
+    } else {
+        {
+            PesanDalamSheet(
+                pesan = pesan,
+                onUrungkan = {
+                    onPesanTampil()
+                    pesan.urungkan?.let(onUrungkan)
+                },
+                onSelesai = onPesanTampil,
+            )
+        }
+    }
     MkSheet(
         visible = anggota != null,
         onTutup = onTutup,
         judul = anggota?.nama ?: "",
-        subjudul = anggota?.let { bangunSubAnggota(it).ifEmpty { null } },
+        subjudul = anggota?.let { subjudulSheet(it, tim) },
         backLabel = "Tim",
+        galat = slotPesan,
         footer = {
-            MkButton(label = "Tutup", onClick = onTutup)
+            val isi = anggota
+            if (isi != null) when (val aksi = aksiUtamaAnggota(isi, tim.terkunci)) {
+                AksiAnggota.TandaiDibaca -> MkButton(
+                    label = if (sibuk == "baca") "Menandai…" else "Tandai sudah dibaca",
+                    variant = MkButtonVariant.PRIMARY,
+                    enabled = sibuk == null,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onTandaiDibaca(isi.id) },
+                )
+                is AksiAnggota.Ingatkan -> MkButton(
+                    label = if (sibuk == "ingatkan") "Mengingatkan…" else aksi.label,
+                    variant = MkButtonVariant.PRIMARY,
+                    enabled = aksi.aktif && sibuk == null,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onIngatkan(isi.id) },
+                )
+                AksiAnggota.Tutup -> MkButton(label = "Tutup", modifier = Modifier.weight(1f), onClick = onTutup)
+            }
         },
     ) {
         val isi = anggota ?: return@MkSheet
-        IsiSheetAnggota(anggota = isi, terkunci = tim.terkunci)
+        IsiSheetAnggota(
+            anggota = isi,
+            terkunci = tim.terkunci,
+            sibuk = sibuk,
+            onAturKehadiran = { onAturKehadiran(isi.id, it) },
+        )
     }
 }
 
+/** "Manager / PIC proyek · 2 proyek" — padanan subtitle member-sheet.tsx. */
+private fun subjudulSheet(anggota: AnggotaUi, tim: TimUi): String {
+    val peran = anggota.jabatan ?: anggota.peran
+    val proyek = if (anggota.proyek.isNotEmpty()) "${anggota.proyek.size} proyek" else "Tanpa proyek"
+    val divisi = tim.divisiNama?.let { "Divisi $it" }
+    return listOfNotNull(divisi, peran, proyek).joinToString(" · ")
+}
+
+/** Pesan hasil aksi di dalam Sheet (+ Urungkan), hilang sendiri setelah 8 detik. */
 @Composable
-private fun IsiSheetAnggota(anggota: AnggotaUi, terkunci: Boolean) {
+private fun PesanDalamSheet(pesan: PesanTim, onUrungkan: () -> Unit, onSelesai: () -> Unit) {
+    val warna = LocalMkColors.current
+    LaunchedEffect(pesan.id) {
+        delay(8_000)
+        onSelesai()
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color = warna.fill1, shape = MkShapes.md)
+            .padding(horizontal = MkSpacing.space3, vertical = MkSpacing.space2)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+    ) {
+        Text(text = pesan.teks, style = MkTypography.footnote, color = warna.ink, modifier = Modifier.weight(1f))
+        if (pesan.urungkan != null) {
+            MkButton(label = "Urungkan", variant = MkButtonVariant.PLAIN, size = MkButtonSize.S, onClick = onUrungkan)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun IsiSheetAnggota(
+    anggota: AnggotaUi,
+    terkunci: Boolean,
+    sibuk: String?,
+    onAturKehadiran: (String) -> Unit,
+) {
     val warna = LocalMkColors.current
     Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space5)) {
-        // Laporan harian hari ini.
+        // Laporan harian hari ini + status baca kepala divisi.
         Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
             Text(
                 text = "Laporan harian hari ini",
@@ -250,6 +468,32 @@ private fun IsiSheetAnggota(anggota: AnggotaUi, terkunci: Boolean) {
             )
             val (status, teks) = lencanaLaporan(anggota, terkunci)
             StatusBadge(status = status, text = teks)
+            if (anggota.laporan == LaporanAnggota.TERKIRIM) {
+                val baca = jamWib(anggota.dibacaIso)?.let { "Sudah Anda baca $it" } ?: "Belum Anda baca"
+                Text(text = "$baca · dikirim ke Admin PT", style = MkTypography.caption, color = warna.ink2)
+            }
+        }
+
+        // Kehadiran hari ini (POST /api/attendance; Urungkan lewat pesan).
+        KolomJudul("Kehadiran hari ini") {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+                verticalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+            ) {
+                STATUS_KEHADIRAN.forEach { kode ->
+                    MkChip(
+                        label = labelKehadiran(kode),
+                        selected = (anggota.kehadiran ?: "HADIR") == kode,
+                        enabled = sibuk == null,
+                        onClick = { onAturKehadiran(kode) },
+                    )
+                }
+            }
+            Text(
+                text = "Orang yang cuti, sakit, atau izin tidak dihitung di laporan harian tim.",
+                style = MkTypography.footnote,
+                color = warna.ink2,
+            )
         }
 
         // Beban kerja minggu ini.
@@ -258,25 +502,29 @@ private fun IsiSheetAnggota(anggota: AnggotaUi, terkunci: Boolean) {
                 text = if (anggota.bebanPersen == null) {
                     "Tidak ada sisa hari kerja minggu ini."
                 } else {
-                    "${anggota.bebanPersen}% · ${anggota.tugasTerbuka} task terbuka"
+                    "${anggota.bebanPersen}% · ${anggota.tugasTerbuka} task terbuka · sisa ${Math.round(anggota.sisaMenit / 60f)} jam"
                 },
                 style = MkTypography.body,
                 color = warna.ink,
             )
         }
 
-        // Capaian hari ini (dari laporan yang sudah masuk).
-        KolomJudul("Capaian hari ini") {
-            if (anggota.capaian.isEmpty()) {
-                TeksKosong("Belum ada capaian yang tercatat hari ini.")
-            } else {
-                anggota.capaian.forEach { capaian ->
-                    Text(
-                        text = "• $capaian",
-                        style = MkTypography.body,
-                        color = warna.ink,
-                    )
-                }
+        // Dikerjakan hari ini (capaian laporan + task hari ini).
+        KolomJudul("Dikerjakan hari ini") {
+            if (anggota.capaian.isEmpty() && anggota.tugas.isEmpty()) {
+                TeksKosong("Belum ada task untuk hari ini.")
+            }
+            anggota.capaian.forEach { capaian ->
+                Text(text = "• $capaian", style = MkTypography.body, color = warna.ink)
+            }
+            anggota.tugas.forEach { t ->
+                MkListRow(
+                    judul = t.judul,
+                    sub = "${t.proyek} · ${t.progres}%",
+                    trailing = {
+                        StatusBadge(status = statusTugas(t.status), text = labelStatusTugas(t.status), size = MkBadgeSize.SM)
+                    },
+                )
             }
         }
 
@@ -286,15 +534,40 @@ private fun IsiSheetAnggota(anggota: AnggotaUi, terkunci: Boolean) {
                 TeksKosong("Tidak ada kendala yang dicatat hari ini.")
             } else {
                 anggota.kendala.forEach { kendala ->
-                    Text(
-                        text = "• $kendala",
-                        style = MkTypography.body,
-                        color = warna.ink,
-                    )
+                    Text(text = "• $kendala", style = MkTypography.body, color = warna.ink)
+                }
+            }
+        }
+
+        // Rencana besok.
+        KolomJudul("Rencana besok") {
+            if (anggota.rencana.isEmpty()) {
+                TeksKosong("Belum ada rencana yang dicatat.")
+            } else {
+                anggota.rencana.forEach { r ->
+                    Text(text = "• $r", style = MkTypography.body, color = warna.ink)
                 }
             }
         }
     }
+}
+
+/** TASK_STATUS_LABEL web. */
+internal fun labelStatusTugas(status: String): String = when (status) {
+    "BELUM_MULAI" -> "Belum mulai"
+    "BERJALAN" -> "Berjalan"
+    "SELESAI" -> "Selesai"
+    "TERKENDALA" -> "Terkendala"
+    "MENUNGGU_KEPUTUSAN" -> "Menunggu keputusan"
+    else -> status
+}
+
+/** Warna status task (member-sheet.tsx). */
+internal fun statusTugas(status: String): MkStatus = when (status) {
+    "SELESAI" -> MkStatus.DONE
+    "TERKENDALA" -> MkStatus.LATE
+    "BELUM_MULAI" -> MkStatus.NEUTRAL
+    else -> MkStatus.ON
 }
 
 /** Bagian sheet: judul headline + isi. */

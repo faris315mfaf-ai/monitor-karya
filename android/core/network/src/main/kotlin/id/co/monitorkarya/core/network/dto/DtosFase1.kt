@@ -1,5 +1,9 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package id.co.monitorkarya.core.network.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -87,7 +91,8 @@ data class DailyInputGetResponse(
     val todayKey: String,
     val lockAt: String,
     val locked: Boolean = false,
-    val countdown: CountdownDto,
+    /** null saat entitas melapor 24/7 (tanpa jam batas) — src/app/api/daily-input/route.ts. */
+    val countdown: CountdownDto? = null,
     val canRequestUnlock: Boolean = false,
     val openDays: List<DailyOpenDayDto> = emptyList(),
     val projects: List<DailyInputProjectDto> = emptyList(),
@@ -160,6 +165,9 @@ data class DailyReportIsiDto(
  */
 @Serializable
 data class TaskSaveRequest(
+    // D1: bawaan non-null dikirim selalu (mkJson encodeDefaults=false) — badan
+    // sama dengan TaskDialog web yang mengirim seluruh kolom; subtasks/tags
+    // "dikirim utuh" sehingga daftar kosong harus tampak eksplisit.
     val title: String,
     val projectId: String? = null,
     val id: String? = null,
@@ -170,22 +178,22 @@ data class TaskSaveRequest(
     val description: String? = null,
     val picName: String? = null,
     val picUserId: String? = null,
-    val tags: List<String> = emptyList(),
-    val status: String = "BELUM_MULAI",
-    val progressPct: Int = 0,
-    val urgency: String = "SEDANG",
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val tags: List<String> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val status: String = "BELUM_MULAI",
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val progressPct: Int = 0,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val urgency: String = "SEDANG",
     val obstacle: String? = null,
     val decisionNeeded: String? = null,
     val startTime: String? = null,
     val endTime: String? = null,
-    val subtasks: List<SubtaskInputDto> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val subtasks: List<SubtaskInputDto> = emptyList(),
 )
 
 /** Subtask pada badan simpan task: hanya judul dan tanda selesai. */
 @Serializable
 data class SubtaskInputDto(
     val title: String,
-    val isDone: Boolean = false,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val isDone: Boolean = false,
 )
 
 /** Respons POST/PUT /api/tasks. */
@@ -761,11 +769,13 @@ data class NotificationsInboxResponse(
 @Serializable
 data class InboxItemDto(
     val id: String,
-    val template: String,
-    val title: String,
-    val body: String,
+    // Bawaan longgar (D1): kotak masuk Pesan dan lonceng kini berbagi DTO ini;
+    // satu pesan berpayload aneh tidak boleh menggagalkan seluruh daftar.
+    val template: String = "",
+    val title: String = "",
+    val body: String = "",
     val tab: String? = null,
-    val createdAt: String,
+    val createdAt: String = "",
     val readAt: String? = null,
 )
 
@@ -810,4 +820,119 @@ data class TandaiBacaRequest(
 data class TandaiBacaResponse(
     val ok: Boolean = false,
     val marked: Int = 0,
+)
+
+/* ------------------------------------------------------------------ */
+/* Entri laporan harian multi-item (A1, 13 Okt 2026)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Satu entri laporan harian PIC = satu task HARIAN hari itu beserta kolom
+ * narasi entri (migrasi 0031_task_entry_fields): [achievementToday] hasil
+ * entri, [followUp] rencana besok, [needsEscalation] tanda butuh eskalasi.
+ * Bentuk persis GET/POST/PUT /api/tasks (TASK_INCLUDE + evidence). Dipisah
+ * dari [TaskDto] agar kontrak lama tidak berubah.
+ */
+@Serializable
+data class EntriLaporanDto(
+    val id: String,
+    val projectId: String,
+    val workDate: String,
+    val title: String,
+    val description: String? = null,
+    val tags: List<String> = emptyList(),
+    val picUserId: String? = null,
+    val picName: String? = null,
+    val startAt: String? = null,
+    val endAt: String? = null,
+    /** BELUM_MULAI | BERJALAN | SELESAI | TERKENDALA | MENUNGGU_KEPUTUSAN. */
+    val status: String,
+    val progressPct: Int = 0,
+    val urgency: String = "SEDANG",
+    val scope: String = "HARIAN",
+    val obstacle: String? = null,
+    val decisionNeeded: String? = null,
+    val achievementToday: String? = null,
+    val followUp: String? = null,
+    val needsEscalation: Boolean = false,
+    val escalationId: String? = null,
+    val subtasks: List<SubtaskDto> = emptyList(),
+    val evidence: List<EvidenceRingkasDto> = emptyList(),
+)
+
+/** GET /api/tasks?projectId=&date= dibaca sebagai daftar entri laporan harian. */
+@Serializable
+data class EntriHariResponse(
+    val workDate: String,
+    /** Lewat jam batas PT atau laporannya beku, kecuali sedang dibuka. */
+    val locked: Boolean = false,
+    /** "FORWARDED" | "LOCKED" | null. */
+    val frozen: String? = null,
+    val reportId: String? = null,
+    val unlockUntil: String? = null,
+    val tasks: List<EntriLaporanDto> = emptyList(),
+)
+
+/**
+ * Badan POST (entri baru, dengan [projectId] + [workDate]) dan PUT (ubah,
+ * dengan [id]) /api/tasks dari Sheet "Tambah/Ubah entri".
+ *
+ * PENTING (mkJson encodeDefaults=false): kolom narasi entri dan
+ * [needsEscalation] sengaja TANPA nilai bawaan agar selalu terkirim — PUT
+ * server mempertahankan nilai lama bila kuncinya absen, jadi `false`/null harus
+ * ikut terkirim untuk membersihkannya. [picUserId]/[urgency]/[tags]/[startTime]/
+ * [endTime]/[subtasks] diisi dari entri lama saat mengubah agar kolom dari meja
+ * kerja tidak hilang (padanan EntrySheet web).
+ */
+@Serializable
+data class EntriSimpanRequest(
+    /** Selalu "HARIAN" untuk meja laporan harian. */
+    val context: String,
+    val title: String,
+    val description: String?,
+    val picName: String?,
+    val status: String,
+    val progressPct: Int,
+    val obstacle: String?,
+    val decisionNeeded: String?,
+    val achievementToday: String?,
+    val followUp: String?,
+    val needsEscalation: Boolean,
+    val projectId: String? = null,
+    val id: String? = null,
+    /** "YYYY-MM-DD" WIB — hanya POST. */
+    val workDate: String? = null,
+    val picUserId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val tags: List<String> = emptyList(),
+    val urgency: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val subtasks: List<SubtaskInputDto> = emptyList(),
+)
+
+/**
+ * Respons POST/PUT /api/tasks dibaca sebagai entri. C5-R3: ulangan
+ * idempotensi berbadan >64 KiB diringkas server (src/lib/idempotency.ts
+ * storableBody) menjadi `{ok, idempotentSummary, resourceId}` tanpa `task` —
+ * karena itu [task] opsional dan [resourceId] menjadi cadangan id server.
+ */
+@Serializable
+data class EntriSimpanResponse(
+    val ok: Boolean = false,
+    val task: EntriLaporanDto? = null,
+    val resourceId: String? = null,
+)
+
+/**
+ * Respons PUT /api/daily-input untuk alur kirim entri. [undoToken] dibaca
+ * defensif: route hari ini tidak menerbitkannya, tetapi bila kelak ada, toast
+ * "Urungkan" langsung hidup lewat POST /api/undo.
+ */
+@Serializable
+data class DailyInputKirimResponse(
+    val ok: Boolean = false,
+    val reportId: String? = null,
+    val submitted: Boolean = false,
+    val derivedFromTasks: Boolean = false,
+    val undoToken: String? = null,
 )

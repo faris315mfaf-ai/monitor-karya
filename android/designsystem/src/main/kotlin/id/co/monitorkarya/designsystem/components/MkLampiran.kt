@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -112,7 +113,7 @@ fun MkLampiranRow(
     }
 }
 
-/** Tombol hapus kecil 32dp dengan ikon tutup; tekan mengecilkan ke 0.94. */
+/** Tombol hapus kecil 32dp (area sentuh 48dp) dengan ikon tutup; tekan mengecilkan ke 0.94. */
 @Composable
 private fun TombolHapusKecil(onHapus: () -> Unit) {
     val warna = LocalMkColors.current
@@ -120,12 +121,14 @@ private fun TombolHapusKecil(onHapus: () -> Unit) {
     val skala = mkTekanSkala(interactionSource, 0.94f)
     Box(
         modifier = Modifier
+            .minimumInteractiveComponentSize()
             .size(32.dp)
             .clip(MkShapes.penuh)
             .graphicsLayer {
                 scaleX = skala
                 scaleY = skala
             }
+            .mkCincinFokus(interactionSource, MkShapes.penuh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

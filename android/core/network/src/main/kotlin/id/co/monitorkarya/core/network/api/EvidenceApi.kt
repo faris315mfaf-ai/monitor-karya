@@ -1,5 +1,6 @@
 package id.co.monitorkarya.core.network.api
 
+import id.co.monitorkarya.core.network.Idempotensi
 import id.co.monitorkarya.core.network.dto.EvidenceAttachResponse
 import id.co.monitorkarya.core.network.dto.EvidenceDeleteResponse
 import id.co.monitorkarya.core.network.dto.EvidenceLinkRequest
@@ -11,6 +12,7 @@ import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
@@ -44,6 +46,8 @@ interface EvidenceApi {
      * Unggah satu berkas multipart. [berkas] dibangun pemanggil, misalnya
      * `MultipartBody.Part.createFormData("file", nama, requestBody)`; label
      * null berarti field tidak dikirim (nama berkas dipakai sebagai judul).
+     * [kunciIdempotensi] (gelombang E): ulangan berkunci sama dijawab server
+     * sebelum berkas dibaca — tidak ada bukti ganda.
      */
     @Multipart
     @POST("api/evidence/upload")
@@ -52,6 +56,7 @@ interface EvidenceApi {
         @Part("targetType") targetType: RequestBody,
         @Part("targetId") targetId: RequestBody,
         @Part("label") label: RequestBody? = null,
+        @Header(Idempotensi.HEADER) kunciIdempotensi: String? = null,
     ): Response<EvidenceUploadResponse>
 
     /**

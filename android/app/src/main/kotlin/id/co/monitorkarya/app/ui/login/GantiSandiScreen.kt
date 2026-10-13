@@ -3,6 +3,11 @@
 // minimal kebijakan sandi dari src/lib/password-policy.ts (lihat KebijakanSandi).
 // Layar murni state + callback: pemanggil (Activity/navigasi) yang memanggil
 // /api/profile/password dan menangani keluar akun.
+// C3-T2: tombol "Keluar dari akun" (padanan forced-password-form.tsx web) —
+// akun yang sandinya tidak diketahui / perangkat dipakai orang lain tidak buntu.
+// C3-S1/S2: kolom sandi bertipe Password (tanpa saran/kamus keyboard, dikenali
+// pengelola sandi) dan nilainya hanya di `remember` — tidak masuk Bundle
+// saved-instance-state.
 package id.co.monitorkarya.app.ui.login
 
 import androidx.compose.foundation.layout.Arrangement
@@ -33,9 +38,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -52,17 +61,21 @@ import id.co.monitorkarya.designsystem.components.ErrorNote
  *  - [memuat] true → kontrol nonaktif, tombol "Menyimpan…".
  *  - [pesan] galat dari server (mis. sandi lama salah), tampil tanpa tombol.
  *  - [onGanti] hanya terpanggil bila validasi ramah lolos.
+ *  - [onKeluar] keluar dari akun ini (kembali ke layar masuk).
  */
 @Composable
 fun GantiSandiScreen(
     memuat: Boolean,
     pesan: String?,
     onGanti: (kini: String, baru: String, ulang: String) -> Unit,
+    onKeluar: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var kini by rememberSaveable { mutableStateOf("") }
-    var baru by rememberSaveable { mutableStateOf("") }
-    var ulang by rememberSaveable { mutableStateOf("") }
+    // Nilai sandi SENGAJA `remember` (bukan rememberSaveable): Bundle state
+    // tersimpan ditulis sistem ke disk saat proses dimatikan (C3-S2).
+    var kini by remember { mutableStateOf("") }
+    var baru by remember { mutableStateOf("") }
+    var ulang by remember { mutableStateOf("") }
     // Satu tombol mata untuk ketiga kolom — sama dengan web.
     var sandiTampak by rememberSaveable { mutableStateOf(false) }
     val c = LocalMkColors.current
@@ -124,32 +137,36 @@ fun GantiSandiScreen(
                     value = kini,
                     onValueChange = { kini = it },
                     label = "Kata sandi saat ini",
-                    modifier = Modifier.focusRequester(fokusKini),
+                    modifier = Modifier
+                        .focusRequester(fokusKini)
+                        .semantics { contentType = ContentType.Password },
                     enabled = !memuat,
                     visualTransformation = ubahSandi,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardOptions = opsiKeyboardSandi(ImeAction.Next),
                     trailingIcon = tombolMata,
                 )
                 MkInputTeks(
                     value = baru,
                     onValueChange = { baru = it },
                     label = "Kata sandi baru",
+                    modifier = Modifier.semantics { contentType = ContentType.NewPassword },
                     enabled = !memuat,
                     isError = galatBaru != null,
                     supportingText = galatBaru ?: "Minimal ${KebijakanSandi.PANJANG_MIN} karakter",
                     visualTransformation = ubahSandi,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardOptions = opsiKeyboardSandi(ImeAction.Next),
                     trailingIcon = tombolMata,
                 )
                 MkInputTeks(
                     value = ulang,
                     onValueChange = { ulang = it },
                     label = "Ulangi kata sandi baru",
+                    modifier = Modifier.semantics { contentType = ContentType.NewPassword },
                     enabled = !memuat,
                     isError = galatUlang != null,
                     supportingText = galatUlang,
                     visualTransformation = ubahSandi,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = opsiKeyboardSandi(ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { kirim() }),
                     trailingIcon = tombolMata,
                 )
@@ -164,10 +181,38 @@ fun GantiSandiScreen(
                 )
             }
         }
+        // Jalan keluar: pindah akun tanpa harus tahu sandi saat ini.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "Bukan akun Anda, atau tidak tahu kata sandi saat ini?",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.ink2,
+            )
+            MkButton(
+                label = "Keluar dari akun",
+                onClick = onKeluar,
+                variant = MkButtonVariant.PLAIN,
+                size = MkButtonSize.M,
+                enabled = !memuat,
+            )
+        }
     }
 
     LaunchedEffect(Unit) { fokusKini.requestFocus() }
 }
+
+/**
+ * Opsi keyboard kolom sandi (C3-S1): tipe Password mematikan saran/kamus
+ * personal IME; huruf kapital otomatis dan koreksi otomatis mati.
+ */
+internal fun opsiKeyboardSandi(ime: ImeAction): KeyboardOptions = KeyboardOptions(
+    keyboardType = KeyboardType.Password,
+    autoCorrectEnabled = false,
+    imeAction = ime,
+)
 
 /**
  * Port minimal src/lib/password-policy.ts (F1-C): panjang 8–256 di semua jalur

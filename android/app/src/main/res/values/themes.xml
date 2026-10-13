@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- E2E-1 #4 / E2E-2 BUG-06: tema jendela TANPA ActionBar platform. Seluruh bilah
+     atas digambar Compose (TopAppBar MKShell) dan inset status/navigasi diurus
+     enableEdgeToEdge() + Scaffold/padding inset Compose. Warna jendela hanya
+     pengisi sebelum Compose menggambar (latar token bg diterapkan MkNavHost). -->
+<resources>
+    <style name="Theme.MonitorKarya" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

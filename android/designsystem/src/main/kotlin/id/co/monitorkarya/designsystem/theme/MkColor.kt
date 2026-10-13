@@ -55,6 +55,12 @@ data class MkColors(
     val statusInfoSoft: Color,
     /** --scrim: tirai gelap di belakang sheet dan dialog. */
     val scrim: Color,
+    /** --chart-idle: batang grafik yang tidak dipilih (>=3:1 di surface); batang terpilih memakai accent-fill. */
+    val chartIdle: Color,
+    /** --chart-grid: garis bantu dan sumbu dasar grafik (dekoratif). */
+    val chartGrid: Color,
+    /** --data-1..6: seri data divisi (indeks 0..5); selalu dengan label langsung. */
+    val data: List<Color>,
     /**
      * --accent: teks/ikon aksen aktif. Dinamis (mengikuti aksen pilihan pengguna) —
      * hanya terisi lewat `MkTheme.colors`/[withAccent]; MkColorsTerang/MkColorsGelap
@@ -89,6 +95,16 @@ val MkColorsTerang: MkColors = MkColors(
     statusInfo = Color(0xFF0A66D6), // --info = --biru
     statusInfoSoft = Color(0xFFE8F1FD), // --info-soft = --biru-soft
     scrim = Color(0xFF000000).copy(alpha = 0.32f), // --scrim
+    chartIdle = Color(0xFF8E8E93), // --chart-idle
+    chartGrid = Color(0xFFEDEDF0), // --chart-grid
+    data = listOf(
+        Color(0xFF0A66D6), // --data-1 (Divisi Teknologi)
+        Color(0xFF1A7340), // --data-2 (Divisi Keuangan)
+        Color(0xFFC2255C), // --data-3 (Divisi Media)
+        Color(0xFF6E3FD8), // --data-4 (Divisi SDM)
+        Color(0xFFB84A00), // --data-5 (Divisi Operasional)
+        Color(0xFF0B7A7A), // --data-6 (Divisi Hukum)
+    ),
 )
 
 /** Tema malam — blok `[data-theme="dark"]` tokens.css (docs/design/08-mode-malam.md). */
@@ -115,6 +131,16 @@ val MkColorsGelap: MkColors = MkColors(
     statusInfo = Color(0xFF4DA3FF), // --info = --biru (malam)
     statusInfoSoft = Color(0xFF0B2340), // --info-soft = --biru-soft (malam)
     scrim = Color(0xFF000000).copy(alpha = 0.62f), // --scrim
+    chartIdle = Color(0xFF6C6C70), // --chart-idle (malam)
+    chartGrid = Color(0xFF222228), // --chart-grid (malam)
+    data = listOf(
+        Color(0xFF4DA3FF), // --data-1 (malam)
+        Color(0xFF3DD47A), // --data-2 (malam)
+        Color(0xFFFF6B9A), // --data-3 (malam)
+        Color(0xFFB79BFF), // --data-4 (malam)
+        Color(0xFFFF9F43), // --data-5 (malam)
+        Color(0xFF3CC9C9), // --data-6 (malam)
+    ),
 )
 
 /** Palet mk aktif; disediakan MKTheme. */

@@ -3,12 +3,15 @@
 // activation-handoff.tsx (serah terima tautan aktivasi). Daftar memakai
 // MkListRow (nama · peran · email + lencana status aktif/nonaktif/wajib
 // ganti sandi); detail dibuka di MkSheet, bukan pindah halaman.
+// "Tambah akun" dan "Ubah data akun" membuka wizard bertahap
+// (SheetWizardAkun.kt, BUG-03); daftar dimuat ulang saat layar tampil lagi
+// dan lewat tarik-untuk-muat-ulang (BUG-12).
 //
-// Konfirmasi dialog HANYA untuk menonaktifkan (tindakan yang menghalangi
-// orang masuk); mengaktifkan, setel ulang sandi, dan terbitkan aktivasi
-// langsung dijalankan. Kata sandi tidak pernah ditampilkan — hasil tautan
-// aktivasi ditampilkan dengan ikon salin (ClipboardManager) dan tidak
-// dicatat log.
+// Konfirmasi dialog untuk tindakan destruktif: menonaktifkan dan setel ulang
+// kata sandi (C3-T1: sandi lama langsung tidak berlaku). Mengaktifkan dan
+// terbitkan aktivasi langsung dijalankan. Sandi hasil setel ulang dan tautan
+// aktivasi tampil sekali di sheet dengan ikon salin bertanda sensitif
+// (C3-S4, SalinRahasia.kt) dan tidak pernah dicatat log.
 package id.co.monitorkarya.app.ui.akun
 
 import androidx.compose.foundation.background
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -31,11 +35,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,28 +54,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.co.monitorkarya.app.ui.luring.BannerLuring
+import id.co.monitorkarya.app.ui.luring.ingatWaktuMuat
+import id.co.monitorkarya.app.ui.luring.rememberStatusLuring
 import id.co.monitorkarya.designsystem.components.EmptyNote
 import id.co.monitorkarya.designsystem.components.ErrorNote
 import id.co.monitorkarya.designsystem.components.MkAvatar
 import id.co.monitorkarya.designsystem.components.MkBadgeSize
 import id.co.monitorkarya.designsystem.components.MkButton
+import id.co.monitorkarya.designsystem.components.MkButtonSize
 import id.co.monitorkarya.designsystem.components.MkButtonVariant
 import id.co.monitorkarya.designsystem.components.MkChip
 import id.co.monitorkarya.designsystem.components.MkDivider
 import id.co.monitorkarya.designsystem.components.MkField
 import id.co.monitorkarya.designsystem.components.MkIconBtn
 import id.co.monitorkarya.designsystem.components.MkListRow
-import id.co.monitorkarya.designsystem.components.MkOfflineBanner
 import id.co.monitorkarya.designsystem.components.MkSheet
 import id.co.monitorkarya.designsystem.components.MkSkeleton
 import id.co.monitorkarya.designsystem.components.MkStatus
 import id.co.monitorkarya.designsystem.components.StatusBadge
+import id.co.monitorkarya.designsystem.theme.LocalAccent
 import id.co.monitorkarya.designsystem.theme.LocalMkColors
 import id.co.monitorkarya.designsystem.theme.MKTheme
 import id.co.monitorkarya.designsystem.theme.MkShapes
@@ -90,6 +100,12 @@ data class AkunTampilan(
     val sheet: SheetAkun? = null,
     val notifikasi: NotifAkun? = null,
     val offline: Boolean = false,
+    /** Kapan daftar akun dimuat — banner "Luring · data tersimpan HH.MM". */
+    val tersimpanPadaMs: Long? = null,
+    /** Wizard tambah/ubah akun yang terbuka (BUG-03); null = tertutup. */
+    val wizard: WizardAkunUi? = null,
+    /** Tarik-untuk-muat-ulang sedang berjalan (BUG-12). */
+    val menyegarkan: Boolean = false,
 )
 
 /** Aksi layar ke ViewModel (dibundel supaya tanda tangan layar ringkas). */
@@ -102,6 +118,10 @@ class AksiMejaAkun(
     val setelUlangSandi: (AkunBaris) -> Unit = {},
     val terbitkanAktivasi: (AkunBaris) -> Unit = {},
     val notifikasiTampil: () -> Unit = {},
+    val segarkan: () -> Unit = {},
+    val tambahAkun: () -> Unit = {},
+    val ubahAkun: (AkunBaris) -> Unit = {},
+    val wizard: AksiWizardAkun = AksiWizardAkun(),
 )
 
 /** Versi ber-ViewModel untuk navigasi; [offline] dari pemantau konektivitas. */
@@ -110,6 +130,7 @@ fun AkunScreen(
     vm: AkunViewModel = hiltViewModel(),
     offline: Boolean = false,
     modifier: Modifier = Modifier,
+    kepala: @Composable () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val baris by vm.baris.collectAsStateWithLifecycle()
@@ -118,6 +139,15 @@ fun AkunScreen(
     val saring by vm.saring.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
     val notifikasi by vm.notifikasi.collectAsStateWithLifecycle()
+    val menyegarkan by vm.menyegarkan.collectAsStateWithLifecycle()
+    // BUG-12: setiap kali Meja akun tampil lagi (lapisan Pengaturan dibuka
+    // ulang), muat ulang daftar — init ViewModel tidak terulang karena
+    // ViewModel terikat entri NavHost tab.
+    LaunchedEffect(vm) { vm.saatTampil() }
+    // Penanda offline-first bersama (app/ui/luring). Meja akun SENGAJA tidak
+    // memakai outbox: semua aksinya harus daring sinkron (A1-LURING.md §6).
+    val luring by rememberStatusLuring()
+    val tersimpanPada = ingatWaktuMuat(state as? AkunUiState.Siap)
     val aksi = remember(vm) {
         AksiMejaAkun(
             ulang = vm::ulang,
@@ -128,6 +158,16 @@ fun AkunScreen(
             setelUlangSandi = vm::setelUlangSandi,
             terbitkanAktivasi = vm::terbitkanAktivasi,
             notifikasiTampil = vm::notifikasiTampil,
+            segarkan = vm::segarkan,
+            tambahAkun = vm::bukaTambahAkun,
+            ubahAkun = vm::bukaUbahAkun,
+            wizard = AksiWizardAkun(
+                ubah = vm::ubahFormAkun,
+                lanjut = vm::lanjutWizard,
+                kembali = vm::kembaliWizard,
+                kirim = vm::kirimWizard,
+                tutup = vm::tutupWizard,
+            ),
         )
     }
     AkunScreen(
@@ -139,28 +179,41 @@ fun AkunScreen(
             saring = saring,
             sheet = sheet,
             notifikasi = notifikasi,
-            offline = offline,
+            offline = offline || luring.luring,
+            tersimpanPadaMs = tersimpanPada ?: luring.terakhirSinkronMs,
+            wizard = vm.wizard,
+            menyegarkan = menyegarkan,
         ),
         aksi = aksi,
         modifier = modifier,
+        kepala = kepala,
     )
 }
 
 /** Versi state murni — mudah dipratinjau dan diuji tanpa ViewModel. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AkunScreen(
     tampilan: AkunTampilan,
     aksi: AksiMejaAkun,
     modifier: Modifier = Modifier,
+    /** Kepala pemanggil (mis. judul Pengaturan) — ikut tergulir bersama daftar. */
+    kepala: @Composable () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     val lingkup = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
+    val salinRahasia = rememberSalinRahasia()
 
-    /** Salin tautan aktivasi ke papan klip; tautan tidak dicatat log. */
+    /** Salin tautan aktivasi (bertanda sensitif); tautan tidak dicatat log. */
     fun salinTautan(url: String) {
-        clipboard.setText(AnnotatedString(url))
+        salinRahasia("Tautan aktivasi", url)
         lingkup.launch { snackbar.showSnackbar("Tautan aktivasi disalin.") }
+    }
+
+    /** Salin sandi hasil setel ulang (bertanda sensitif); tidak dicatat log. */
+    fun salinSandi(sandi: String) {
+        salinRahasia("Kata sandi", sandi)
+        lingkup.launch { snackbar.showSnackbar("Kata sandi disalin.") }
     }
 
     LaunchedEffect(tampilan.notifikasi?.id) {
@@ -170,35 +223,69 @@ fun AkunScreen(
         }
     }
 
-    // Konfirmasi dialog hanya untuk menonaktifkan.
+    // Konfirmasi dialog untuk tindakan destruktif: nonaktifkan + setel ulang sandi.
     var konfirmasiNonaktif by remember { mutableStateOf<AkunBaris?>(null) }
+    var konfirmasiSetelUlang by remember { mutableStateOf<AkunBaris?>(null) }
 
+    val warnaTarik = LocalMkColors.current
+    val aksenTarik = LocalAccent.current
+    val statusTarik = rememberPullToRefreshState()
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
-                .padding(horizontal = MkSpacing.space3),
-            verticalArrangement = Arrangement.spacedBy(MkSpacing.space3),
+        // BUG-12 / N-03: SATU gulir untuk kepala, saringan, dan daftar. Dulu
+        // kepala diam + LazyColumn ber-weight sehingga daftar hanya ±40% layar
+        // potret dan setinggi 0 di lanskap (tidak bisa dibuka sama sekali).
+        // Tarik ke bawah memuat ulang daftar (hanya saat daftar sudah tampil).
+        PullToRefreshBox(
+            isRefreshing = tampilan.menyegarkan,
+            onRefresh = { if (tampilan.state is AkunUiState.Siap) aksi.segarkan() else aksi.ulang() },
+            state = statusTarik,
+            modifier = Modifier.fillMaxSize(),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = statusTarik,
+                    isRefreshing = tampilan.menyegarkan,
+                    containerColor = warnaTarik.surface,
+                    color = aksenTarik.fill,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            },
         ) {
-            if (tampilan.offline) {
-                MkOfflineBanner(terlihat = true, onCobaLagi = aksi.ulang)
-            }
-            KepalaMeja(tampilan)
-            MkField(
-                nilai = tampilan.cari,
-                onUbah = aksi.setCari,
-                label = "Cari akun",
-                placeholder = "Nama, username, email, atau jabatan",
-            )
-            BarisChip(tampilan, aksi.setSaring)
-            // Batas antar bagian: saringan vs daftar — garis 1px.
-            MkDivider()
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = MkSpacing.space16),
+            ) {
+                item(key = "kepala-pemanggil") { kepala() }
+                item(key = "kepala-meja") {
+                    Column(
+                        // Margin samping layar 12dp (keputusan pemilik 9 Okt 2026).
+                        modifier = Modifier.padding(horizontal = MkSpacing.space3),
+                        verticalArrangement = Arrangement.spacedBy(MkSpacing.space3),
+                    ) {
+                        if (tampilan.offline) {
+                            BannerLuring(tersimpanPadaMs = tampilan.tersimpanPadaMs, onCobaLagi = aksi.ulang)
+                        }
+                        KepalaMeja(tampilan, onTambah = aksi.tambahAkun)
+                        MkField(
+                            nilai = tampilan.cari,
+                            onUbah = aksi.setCari,
+                            label = "Cari akun",
+                            placeholder = "Nama, username, email, atau jabatan",
+                        )
+                        BarisChip(tampilan, aksi.setSaring)
+                        // Batas antar bagian: saringan vs daftar — garis 1px.
+                        MkDivider()
+                    }
+                }
                 when (val state = tampilan.state) {
-                    AkunUiState.Memuat -> KolomKerangka()
-                    is AkunUiState.Galat -> ErrorNote(pesan = state.pesan, onCobaLagi = aksi.ulang)
-                    is AkunUiState.Siap -> DaftarAkun(
+                    AkunUiState.Memuat -> item(key = "kerangka") {
+                        Box(Modifier.padding(horizontal = MkSpacing.space3)) { KolomKerangka() }
+                    }
+                    is AkunUiState.Galat -> item(key = "galat") {
+                        Box(Modifier.padding(horizontal = MkSpacing.space3)) {
+                            ErrorNote(pesan = state.pesan, onCobaLagi = aksi.ulang)
+                        }
+                    }
+                    is AkunUiState.Siap -> daftarAkun(
                         baris = tampilan.baris,
                         meja = state.meja,
                         onPilih = aksi.pilih,
@@ -216,9 +303,32 @@ fun AkunScreen(
             onTutup = { aksi.pilih(null) },
             onNonaktifkan = { akun -> konfirmasiNonaktif = akun },
             onAktifkan = { akun -> aksi.setAktif(akun, true) },
-            onSetelUlangSandi = aksi.setelUlangSandi,
+            onSetelUlangSandi = { akun -> konfirmasiSetelUlang = akun },
             onTerbitkanAktivasi = aksi.terbitkanAktivasi,
+            onUbahData = aksi.ubahAkun,
             onSalinTautan = ::salinTautan,
+            onSalinSandi = ::salinSandi,
+        )
+    }
+
+    tampilan.wizard?.let { w ->
+        SheetWizardAkun(
+            ui = w,
+            meja = (tampilan.state as? AkunUiState.Siap)?.meja,
+            luring = tampilan.offline,
+            aksi = aksi.wizard,
+            onSalinSandi = ::salinSandi,
+        )
+    }
+
+    konfirmasiSetelUlang?.let { akun ->
+        DialogSetelUlangSandi(
+            akun = akun,
+            onBatal = { konfirmasiSetelUlang = null },
+            onSetuju = {
+                aksi.setelUlangSandi(akun)
+                konfirmasiSetelUlang = null
+            },
         )
     }
 
@@ -240,11 +350,28 @@ fun AkunScreen(
 
 /** Judul + satu kalimat jawaban di atas daftar (angka di depan). */
 @Composable
-private fun KepalaMeja(tampilan: AkunTampilan) {
+private fun KepalaMeja(tampilan: AkunTampilan, onTambah: () -> Unit) {
     val warna = LocalMkColors.current
+    val meja = (tampilan.state as? AkunUiState.Siap)?.meja
     Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space1)) {
-        Text(text = "Meja akun", style = MkTypography.headline, color = warna.ink)
-        val meja = (tampilan.state as? AkunUiState.Siap)?.meja
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Meja akun",
+                style = MkTypography.headline,
+                color = warna.ink,
+                modifier = Modifier.weight(1f),
+            )
+            // BUG-03: tambah akun hanya untuk posisi yang boleh dikelola meja ini.
+            if (meja != null && posisiBoleh(meja.peranKelola).isNotEmpty()) {
+                MkButton(
+                    label = "Tambah akun",
+                    onClick = onTambah,
+                    variant = MkButtonVariant.PRIMARY,
+                    size = MkButtonSize.S,
+                    enabled = tampilan.wizard == null,
+                )
+            }
+        }
         val kalimat = if (meja == null) {
             "Kelola akun di perusahaan Anda."
         } else {
@@ -290,23 +417,23 @@ private fun KolomKerangka() {
     }
 }
 
-@Composable
-private fun DaftarAkun(
+/** Baris daftar akun sebagai item LazyColumn bersama (satu gulir dengan kepala). */
+private fun LazyListScope.daftarAkun(
     baris: List<AkunBaris>,
     meja: MejaAkun,
     onPilih: (String?) -> Unit,
 ) {
     if (baris.isEmpty()) {
-        EmptyNote(teks = "Tidak ada akun yang cocok. Ubah saringan atau kata pencarian.")
-        return
+        item(key = "kosong") {
+            Box(Modifier.padding(horizontal = MkSpacing.space3)) {
+                EmptyNote(teks = "Tidak ada akun yang cocok. Ubah saringan atau kata pencarian.")
+            }
+        }
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = MkSpacing.space16),
-    ) {
-        // Satu wadah penuh lebar; antar baris cukup garis 1px (keputusan
-        // pemilik 9 Okt 2026).
-        itemsIndexed(baris, key = { _, akun -> akun.id }) { index, akun ->
+    // Satu wadah penuh lebar; antar baris cukup garis 1px (keputusan
+    // pemilik 9 Okt 2026).
+    itemsIndexed(baris, key = { _, akun -> akun.id }) { index, akun ->
+        Column(Modifier.padding(horizontal = MkSpacing.space3)) {
             BarisAkun(akun = akun, bisaKelola = meja.bisaKelola(akun), onClick = { onPilih(akun.id) })
             if (index < baris.lastIndex) MkDivider()
         }
@@ -368,7 +495,9 @@ private fun SheetAkunDetail(
     onAktifkan: (AkunBaris) -> Unit,
     onSetelUlangSandi: (AkunBaris) -> Unit,
     onTerbitkanAktivasi: (AkunBaris) -> Unit,
+    onUbahData: (AkunBaris) -> Unit,
     onSalinTautan: (String) -> Unit,
+    onSalinSandi: (String) -> Unit,
 ) {
     val warna = LocalMkColors.current
     val akun = data.akun
@@ -420,6 +549,7 @@ private fun SheetAkunDetail(
                 )
                 else -> BagianAksi(
                     data = data,
+                    onUbahData = onUbahData,
                     onNonaktifkan = onNonaktifkan,
                     onAktifkan = onAktifkan,
                     onSetelUlangSandi = onSetelUlangSandi,
@@ -429,6 +559,7 @@ private fun SheetAkunDetail(
             data.galat?.let {
                 Text(text = it, style = MkTypography.body, color = warna.statusLate)
             }
+            data.sandiBaru?.let { SerahTerimaSandi(sandiBaru = it, onSalin = onSalinSandi) }
             data.tautan?.let { SerahTerimaTautan(tautan = it, onSalin = onSalinTautan) }
         }
     }
@@ -438,6 +569,7 @@ private fun SheetAkunDetail(
 @Composable
 private fun BagianAksi(
     data: SheetAkun,
+    onUbahData: (AkunBaris) -> Unit,
     onNonaktifkan: (AkunBaris) -> Unit,
     onAktifkan: (AkunBaris) -> Unit,
     onSetelUlangSandi: (AkunBaris) -> Unit,
@@ -449,6 +581,20 @@ private fun BagianAksi(
     val menungguStatus = data.aksi.pada(AksiMeja.NONAKTIFKAN, akun.id) || data.aksi.pada(AksiMeja.AKTIFKAN, akun.id)
     Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space4)) {
         Text(text = "Aksi", style = MkTypography.title3, color = warna.ink)
+        Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
+            MkButton(
+                label = "Ubah data akun",
+                onClick = { onUbahData(akun) },
+                variant = MkButtonVariant.SECONDARY,
+                enabled = !sibuk,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = "Nama, username, email, jabatan, telepon, dan posisi.",
+                style = MkTypography.footnote,
+                color = warna.ink2,
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space2)) {
             MkButton(
                 label = when {
@@ -484,7 +630,8 @@ private fun BagianAksi(
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                text = "Kata sandi acak baru dibuat dan tidak ditampilkan. Pemegang akun wajib menggantinya saat masuk berikutnya.",
+                text = "Kata sandi acak baru dibuat dan ditampilkan sekali di sini untuk Anda sampaikan. " +
+                    "Pemegang akun wajib menggantinya saat masuk berikutnya.",
                 style = MkTypography.footnote,
                 color = warna.ink2,
             )
@@ -566,6 +713,51 @@ private fun SerahTerimaTautan(tautan: TautanAktivasi, onSalin: (String) -> Unit)
     }
 }
 
+/**
+ * Serah terima sandi hasil setel ulang (C3-T1, pola SerahTerimaAkunBaru
+ * feature/entitas): tampil sekali, salin bertanda sensitif, tidak dicatat log.
+ */
+@Composable
+private fun SerahTerimaSandi(sandiBaru: SandiBaru, onSalin: (String) -> Unit) {
+    val warna = LocalMkColors.current
+    val sandi = sandiBaru.sandi.nilai
+    Column(verticalArrangement = Arrangement.spacedBy(MkSpacing.space3)) {
+        Text(text = "Sampaikan kata sandi baru", style = MkTypography.title3, color = warna.ink)
+        StatusBadge(status = MkStatus.DONE, text = "Kata sandi diatur ulang")
+        Text(
+            text = "Sampaikan langsung kepada pemilik akun ${sandiBaru.username ?: ""}".trimEnd() +
+                ". Ia wajib menggantinya saat masuk berikutnya.",
+            style = MkTypography.body,
+            color = warna.ink,
+        )
+        Text(
+            text = "Kata sandi ini hanya tampil sekarang. Setelah lembar ini ditutup, setel ulang lagi bila perlu.",
+            style = MkTypography.footnote,
+            color = warna.ink2,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MkSpacing.space2),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(MkShapes.md)
+                    .background(color = warna.fill1)
+                    .padding(MkSpacing.space3),
+            ) {
+                // Tanpa SelectionContainer: salinan hanya lewat tombol (bertanda sensitif).
+                Text(text = sandi, style = MkTypography.code, color = warna.ink, maxLines = 1)
+            }
+            MkIconBtn(
+                icon = Icons.Outlined.ContentCopy,
+                label = "Salin kata sandi",
+                onClick = { onSalin(sandi) },
+            )
+        }
+    }
+}
+
 /** Catatan kecil di dalam kotak lembut (fill1) untuk penanda baca-saja/akun sendiri. */
 @Composable
 private fun CatatanInfo(teks: String) {
@@ -581,7 +773,33 @@ private fun CatatanInfo(teks: String) {
     }
 }
 
-/** Konfirmasi menonaktifkan — satu-satunya aksi dengan dialog. */
+/**
+ * Konfirmasi setel ulang kata sandi (C3-T1) — destruktif: sandi lama langsung
+ * berhenti berlaku dan pemegang akun tidak bisa masuk sampai menerima sandi baru.
+ */
+@Composable
+private fun DialogSetelUlangSandi(akun: AkunBaris, onBatal: () -> Unit, onSetuju: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onBatal,
+        title = { Text(text = "Setel ulang kata sandi ${akun.nama}?") },
+        text = {
+            Text(
+                text = "Kata sandi lama langsung tidak berlaku. Kata sandi baru tampil sekali di lembar ini " +
+                    "untuk Anda sampaikan langsung kepada pemegang akun.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onSetuju) {
+                Text(text = "Setel ulang", color = LocalMkColors.current.statusLate)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onBatal) { Text(text = "Batal") }
+        },
+    )
+}
+
+/** Konfirmasi menonaktifkan akun. */
 @Composable
 private fun DialogNonaktifkan(akun: AkunBaris, onBatal: () -> Unit, onSetuju: () -> Unit) {
     AlertDialog(
@@ -744,7 +962,9 @@ private fun SheetAkunPreview() {
                 onAktifkan = {},
                 onSetelUlangSandi = {},
                 onTerbitkanAktivasi = {},
+                onUbahData = {},
                 onSalinTautan = {},
+                onSalinSandi = {},
             )
         }
     }
