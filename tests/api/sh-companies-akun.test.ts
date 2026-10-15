@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
  *  - POST /api/companies type SUB_HOLDING → akun ADMIN_SUBHOLDING otomatis (admin.<slug>,
  *    sandi awal 12345678, wajib ganti), bentrok username/email → akhiran angka, AuditLog tanpa sandi.
  *  - PT baru TIDAK membuat akun Admin PT otomatis; PT boleh di bawah subholding/keturunannya.
- *  - Meja akun Super Admin: SUPERVISOR / KETUA_UMUM / MANAJEMEN tanpa cakupan,
+ *  - Meja akun Super Admin: SUPERVISOR / SUPERUSER / MANAJEMEN tanpa cakupan,
  *    ADMIN_SUBHOLDING wajib cakupan SUB_HOLDING (satu akun aktif per subholding).
  * Basis data palsu di memori; tidak ada koneksi DB.
  */
@@ -160,7 +160,7 @@ describe('POST /api/companies — PT', () => {
 })
 
 describe('/api/companies/users — akun peran baru oleh Super Admin', () => {
-  it.each(['SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN'])('membuat %s tanpa cakupan', async (role) => {
+  it.each(['SUPERVISOR', 'SUPERUSER', 'MANAJEMEN'])('membuat %s tanpa cakupan', async (role) => {
     const res = await companyUsers.POST(req('/api/companies/users', 'POST', { role, name: 'Bapak Uji', username: `uji.${role.toLowerCase()}`, entityId: null }))
     expect(res.status).toBe(200)
     const { account } = await res.json()
@@ -172,7 +172,7 @@ describe('/api/companies/users — akun peran baru oleh Super Admin', () => {
     expect(res.status).toBe(200)
     expect(store.user.find((u) => u.username === 'sup.satu')!.scopeEntityId).toBeNull()
     for (const entityId of ['pt-a', 'sh-energi']) {
-      res = await companyUsers.POST(req('/api/companies/users', 'POST', { role: 'KETUA_UMUM', name: 'Ketum', username: `ketum.${entityId}`, entityId }))
+      res = await companyUsers.POST(req('/api/companies/users', 'POST', { role: 'SUPERUSER', name: 'Superuser', username: `superuser.${entityId}`, entityId }))
       expect(res.status).toBe(422)
     }
   })
@@ -217,7 +217,7 @@ describe('/api/companies/users — akun peran baru oleh Super Admin', () => {
 describe('aturan peran–tempat (lib)', () => {
   it('positionRolesFor & roleScopeProblem', () => {
     expect(positionRolesFor('SUB_HOLDING')).toEqual(['ADMIN_SUBHOLDING', 'DIREKTUR_ENTITAS'])
-    expect(positionRolesFor(null)).toEqual(expect.arrayContaining(['SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN']))
+    expect(positionRolesFor(null)).toEqual(expect.arrayContaining(['SUPERVISOR', 'SUPERUSER', 'MANAJEMEN']))
     expect(positionRolesFor('PT')).not.toContain('SUPERVISOR')
     expect(positionRolesFor('PT')).not.toContain('ADMIN_SUBHOLDING')
     expect(roleScopeProblem('ADMIN_SUBHOLDING', { type: 'SUB_HOLDING' })).toBeNull()

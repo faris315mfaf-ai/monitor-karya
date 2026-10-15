@@ -3,7 +3,7 @@
 /**
  * Tampilan "Subholding" di Perusahaan & akun (papan 10 mockup, kontrak
  * 16 Okt 2026): struktur PT BIKE Tbk → subholding → PT di kiri, akun model
- * laporan subholding (Admin subholding, Supervisor, Ketua Umum, Manajemen)
+ * laporan subholding (Admin subholding, Supervisor, Superuser, Manajemen)
  * di kanan. Semua perubahan lewat Sheet.
  */
 
@@ -15,7 +15,7 @@ import { SH_ROLES, SH_ROLE_OPTIONS, isSubholding, subholdingTree } from './subho
 
 const SCOPE_LABEL: Record<string, string> = {
   SUPERVISOR: 'Semua subholding · Persetujuan',
-  KETUA_UMUM: 'Seluruh PT BIKE Tbk · Dashboard',
+  SUPERUSER: 'Seluruh PT BIKE Tbk · Dashboard',
   MANAJEMEN: 'Seluruh PT BIKE Tbk · Dashboard',
 }
 
@@ -182,10 +182,10 @@ export function SubholdingPanel({
       >
         <p className="mk-note-box mk-soft--risk mb-3">
           Membuat subholding otomatis membuat <strong>satu akun Admin subholding</strong>. Sandi awal ditampilkan sekali dan wajib diganti saat
-          masuk pertama. Supervisor, Ketua Umum, dan Manajemen adalah akun pribadi tingkat grup.
+          masuk pertama. Supervisor, Superuser, dan Manajemen adalah akun pribadi tingkat grup.
         </p>
         {shAccounts.length === 0 ? (
-          <EmptyNote icon="pengguna">Belum ada akun Supervisor, Ketua Umum, Manajemen, atau Admin subholding.</EmptyNote>
+          <EmptyNote icon="pengguna">Belum ada akun Supervisor, Superuser, Manajemen, atau Admin subholding.</EmptyNote>
         ) : (
           <div className="mk-list">
             {shAccounts.map(({ u, c }) => (

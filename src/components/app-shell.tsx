@@ -20,7 +20,7 @@ import { SystemView } from '@/components/views/system-view'
 import { CompaniesView } from '@/components/views/companies-view'
 import { ApprovalsView } from '@/components/oversight/approvals-view' // [F2-DIREKTUR]
 import { ShReviewView } from '@/components/views/sh-review/sh-review-view' // Supervisor (16 Okt 2026)
-import { ShOverviewView } from '@/components/views/sh-overview/sh-overview-view' // Ketua Umum & Manajemen (16 Okt 2026)
+import { ShOverviewView } from '@/components/views/sh-overview/sh-overview-view' // Superuser & Manajemen (16 Okt 2026)
 import { ShDashboardView, ShInboxView, ShHistoryView } from '@/components/views/sh-admin' // Admin subholding (16 Okt 2026)
 import { canSeeTab } from '@/lib/rbac'
 

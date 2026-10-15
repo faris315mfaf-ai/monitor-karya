@@ -14,7 +14,7 @@ DIARSIPKAN di branch `arsip/k15-peran` — JANGAN dipakai/diporting.
   subholding, DIPAKAI BERSAMA banyak pelapor. Menambah laporan berkali-kali.
 - **Supervisor** (`SUPERVISOR`, direksi di luar subholding, `scopeEntityId` null): meninjau
   laporan SEMUA subholding — setujui, minta perbaikan (wajib komentar), atau komentar saja.
-- **Ketua Umum** (`KETUA_UMUM`) dan **Manajemen** (`MANAJEMEN`): HANYA dashboard laporan
+- **Superuser** (`SUPERUSER`) dan **Manajemen** (`MANAJEMEN`): HANYA dashboard laporan
   yang sudah DISETUJUI, seluruh subholding.
 - Akun **PIC_PROYEK** dan **KEPALA_DIVISI** dihapus (dinonaktifkan lewat skrip saat deploy;
   data lama tetap).
@@ -44,14 +44,14 @@ kind `KOMENTAR|PERBAIKAN|SETUJU|BALASAN`, body, readAt).
 |---|---|
 | ADMIN_SUBHOLDING | `sh-dashboard`, `sh-inbox`, `sh-history` |
 | SUPERVISOR | `sh-review` |
-| KETUA_UMUM | `sh-overview` |
+| SUPERUSER | `sh-overview` |
 | MANAJEMEN | `sh-overview` (menggantikan tab lamanya) |
 | SUPERADMIN | tab lama tetap (Perusahaan & akun dipakai untuk subholding/PT/akun) |
 NAV_TABS baru: `sh-dashboard` "Dashboard", `sh-inbox` "Kotak masuk", `sh-history`
 "Riwayat", `sh-review` "Persetujuan", `sh-overview` "Dashboard".
 Kapabilitas baru: `shreport:write` (ADMIN_SUBHOLDING), `shreport:review` (SUPERVISOR,
-SUPERADMIN), `shreport:view-approved` (KETUA_UMUM, MANAJEMEN, SUPERVISOR, SUPERADMIN).
-Label peran Indonesia: Admin subholding, Supervisor, Ketua Umum, Manajemen.
+SUPERADMIN), `shreport:view-approved` (SUPERUSER, MANAJEMEN, SUPERVISOR, SUPERADMIN).
+Label peran Indonesia: Admin subholding, Supervisor, Superuser, Manajemen.
 
 ## API (semua JSON; galat `{ error }`; 401/403/404/409/422 seperti pola yang ada)
 
@@ -73,12 +73,12 @@ Label peran Indonesia: Admin subholding, Supervisor, Ketua Umum, Manajemen.
 - `POST /api/sh/reports/:id/decision` (SUPERVISOR) `{ action: 'approve'|'revise', note? }` — revise wajib note ≥5 huruf (jadi komentar PERBAIKAN); approve: note opsional (komentar SETUJU), wajib ≥1 bukti; klaim bersyarat status MENUNGGU (selain itu 409).
 - `GET /api/sh/inbox` (ADMIN_SUBHOLDING) → `{ items: [{ id, kind, body, createdAt, unread, authorName, report: { id, kegiatan, ptName, status, reporterName, reporterTitle, submittedAt, evidenceCount } }], reminders: [{ id, text, createdAt }], unreadCount }`; `POST /api/sh/inbox/read` `{ ids?: string[], all?: true }`. Pengingat: PT di subholding tanpa laporan pada hari kerja sebelumnya.
 - `GET /api/sh/review?status=MENUNGGU|PERLU_PERBAIKAN|DISETUJUI&subholdingId&date` (SUPERVISOR/SUPERADMIN) → `{ items: ShReport[], counts, subholdings: [{ id, name, waiting }] }`.
-- `GET /api/sh/overview?date=YYYY-MM-DD` (KETUA_UMUM/MANAJEMEN/SUPERVISOR/SUPERADMIN) → `{ date, subholdings: [{ id, name, count, ptCount, pts: [{ id, name, reports: [{ id, kegiatan, deskripsi, evidence: [{ id, fileName, mime }] }] }] }] }` — HANYA DISETUJUI pada `reportDate` itu; semua subholding aktif tampil walau 0.
-- Bukti: `GET /api/evidence/:id` (URL bertanda tangan) harus mengizinkan: admin subholding laporannya; supervisor semua; KETUA_UMUM/MANAJEMEN hanya laporan DISETUJUI.
-- `POST /api/companies` (SUPERADMIN) membuat Entity `SUB_HOLDING` → akun ADMIN_SUBHOLDING otomatis (`admin.<slug>`, `Admin <nama>`, sandi `12345678`, `mustChangePassword: true`, bentrok → akhiran angka); balasan `adminAccount: { id, username, defaultPassword }`. Superadmin bisa membuat akun SUPERVISOR / KETUA_UMUM / MANAJEMEN.
+- `GET /api/sh/overview?date=YYYY-MM-DD` (SUPERUSER/MANAJEMEN/SUPERVISOR/SUPERADMIN) → `{ date, subholdings: [{ id, name, count, ptCount, pts: [{ id, name, reports: [{ id, kegiatan, deskripsi, evidence: [{ id, fileName, mime }] }] }] }] }` — HANYA DISETUJUI pada `reportDate` itu; semua subholding aktif tampil walau 0; `ptCount` = PT yang punya laporan disetujui.
+- Bukti: `GET /api/evidence/:id` (URL bertanda tangan) harus mengizinkan: admin subholding laporannya; supervisor semua; SUPERUSER/MANAJEMEN hanya laporan DISETUJUI.
+- `POST /api/companies` (SUPERADMIN) membuat Entity `SUB_HOLDING` → akun ADMIN_SUBHOLDING otomatis (`admin.<slug>`, `Admin <nama>`, sandi `12345678`, `mustChangePassword: true`, bentrok → akhiran angka); balasan `adminAccount: { id, username, defaultPassword }`. Superadmin bisa membuat akun SUPERVISOR / SUPERUSER / MANAJEMEN.
 
 ## UI (mockup) — Dock sederhana
 - Admin: Dashboard (form Tambah laporan di atas + daftar laporan hari ini dengan saringan status, Perbaiki & kirim ulang, Tarik), Kotak masuk (daftar + percakapan + balas), Riwayat (tabel + saringan periode/PT/status/cari + CSV).
 - Supervisor: Persetujuan (saring subholding, tab Menunggu/Diminta perbaikan/Disetujui, rincian + bukti + komentar + Setujui/Minta perbaikan/Komentar).
-- Ketua Umum & Manajemen: Dashboard = HANYA kartu per subholding (pilih Hari ini/Kemarin); klik kartu → di bawahnya laporan per PT: judul + foto bukti di sampingnya; klik foto → membesar (sebelumnya/berikutnya); klik judul → pop-up judul + deskripsi. TANPA angka KPI.
+- Superuser & Manajemen: Dashboard = HANYA kartu per subholding (pilih Hari ini/Kemarin); klik kartu → di bawahnya laporan per PT: judul + foto bukti di sampingnya; klik foto → membesar (sebelumnya/berikutnya); klik judul → pop-up judul + deskripsi. TANPA angka KPI.
 - Semua responsif (ponsel: dock di bawah). Bahasa Indonesia, "Anda", tanpa emoji/tanda seru, status = warna + ikon + kata, konfirmasi hanya untuk hapus.

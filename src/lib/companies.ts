@@ -112,9 +112,9 @@ export function isKnownRole(role: string): boolean {
 /** Satu akun bersama per subholding; cakupannya = id subholding. */
 export const ADMIN_SUBHOLDING_ROLE = 'ADMIN_SUBHOLDING'
 /** Peran tingkat grup tanpa cakupan entitas (scopeEntityId null). */
-export const UNSCOPED_GROUP_ROLES = ['SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN'] as const
+export const UNSCOPED_GROUP_ROLES = ['SUPERVISOR', 'SUPERUSER', 'MANAJEMEN'] as const
 /** Peran model baru yang mungkin belum ada di ALL_ROLES (rbac.ts). */
-export const NEW_MODEL_ROLES = [ADMIN_SUBHOLDING_ROLE, 'SUPERVISOR', 'KETUA_UMUM'] as const
+export const NEW_MODEL_ROLES = [ADMIN_SUBHOLDING_ROLE, 'SUPERVISOR', 'SUPERUSER'] as const
 /** Sandi awal akun Admin subholding buatan otomatis; wajib diganti saat masuk pertama. */
 export const SUBHOLDING_DEFAULT_PASSWORD = '12345678'
 /** Jenis entitas tempat akun boleh ditempatkan. */
@@ -134,7 +134,7 @@ const uniq = (xs: readonly string[]) => [...new Set(xs)]
 export function positionRolesFor(entityType: string | null): string[] {
   if (entityType === 'SUB_HOLDING') return [ADMIN_SUBHOLDING_ROLE, 'DIREKTUR_ENTITAS']
   const group = entityType === null || entityType === 'HOLDING'
-  const base = group ? [...ENTITY_ROLES, ...HOLDING_ROLES, 'SUPERVISOR', 'KETUA_UMUM'] : [...ENTITY_ROLES]
+  const base = group ? [...ENTITY_ROLES, ...HOLDING_ROLES, 'SUPERVISOR', 'SUPERUSER'] : [...ENTITY_ROLES]
   return uniq(base).filter((r) => r !== ADMIN_SUBHOLDING_ROLE && (group || !isUnscopedGroupRole(r)))
 }
 
@@ -146,7 +146,7 @@ export function deskRoles(desk: { full: boolean; roles: readonly string[] }): st
 /**
  * Pesan galat bila peran tidak cocok dengan tempatnya, null bila cocok.
  * - ADMIN_SUBHOLDING wajib di entitas bertipe SUB_HOLDING.
- * - SUPERVISOR / KETUA_UMUM / MANAJEMEN tanpa cakupan (holding dianggap tanpa cakupan).
+ * - SUPERVISOR / SUPERUSER / MANAJEMEN tanpa cakupan (holding dianggap tanpa cakupan).
  * - Subholding hanya menampung Admin subholding dan Direktur.
  */
 export function roleScopeProblem(role: string, entity: { type: string } | null): string | null {
@@ -154,7 +154,7 @@ export function roleScopeProblem(role: string, entity: { type: string } | null):
     return entity?.type === 'SUB_HOLDING' ? null : 'Admin subholding wajib ditempatkan di sebuah subholding.'
   }
   if (isUnscopedGroupRole(role)) {
-    return entity && entity.type !== 'HOLDING' ? 'Supervisor, Ketua Umum, dan Manajemen tidak ditempatkan di perusahaan mana pun.' : null
+    return entity && entity.type !== 'HOLDING' ? 'Supervisor, Superuser, dan Manajemen tidak ditempatkan di perusahaan mana pun.' : null
   }
   if (entity?.type === 'SUB_HOLDING' && role !== 'DIREKTUR_ENTITAS') {
     return 'Subholding hanya menampung akun Admin subholding atau Direktur.'
@@ -496,7 +496,7 @@ export async function createAccount(tx: Tx, entity: EntityRef | null, p: Positio
   if (userClash) throw new Error(`Username "${p.username}" sudah dipakai.`)
   if (emailClash) throw new Error(`Email "${p.email}" sudah dipakai.`)
 
-  // Peran tingkat grup (Supervisor/Ketua Umum/Manajemen) selalu tanpa cakupan.
+  // Peran tingkat grup (Supervisor/Superuser/Manajemen) selalu tanpa cakupan.
   const scopeEntityId = isUnscopedGroupRole(p.role) ? null : (entity?.id ?? null)
   const user = await tx.user.create({
     data: {

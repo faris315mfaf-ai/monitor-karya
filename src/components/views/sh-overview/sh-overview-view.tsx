@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Dashboard Ketua Umum & Manajemen (papan 6 mockup subholding, versi terbaru):
+ * Dashboard Superuser & Manajemen (papan 6 mockup subholding, versi terbaru):
  * HANYA kartu per subholding untuk laporan yang sudah DISETUJUI supervisor —
  * pilih Hari ini / Kemarin, klik kartu membuka laporan per PT di bawahnya.
  * Baris laporan = judul (membuka Sheet judul + deskripsi) + thumbnail bukti
@@ -40,7 +40,7 @@ export function ShOverviewView() {
   const list = data?.subholdings ?? []
   // undefined = belum memilih: buka subholding pertama yang berisi; null = semua tertutup.
   const open = picked === undefined ? defaultOpen(list, null) : picked
-  const roleName = ROLE_LABELS[user.role] ?? (user.role === 'KETUA_UMUM' ? 'Ketua Umum' : 'Manajemen')
+  const roleName = ROLE_LABELS[user.role] ?? (user.role === 'SUPERUSER' ? 'Superuser' : 'Manajemen')
 
   return (
     <div className="flex flex-col gap-5">

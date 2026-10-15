@@ -296,7 +296,7 @@ async function main() {
 
   // Model SUBHOLDING (16 Okt 2026): satu akun Admin subholding bersama per
   // subholding (admin.<slug>), satu Supervisor (direksi, tanpa cakupan), satu
-  // Ketua Umum. Manajemen memakai akun managementUser di atas.
+  // Superuser. Manajemen memakai akun managementUser di atas.
   const shSlug = (name: string) => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '').slice(0, 24)
   const adminSubholdings = await Promise.all(
     sh.map((s, i) =>
@@ -317,7 +317,7 @@ async function main() {
     data: { username: 'supervisor', email: 'supervisor@karya.co.id', name: 'Bpk. Surya Atmaja', title: 'Direktur Operasional', role: 'SUPERVISOR', avatarColor: avatarColors[6] },
   })
   const ketuaUmumUser = await client.user.create({
-    data: { username: 'ketua.umum', email: 'ketua.umum@karya.co.id', name: 'Bpk. Bambang Hadi', title: 'Ketua Umum', role: 'KETUA_UMUM', avatarColor: avatarColors[7] },
+    data: { username: 'superuser', email: 'superuser@karya.co.id', name: 'Bpk. Bambang Hadi', title: 'Superuser', role: 'SUPERUSER', avatarColor: avatarColors[7] },
   })
 
   const allUsers = [managementUser, direkturSDM, auditorUser, tiUser, ...direkturEntitas, ...adminPts, ...adminSubholdings, supervisorUser, ketuaUmumUser]
@@ -984,7 +984,7 @@ async function main() {
   await client.user.updateMany({ data: { passwordHash: await hashPassword(seedPw.password), mustChangePassword: true } })
   // Akun demo model SUBHOLDING tidak dipaksa ganti sandi agar uji alur lokal mudah.
   await client.user.updateMany({
-    where: { role: { in: ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN'] } },
+    where: { role: { in: ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'SUPERUSER', 'MANAJEMEN'] } },
     data: { mustChangePassword: false },
   })
 
@@ -994,7 +994,7 @@ async function main() {
   console.log(`  - ${allProjects.length} active projects`)
   console.log(`  - ${dailyCount} daily project reports`)
   console.log(`  - ${weeklyCount} weekly division reports`)
-  console.log(`  - ${shCount} subholding reports; akun demo: ${adminSubholdings.map((u) => u.username).join(', ')}, supervisor, ketua.umum, manajemen@karya.co.id`)
+  console.log(`  - ${shCount} subholding reports; akun demo: ${adminSubholdings.map((u) => u.username).join(', ')}, supervisor, superuser, manajemen@karya.co.id`)
   console.log(
     seedPw.generated
       ? `  - kata sandi semua akun (acak, SEED_PASSWORD kosong): ${seedPw.password}`

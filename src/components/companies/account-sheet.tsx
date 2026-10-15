@@ -109,7 +109,7 @@ function AccountForm({
   const [entityId, setEntityId] = useState(target.company?.id ?? '')
   const company = useMemo(() => companies.find((c) => c.id === entityId) ?? null, [companies, entityId])
   // Subholding (16 Okt 2026): penempatan menentukan posisi — subholding = Admin subholding;
-  // tingkat grup = termasuk Supervisor, Ketua Umum, Manajemen.
+  // tingkat grup = termasuk Supervisor, Superuser, Manajemen.
   const options = positionsForPlacement(company, allowedRoles)
 
   const [role, setRole] = useState(user?.role ?? options[0]?.role ?? 'ADMIN_PT')
@@ -276,7 +276,7 @@ function AccountForm({
       <section className="mk-formsec">
         <SectionTitle icon="gedung">Penempatan & posisi</SectionTitle>
         {!lockCompany && companies.length > 0 ? (
-          <Field label="Perusahaan" htmlFor="ac-entity" error={show('placement')} hint="Supervisor, Ketua Umum, dan Manajemen: tingkat grup. Admin subholding: pilih subholding-nya. Akun perusahaan terbatas pada perusahaannya.">
+          <Field label="Perusahaan" htmlFor="ac-entity" error={show('placement')} hint="Supervisor, Superuser, dan Manajemen: tingkat grup. Admin subholding: pilih subholding-nya. Akun perusahaan terbatas pada perusahaannya.">
             <select id="ac-entity" className={selectCls} value={entityId} onChange={(e) => changeEntity(e.target.value)} onBlur={() => setTouched((x) => ({ ...x, placement: true }))}>
               <option value="">Tingkat grup (tanpa perusahaan)</option>
               {companies.map((c) => (

@@ -16,7 +16,7 @@ type Ctx = { params: Promise<{ id: string }> }
  *  - Admin subholding pemilik → kind BALASAN (Supervisor diberi notifikasi)
  *  - Supervisor / Super Admin (`shreport:review`) → kind KOMENTAR (Admin
  *    subholding diberi notifikasi; muncul di kotak masuknya)
- * Ketua Umum / Manajemen tidak berkomentar (403).
+ * Superuser / Manajemen tidak berkomentar (403).
  * → 201 { comment: ShComment, report: ShReport }
  */
 export async function POST(req: NextRequest, { params }: Ctx) {

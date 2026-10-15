@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * Dashboard Ketua Umum & Manajemen (kontrak subholding 16 Okt 2026, papan 6):
+ * Dashboard Superuser & Manajemen (kontrak subholding 16 Okt 2026, papan 6):
  * pengelompokan laporan per PT, ringkasan kartu "n laporan · m PT", tanggal
  * WIB Hari ini/Kemarin, dan navigasi lightbox (putaran, posisi, tombol panah).
  */

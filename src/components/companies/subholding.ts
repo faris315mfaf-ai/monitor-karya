@@ -13,7 +13,7 @@ export const ADMIN_SUBHOLDING = 'ADMIN_SUBHOLDING'
 /** Peran model laporan subholding yang dibuat Super Admin, berlabel Indonesia. */
 export const SH_ROLE_OPTIONS: { role: string; label: string; hint: string }[] = [
   { role: 'SUPERVISOR', label: 'Supervisor', hint: 'Menyetujui laporan seluruh subholding' },
-  { role: 'KETUA_UMUM', label: 'Ketua Umum', hint: 'Dashboard laporan yang sudah disetujui' },
+  { role: 'SUPERUSER', label: 'Superuser', hint: 'Dashboard laporan yang sudah disetujui' },
   { role: 'MANAJEMEN', label: 'Manajemen', hint: 'Dashboard laporan yang sudah disetujui' },
   { role: ADMIN_SUBHOLDING, label: 'Admin subholding', hint: 'Satu akun bersama per subholding untuk menambah laporan' },
 ]
@@ -80,7 +80,7 @@ export function strayCompanies(companies: Company[]): Company[] {
 /**
  * Posisi yang boleh dipilih per penempatan (cermin roleScopeProblem di API):
  * subholding → hanya Admin subholding (+ Direktur); tingkat grup/holding →
- * posisi lama + Supervisor, Ketua Umum, Manajemen; PT → posisi perusahaan.
+ * posisi lama + Supervisor, Superuser, Manajemen; PT → posisi perusahaan.
  */
 export function positionsForPlacement(
   company: Kinded | null,
@@ -93,7 +93,7 @@ export function positionsForPlacement(
   }
   const base = positionsFor(company && company.type === 'HOLDING' ? { type: 'HOLDING' } : company ? { type: 'PT' } : null, allowed)
   if (company && company.type !== 'HOLDING') return base
-  // Tingkat grup / holding: pastikan Supervisor, Ketua Umum, Manajemen tersedia dan berlabel Indonesia.
+  // Tingkat grup / holding: pastikan Supervisor, Superuser, Manajemen tersedia dan berlabel Indonesia.
   const extra = SH_ROLE_OPTIONS.filter((o) => o.role !== ADMIN_SUBHOLDING && ok(o.role) && !base.some((b) => b.role === o.role))
   return [...base, ...extra].map((o) => SH_ROLE_OPTIONS.find((s) => s.role === o.role && s.role !== ADMIN_SUBHOLDING) ?? o)
 }
@@ -101,8 +101,8 @@ export function positionsForPlacement(
 /** Pesan bila peran tidak cocok dengan penempatannya (null = cocok). */
 export function placementProblem(role: string, company: Kinded | null): string | null {
   if (role === ADMIN_SUBHOLDING) return isSubholding(company) ? null : 'Pilih subholding untuk akun Admin subholding.'
-  if (['SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN'].includes(role) && company && company.type !== 'HOLDING') {
-    return 'Supervisor, Ketua Umum, dan Manajemen tidak ditempatkan di perusahaan mana pun.'
+  if (['SUPERVISOR', 'SUPERUSER', 'MANAJEMEN'].includes(role) && company && company.type !== 'HOLDING') {
+    return 'Supervisor, Superuser, dan Manajemen tidak ditempatkan di perusahaan mana pun.'
   }
   return null
 }

@@ -146,7 +146,7 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
   // Direksi di luar subholding: meninjau laporan semua subholding.
   SUPERVISOR: ['shreport:review', 'shreport:view-approved'],
   // Hanya dashboard laporan yang sudah disetujui.
-  KETUA_UMUM: ['shreport:view-approved'],
+  SUPERUSER: ['shreport:view-approved'],
 }
 
 /**
@@ -204,7 +204,7 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   AUDITOR: ['dashboard', 'pesan', 'projects', 'divisions', 'entities', 'audit'],
   ADMIN_SUBHOLDING: ['sh-dashboard', 'sh-inbox', 'sh-history'],
   SUPERVISOR: ['sh-review'],
-  KETUA_UMUM: ['sh-overview'],
+  SUPERUSER: ['sh-overview'],
 }
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']
@@ -309,7 +309,7 @@ export function isMasterRole(role: string): boolean {
 export const ENTITY_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK', 'DIREKTUR_ENTITAS', 'ADMIN_SUBHOLDING'] as const
 
 /** Peran tingkat holding, tanpa entitas tertentu. */
-export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR', 'SUPERVISOR', 'KETUA_UMUM'] as const
+export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR', 'SUPERVISOR', 'SUPERUSER'] as const
 
 /**
  * Peran model laporan subholding (16 Okt 2026) yang HANYA memakai modul
@@ -319,7 +319,7 @@ export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI'
  * lama — jadi Admin subholding tidak pernah membaca subpohon entitasnya lewat
  * rute lama. MANAJEMEN tidak termasuk: perannya peran lama (global).
  */
-export const SUBHOLDING_ONLY_ROLES = ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'KETUA_UMUM'] as const
+export const SUBHOLDING_ONLY_ROLES = ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'SUPERUSER'] as const
 
 export function isSubholdingOnlyRole(role: string): boolean {
   return (SUBHOLDING_ONLY_ROLES as readonly string[]).includes(role)
@@ -388,5 +388,5 @@ export const ROLE_DUTIES: Record<string, string> = {
   ADMIN_SUBHOLDING:
     'Tambahkan laporan kegiatan harian PT di subholding Anda beserta buktinya, lalu tindak lanjuti permintaan perbaikan.',
   SUPERVISOR: 'Tinjau laporan seluruh subholding: setujui, minta perbaikan, atau beri komentar.',
-  KETUA_UMUM: 'Pantau laporan yang sudah disetujui di seluruh subholding.',
+  SUPERUSER: 'Pantau laporan yang sudah disetujui di seluruh subholding.',
 }

@@ -1,5 +1,5 @@
 /**
- * Logika murni dashboard Ketua Umum & Manajemen (papan 6, kontrak subholding
+ * Logika murni dashboard Superuser & Manajemen (papan 6, kontrak subholding
  * 16 Okt 2026): tanggal WIB, pengelompokan laporan per PT, ringkasan kartu,
  * dan navigasi lightbox bukti. Tanpa React supaya bisa diuji di Node.
  */

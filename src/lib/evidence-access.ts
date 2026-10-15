@@ -42,7 +42,7 @@ export const EVIDENCE_TARGETS = new Set([
  *  - tulis (unggah/tautan/hapus): Admin subholding pemilik laporan saat
  *    MENUNGGU/PERLU_PERBAIKAN; Super Admin kapan pun. TI tidak.
  *  - baca: Admin subholding pemilik, peninjau (`shreport:review`: Supervisor,
- *    Super Admin) semua laporan; Ketua Umum/Manajemen (`shreport:view-approved`)
+ *    Super Admin) semua laporan; Superuser/Manajemen (`shreport:view-approved`)
  *    hanya laporan DISETUJUI. Diperiksa SEBELUM jalur peran global, jadi
  *    Manajemen/TI/Auditor tidak membaca bukti laporan yang belum disetujui.
  */

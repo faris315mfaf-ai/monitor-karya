@@ -52,9 +52,9 @@ describe('positionsForPlacement', () => {
   it('subholding hanya menampung Admin subholding (dan Direktur)', () => {
     expect(roles({ type: 'SUB_HOLDING' })).toEqual(['ADMIN_SUBHOLDING', 'DIREKTUR_ENTITAS'])
   })
-  it('tingkat grup memuat Supervisor, Ketua Umum, Manajemen berlabel Indonesia', () => {
+  it('tingkat grup memuat Supervisor, Superuser, Manajemen berlabel Indonesia', () => {
     const opts = positionsForPlacement(null)
-    for (const [role, label] of [['SUPERVISOR', 'Supervisor'], ['KETUA_UMUM', 'Ketua Umum'], ['MANAJEMEN', 'Manajemen']]) {
+    for (const [role, label] of [['SUPERVISOR', 'Supervisor'], ['SUPERUSER', 'Superuser'], ['MANAJEMEN', 'Manajemen']]) {
       expect(opts.find((o) => o.role === role)?.label).toBe(label)
     }
     expect(opts.some((o) => o.role === 'ADMIN_SUBHOLDING')).toBe(false)

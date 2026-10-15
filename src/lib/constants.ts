@@ -15,7 +15,7 @@ export const ROLE_LABELS: Record<string, string> = {
   // Model laporan subholding (16 Okt 2026) — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md
   ADMIN_SUBHOLDING: 'Admin subholding',
   SUPERVISOR: 'Supervisor',
-  KETUA_UMUM: 'Ketua Umum',
+  SUPERUSER: 'Superuser',
 }
 
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -30,7 +30,7 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   AUDITOR: 'Read-only seluruh data + audit trail',
   ADMIN_SUBHOLDING: 'Menambah laporan kegiatan harian PT di subholding-nya beserta bukti',
   SUPERVISOR: 'Meninjau laporan seluruh subholding: setujui, minta perbaikan, atau beri komentar',
-  KETUA_UMUM: 'Melihat laporan yang sudah disetujui di seluruh subholding',
+  SUPERUSER: 'Melihat laporan yang sudah disetujui di seluruh subholding',
 }
 
 /**
@@ -58,7 +58,7 @@ export const HOLDING_POSITION_OPTIONS: { role: string; label: string; hint: stri
   { role: 'TI', label: 'Tim TI', hint: 'Konsol sistem & akses' },
   { role: 'AUDITOR', label: 'Auditor', hint: 'Baca-saja + jejak audit' },
   { role: 'SUPERVISOR', label: 'Supervisor', hint: 'Menyetujui laporan seluruh subholding' },
-  { role: 'KETUA_UMUM', label: 'Ketua Umum', hint: 'Dashboard laporan yang disetujui' },
+  { role: 'SUPERUSER', label: 'Superuser', hint: 'Dashboard laporan yang disetujui' },
 ]
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
@@ -234,7 +234,7 @@ export const NAV_TABS = [
   { id: 'audit', label: 'Log aktivitas', short: 'Log' },
   { id: 'system', label: 'Sistem & akses', short: 'Sistem' },
   // Model laporan subholding (16 Okt 2026): Admin subholding, Supervisor,
-  // Ketua Umum & Manajemen — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md.
+  // Superuser & Manajemen — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md.
   { id: 'sh-dashboard', label: 'Dashboard', short: 'Dashboard' },
   { id: 'sh-inbox', label: 'Kotak masuk', short: 'Pesan' },
   { id: 'sh-history', label: 'Riwayat', short: 'Riwayat' },

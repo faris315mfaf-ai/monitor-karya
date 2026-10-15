@@ -39,7 +39,7 @@ import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-
  * penyetujunya sendiri.
  *
  * Model 16 Okt 2026 (docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md): Super Admin juga
- * membuat/mengubah SUPERVISOR, KETUA_UMUM, MANAJEMEN (tanpa cakupan) dan
+ * membuat/mengubah SUPERVISOR, SUPERUSER, MANAJEMEN (tanpa cakupan) dan
  * ADMIN_SUBHOLDING (cakupan wajib entitas SUB_HOLDING, satu akun aktif per
  * subholding). Aturannya di roleScopeProblem (src/lib/companies.ts).
  */
@@ -268,7 +268,7 @@ export async function PATCH(req: NextRequest) {
         : null
     }
     if (isUnscopedGroupRole(finalRole) && targetEntity === undefined) {
-      // Ganti peran ke Supervisor/Ketua Umum/Manajemen tanpa memilih tempat: lepas cakupannya.
+      // Ganti peran ke Supervisor/Superuser/Manajemen tanpa memilih tempat: lepas cakupannya.
       if (roleChanged && existing.scopeEntityId) {
         data.scopeEntityId = null
         audit.entityId = null

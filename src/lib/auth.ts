@@ -275,7 +275,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
  * getSessionUser langsung.
  *
  * Model subholding (16 Okt 2026): peran ADMIN_SUBHOLDING, SUPERVISOR, dan
- * KETUA_UMUM ditolak 403 di semua rute, kecuali rute yang ikut serta dengan
+ * SUPERUSER ditolak 403 di semua rute, kecuali rute yang ikut serta dengan
  * `allowSubholdingRoles` (/api/sh/**, /api/evidence/**, profil, notifikasi
  * sendiri, nav-badges). Gagal-tertutup: rute lama yang lupa memeriksa
  * kapabilitas tidak bisa membocorkan data ke peran baru.

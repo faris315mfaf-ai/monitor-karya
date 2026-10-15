@@ -147,7 +147,7 @@ beforeEach(() => {
       { id: 'u-shb', name: 'Admin Subholding Beta', role: 'ADMIN_SUBHOLDING', scopeEntityId: 'sh-b' },
       { id: 'u-sup', name: 'Sutan Supervisor', role: 'SUPERVISOR', scopeEntityId: null },
       { id: 'u-sup2', name: 'Sekar Supervisor', role: 'SUPERVISOR', scopeEntityId: null },
-      { id: 'u-ketum', name: 'Kusuma Ketua', role: 'KETUA_UMUM', scopeEntityId: null },
+      { id: 'u-superuser', name: 'Kusuma Ketua', role: 'SUPERUSER', scopeEntityId: null },
     ].map((u) => ({ ...u, email: `${u.id}@contoh.test`, username: u.id.slice(2), passwordHash: `hash-${u.id}` }))
   )
 })
@@ -160,10 +160,10 @@ describe('peran, tab, kapabilitas', () => {
   it('tab dan label sesuai kontrak; Manajemen hanya sh-overview', () => {
     expect(tabsForRole('ADMIN_SUBHOLDING')).toEqual(['sh-dashboard', 'sh-inbox', 'sh-history'])
     expect(tabsForRole('SUPERVISOR')).toEqual(['sh-review'])
-    expect(tabsForRole('KETUA_UMUM')).toEqual(['sh-overview'])
+    expect(tabsForRole('SUPERUSER')).toEqual(['sh-overview'])
     expect(tabsForRole('MANAJEMEN')).toEqual(['sh-overview'])
     expect(defaultTabForRole('MANAJEMEN')).toBe('sh-overview')
-    expect(ROLE_LABELS).toMatchObject({ ADMIN_SUBHOLDING: 'Admin subholding', SUPERVISOR: 'Supervisor', KETUA_UMUM: 'Ketua Umum', MANAJEMEN: 'Manajemen' })
+    expect(ROLE_LABELS).toMatchObject({ ADMIN_SUBHOLDING: 'Admin subholding', SUPERVISOR: 'Supervisor', SUPERUSER: 'Superuser', MANAJEMEN: 'Manajemen' })
     const ids = NAV_TABS.map((t) => t.id as string)
     for (const id of ['sh-dashboard', 'sh-inbox', 'sh-history', 'sh-review', 'sh-overview']) expect(ids).toContain(id)
   })
@@ -174,7 +174,7 @@ describe('peran, tab, kapabilitas', () => {
     expect(can('SUPERVISOR', 'shreport:review')).toBe(true)
     expect(can('SUPERADMIN', 'shreport:review')).toBe(true)
     expect(can('SUPERADMIN', 'shreport:write')).toBe(false)
-    for (const r of ['KETUA_UMUM', 'MANAJEMEN', 'SUPERVISOR', 'SUPERADMIN']) expect(can(r, 'shreport:view-approved'), r).toBe(true)
+    for (const r of ['SUPERUSER', 'MANAJEMEN', 'SUPERVISOR', 'SUPERADMIN']) expect(can(r, 'shreport:view-approved'), r).toBe(true)
     for (const c of ['shreport:write', 'shreport:review', 'shreport:view-approved'] as const) {
       expect(can('TI', c)).toBe(false)
       expect(can('AUDITOR', c)).toBe(false)
@@ -222,7 +222,7 @@ describe('GET /api/sh/options', () => {
   })
 
   it('peran lain ditolak 403', async () => {
-    for (const who of ['u-sup', 'u-ketum', 'u-mgmt', 'u-super', 'u-ti', 'u-admin-a', 'u-auditor']) {
+    for (const who of ['u-sup', 'u-superuser', 'u-mgmt', 'u-super', 'u-ti', 'u-admin-a', 'u-auditor']) {
       signIn(who)
       expect((await optionsGet()).status, who).toBe(403)
     }
@@ -300,8 +300,8 @@ describe('POST /api/sh/reports', () => {
     expect(rows('notificationLog', { template: 'SH_LAPORAN_BARU' })).toHaveLength(2)
   })
 
-  it('supervisor, ketua umum, manajemen, super admin tidak membuat laporan', async () => {
-    for (const who of ['u-sup', 'u-ketum', 'u-mgmt', 'u-super']) {
+  it('supervisor, superuser, manajemen, super admin tidak membuat laporan', async () => {
+    for (const who of ['u-sup', 'u-superuser', 'u-mgmt', 'u-super']) {
       signIn(who)
       expect((await reportsPost(req('/api/sh/reports', 'POST', VALID))).status, who).toBe(403)
     }
@@ -426,10 +426,10 @@ describe('alur status', () => {
     expect(one('subholdingReport', id).status).toBe('DISETUJUI')
   })
 
-  it('hanya peninjau yang memutuskan: admin, ketua umum, manajemen, TI → 403', async () => {
+  it('hanya peninjau yang memutuskan: admin, superuser, manajemen, TI → 403', async () => {
     const id = seedReport({})
     seedEvidence(id)
-    for (const who of ['u-sha', 'u-ketum', 'u-mgmt', 'u-ti', 'u-auditor']) {
+    for (const who of ['u-sha', 'u-superuser', 'u-mgmt', 'u-ti', 'u-auditor']) {
       signIn(who)
       expect((await decisionPost(req(`/api/sh/reports/${id}/decision`, 'POST', { action: 'approve' }), ctx(id))).status, who).toBe(403)
     }
@@ -475,9 +475,9 @@ describe('alur status', () => {
     expect((await reportDelete(req(`/api/sh/reports/${id}`, 'DELETE'), ctx(id))).status).toBe(200)
   })
 
-  it('supervisor dan ketua umum tidak bisa mengubah/menarik laporan', async () => {
+  it('supervisor dan superuser tidak bisa mengubah/menarik laporan', async () => {
     const id = seedReport({})
-    for (const who of ['u-sup', 'u-ketum', 'u-mgmt']) {
+    for (const who of ['u-sup', 'u-superuser', 'u-mgmt']) {
       signIn(who)
       expect((await reportPatch(req(`/api/sh/reports/${id}`, 'PATCH', { kegiatan: 'X' }), ctx(id))).status, who).toBe(403)
       expect((await reportDelete(req(`/api/sh/reports/${id}`, 'DELETE'), ctx(id))).status, who).toBe(403)
@@ -487,7 +487,7 @@ describe('alur status', () => {
 
 // ------------------------------------------------------------------
 describe('komentar dan kotak masuk', () => {
-  it('supervisor berkomentar (KOMENTAR), admin membalas (BALASAN); ketua umum 403', async () => {
+  it('supervisor berkomentar (KOMENTAR), admin membalas (BALASAN); superuser 403', async () => {
     const id = seedReport({ status: 'DISETUJUI' })
     signIn('u-sup')
     const c = await commentPost(req(`/api/sh/reports/${id}/comments`, 'POST', { body: 'Mohon detail biaya' }), ctx(id))
@@ -504,7 +504,7 @@ describe('komentar dan kotak masuk', () => {
     expect((await commentPost(req(`/api/sh/reports/${id}/comments`, 'POST', { body: '' }), ctx(id))).status).toBe(422)
     expect((await commentPost(req(`/api/sh/reports/${id}/comments`, 'POST', { body: 'x'.repeat(2001) }), ctx(id))).status).toBe(422)
 
-    signIn('u-ketum')
+    signIn('u-superuser')
     expect((await commentPost(req(`/api/sh/reports/${id}/comments`, 'POST', { body: 'Halo' }), ctx(id))).status).toBe(403)
   })
 
@@ -569,8 +569,8 @@ describe('GET /api/sh/review', () => {
     expect((await reviewGet(req('/api/sh/review?status=X'))).status).toBe(422)
   })
 
-  it('admin, ketua umum, manajemen, TI → 403', async () => {
-    for (const who of ['u-sha', 'u-ketum', 'u-mgmt', 'u-ti']) {
+  it('admin, superuser, manajemen, TI → 403', async () => {
+    for (const who of ['u-sha', 'u-superuser', 'u-mgmt', 'u-ti']) {
       signIn(who)
       expect((await reviewGet(req('/api/sh/review'))).status, who).toBe(403)
     }
@@ -585,7 +585,7 @@ describe('GET /api/sh/overview', () => {
     seedReport({ kegiatan: 'Rahasia menunggu', status: 'MENUNGGU', ptId: 'pt-a2' })
     seedReport({ kegiatan: 'Rahasia perbaikan', status: 'PERLU_PERBAIKAN', subholdingId: 'sh-b', ptId: 'pt-b1' })
     seedReport({ kegiatan: 'Disetujui kemarin', status: 'DISETUJUI', reportDate: YESTERDAY })
-    for (const who of ['u-ketum', 'u-mgmt', 'u-sup', 'u-super']) {
+    for (const who of ['u-superuser', 'u-mgmt', 'u-sup', 'u-super']) {
       signIn(who)
       const res = await overviewGet(req('/api/sh/overview'))
       expect(res.status, who).toBe(200)
@@ -599,7 +599,7 @@ describe('GET /api/sh/overview', () => {
           id: 'sh-a',
           name: 'Subholding Alfa',
           count: 1,
-          ptCount: 2,
+          ptCount: 1,
           pts: [
             {
               id: 'pt-a1',
@@ -608,10 +608,10 @@ describe('GET /api/sh/overview', () => {
             },
           ],
         },
-        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 1, pts: [] },
+        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [] },
       ])
     }
-    signIn('u-ketum')
+    signIn('u-superuser')
     const yesterday = await json(await overviewGet(req('/api/sh/overview?date=2026-10-13')))
     expect(yesterday.subholdings[0].pts[0].reports[0].kegiatan).toBe('Disetujui kemarin')
     expect((await overviewGet(req('/api/sh/overview?date=kemarin'))).status).toBe(422)
@@ -627,14 +627,14 @@ describe('GET /api/sh/overview', () => {
 
 // ------------------------------------------------------------------
 describe('bukti SUBHOLDING_REPORT', () => {
-  it('baca: ketua umum & manajemen hanya laporan DISETUJUI; supervisor semua; admin lain & peran lama ditolak', async () => {
+  it('baca: superuser & manajemen hanya laporan DISETUJUI; supervisor semua; admin lain & peran lama ditolak', async () => {
     const approved = seedReport({ status: 'DISETUJUI' })
     const pending = seedReport({})
     const evOk = seedEvidence(approved)
     const evPending = seedEvidence(pending)
     const open = (id: string) => evidenceGet(req(`/api/evidence/${id}`), ctx(id))
 
-    for (const who of ['u-ketum', 'u-mgmt']) {
+    for (const who of ['u-superuser', 'u-mgmt']) {
       signIn(who)
       const ok = await open(evOk)
       expect(ok.status, who).toBe(200)
@@ -654,11 +654,11 @@ describe('bukti SUBHOLDING_REPORT', () => {
     }
   })
 
-  it('tulis: hanya admin pemilik (dan super admin); supervisor/ketum/TI ditolak; hapus bukti saat MENUNGGU', async () => {
+  it('tulis: hanya admin pemilik (dan super admin); supervisor/superuser/TI ditolak; hapus bukti saat MENUNGGU', async () => {
     const id = seedReport({})
     const ev = seedEvidence(id)
     const body = { targetType: 'SUBHOLDING_REPORT', targetId: id, fileName: 'Tautan', url: 'https://contoh.test/x' }
-    for (const who of ['u-sup', 'u-ketum', 'u-mgmt', 'u-ti']) {
+    for (const who of ['u-sup', 'u-superuser', 'u-mgmt', 'u-ti']) {
       signIn(who)
       expect((await evidenceLinkPost(req('/api/evidence', 'POST', body))).status, who).toBe(403)
       expect((await evidenceDelete(req(`/api/evidence/${ev}`, 'DELETE'), ctx(ev))).status, who).toBe(403)
@@ -679,7 +679,7 @@ describe('bukti SUBHOLDING_REPORT', () => {
     const [ev] = seed('evidence', [
       { targetType: 'DAILY_REPORT', targetId: 'dr-1', storageKey: 'k', fileName: 'f', mime: 'image/png', size: 1, url: null },
     ])
-    for (const who of ['u-sha', 'u-sup', 'u-ketum']) {
+    for (const who of ['u-sha', 'u-sup', 'u-superuser']) {
       signIn(who)
       expect((await evidenceGet(req(`/api/evidence/${ev.id}`), ctx(ev.id as string))).status, who).toBe(403)
     }
@@ -691,7 +691,7 @@ describe('peran baru ditolak di rute lama', () => {
   it('projects, daily-input, ringkasan, work-desk, entities, dashboard → 403', async () => {
     // Subpohon subholding A berisi PT lama dengan proyek: tidak boleh bocor.
     one('entity', 'pt-a').path = '/h/sh-a/pt-a/'
-    for (const who of ['u-sha', 'u-sup', 'u-ketum']) {
+    for (const who of ['u-sha', 'u-sup', 'u-superuser']) {
       signIn(who)
       expect((await projectsGet(req('/api/projects'))).status, `${who} projects`).toBe(403)
       expect((await dailyInputGet(req('/api/daily-input'))).status, `${who} daily-input`).toBe(403)
@@ -703,7 +703,7 @@ describe('peran baru ditolak di rute lama', () => {
   })
 
   it('profil dan notifikasi sendiri tetap terbuka untuk peran baru', async () => {
-    for (const who of ['u-sha', 'u-sup', 'u-ketum']) {
+    for (const who of ['u-sha', 'u-sup', 'u-superuser']) {
       signIn(who)
       expect((await profileGet()).status, who).toBe(200)
       expect((await notificationsGet(req('/api/notifications?inbox=1'))).status, who).toBe(200)

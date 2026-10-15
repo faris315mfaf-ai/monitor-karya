@@ -269,7 +269,7 @@ function ReportDetail({
       return
     }
     toast.success(action === 'approve' ? `Disetujui: ${r.kegiatan}` : `Perbaikan diminta: ${r.kegiatan}`, {
-      description: action === 'approve' ? 'Laporan tampil di dashboard Ketua Umum & Manajemen.' : 'Admin subholding menerima komentar Anda.',
+      description: action === 'approve' ? 'Laporan tampil di dashboard Superuser & Manajemen.' : 'Admin subholding menerima komentar Anda.',
     })
     refreshNavBadges()
     onDecided(r.id)
@@ -389,7 +389,7 @@ function ReportDetail({
         {r.status !== 'MENUNGGU' ? (
           <p className={cx('mk-note-box', r.status === 'DISETUJUI' ? 'mk-soft--done' : 'mk-soft--risk')}>
             {r.status === 'DISETUJUI'
-              ? `Disetujui${r.decidedByName ? ` oleh ${r.decidedByName}` : ''}${r.decidedAt ? ` · ${formatDateTime(r.decidedAt)}` : ''}. Laporan ini tampil di dashboard Ketua Umum & Manajemen.`
+              ? `Disetujui${r.decidedByName ? ` oleh ${r.decidedByName}` : ''}${r.decidedAt ? ` · ${formatDateTime(r.decidedAt)}` : ''}. Laporan ini tampil di dashboard Superuser & Manajemen.`
               : 'Menunggu admin subholding memperbaiki dan mengirim ulang.'}
           </p>
         ) : null}

@@ -12,7 +12,7 @@ import type { SessionUser } from '@/lib/auth'
  * - Admin subholding terpaku pada SATU entitas SUB_HOLDING (`scopeEntityId`).
  *   PT yang boleh dilaporkannya = Entity `PT` aktif yang `path`-nya diawali
  *   path subholding itu (boleh lewat SECTOR/REGION di antaranya).
- * - Supervisor / Super Admin membaca semua subholding; Ketua Umum & Manajemen
+ * - Supervisor / Super Admin membaca semua subholding; Superuser & Manajemen
  *   hanya laporan DISETUJUI.
  */
 

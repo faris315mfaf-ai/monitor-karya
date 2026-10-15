@@ -30,7 +30,7 @@ const LOCKED_WITHDRAW = 'Laporan hanya bisa ditarik selama masih menunggu perset
 
 /**
  * GET /api/sh/reports/:id → { report: ShReport }
- * Admin subholding pemilik; Supervisor/Super Admin semua; Ketua Umum/Manajemen
+ * Admin subholding pemilik; Supervisor/Super Admin semua; Superuser/Manajemen
  * hanya DISETUJUI. Di luar cakupan = 404.
  */
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const current = await visibleShReport(user, id)
   const kind = current ? writerKind(user, current.subholdingId) : null
   if (!current || !kind) {
-    // Pembaca (supervisor/ketum) melihat laporannya tetapi tidak mengubahnya.
+    // Pembaca (supervisor/superuser) melihat laporannya tetapi tidak mengubahnya.
     return current ? NextResponse.json({ error: 'Anda tidak dapat mengubah laporan ini' }, { status: 403 }) : notFound()
   }
   if (kind === 'admin' && !adminCanEdit(current.status)) {

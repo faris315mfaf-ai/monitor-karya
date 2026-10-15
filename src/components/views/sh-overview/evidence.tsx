@@ -3,7 +3,7 @@
 /**
  * Bukti laporan subholding: thumbnail gambar nyata dan lightbox
  * (sebelumnya/berikutnya, Esc/tutup, fokus kembali ke pemicu). Dipakai
- * dashboard Ketua Umum & Manajemen dan layar Persetujuan Supervisor.
+ * dashboard Superuser & Manajemen dan layar Persetujuan Supervisor.
  *
  * Berkas disimpan privat; tautannya diminta ke GET /api/evidence/:id (URL
  * bertanda tangan, berlaku 5 menit) dan disimpan sebentar di memori supaya

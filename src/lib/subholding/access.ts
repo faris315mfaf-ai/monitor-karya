@@ -13,7 +13,7 @@ type Client = Prisma.TransactionClient | typeof db
  * Siapa boleh membaca satu laporan subholding:
  *  - Admin subholding pemiliknya,
  *  - peninjau (`shreport:review`: Supervisor, Super Admin) — semua,
- *  - `shreport:view-approved` (Ketua Umum, Manajemen) — hanya DISETUJUI.
+ *  - `shreport:view-approved` (Superuser, Manajemen) — hanya DISETUJUI.
  */
 export function canReadShReport(user: SessionUser, row: Pick<ShReportRow, 'subholdingId' | 'status'>): boolean {
   if (can(user.role, 'shreport:write') && ownsSubholding(user, row.subholdingId)) return true
