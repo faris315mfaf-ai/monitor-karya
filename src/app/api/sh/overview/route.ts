@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { serverError } from '@/lib/api-error'
 import { startOfWibDay, wibDateKey } from '@/lib/lock'
 import { dateParam, requireShUser, unprocessable } from '@/lib/subholding/http'
-import { SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
+import { reporterTitle, SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
 import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
 
 /**
@@ -15,7 +15,10 @@ import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
  * tanggal itu ("3 laporan · 2 PT" di kartu); `pts` = PT tersebut.
  * → { date, subholdings: [{ id, name, count, ptCount,
  *       pts: [{ id, name, reports: [{ id, kegiatan, deskripsi,
+ *         reporterName, reporterTitle, decidedAt,
  *         evidence: [{ id, fileName, mime, kind: 'file' | 'link' }] }] }] }] }
+ * `reporterTitle` = label jadi ("Manajer Proyek", helper yang sama dengan
+ * ShReport); `decidedAt` = ISO string atau null.
  * Urutan (kontrak Opsi A, 15 Okt 2026): subholding menurut nama, PT menurut
  * nama, laporan menurut `decidedAt` lalu `submittedAt`; bukti menurut waktu unggah.
  * `kind: 'link'` = bukti tautan lama (kolom `url`); URL-nya sendiri TIDAK
@@ -36,7 +39,17 @@ export async function GET(req: NextRequest) {
       activeSubholdings(),
       db.subholdingReport.findMany({
         where: { status: 'DISETUJUI', reportDate: date },
-        select: { id: true, subholdingId: true, ptId: true, kegiatan: true, deskripsi: true },
+        select: {
+          id: true,
+          subholdingId: true,
+          ptId: true,
+          kegiatan: true,
+          deskripsi: true,
+          reporterName: true,
+          reporterTitleKind: true,
+          reporterTitleField: true,
+          decidedAt: true,
+        },
         orderBy: [{ decidedAt: 'asc' }, { submittedAt: 'asc' }],
       }),
     ])
@@ -74,6 +87,9 @@ export async function GET(req: NextRequest) {
             id: r.id,
             kegiatan: r.kegiatan,
             deskripsi: r.deskripsi,
+            reporterName: r.reporterName,
+            reporterTitle: reporterTitle(r.reporterTitleKind, r.reporterTitleField),
+            decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
             evidence: evidenceBy.get(r.id) ?? [],
           })),
         }))

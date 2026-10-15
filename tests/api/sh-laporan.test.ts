@@ -580,7 +580,15 @@ describe('GET /api/sh/review', () => {
 // ------------------------------------------------------------------
 describe('GET /api/sh/overview', () => {
   it('hanya DISETUJUI pada tanggal itu; semua subholding aktif tampil walau 0', async () => {
-    const ok = seedReport({ kegiatan: 'Disetujui A1', status: 'DISETUJUI' })
+    const decided = new Date('2026-10-14T03:24:00Z') // 10.24 WIB
+    const ok = seedReport({
+      kegiatan: 'Disetujui A1',
+      status: 'DISETUJUI',
+      reporterName: 'Budi Santoso',
+      reporterTitleKind: 'MANAJER',
+      reporterTitleField: 'Proyek',
+      decidedAt: decided,
+    })
     seedEvidence(ok)
     seedReport({ kegiatan: 'Rahasia menunggu', status: 'MENUNGGU', ptId: 'pt-a2' })
     seedReport({ kegiatan: 'Rahasia perbaikan', status: 'PERLU_PERBAIKAN', subholdingId: 'sh-b', ptId: 'pt-b1' })
@@ -604,7 +612,17 @@ describe('GET /api/sh/overview', () => {
             {
               id: 'pt-a1',
               name: 'PT Alfa Satu',
-              reports: [{ id: ok, kegiatan: 'Disetujui A1', deskripsi: 'Deskripsi contoh', evidence: [{ id: expect.any(String), fileName: 'foto.jpg', mime: 'image/jpeg', kind: 'file' }] }],
+              reports: [
+                {
+                  id: ok,
+                  kegiatan: 'Disetujui A1',
+                  deskripsi: 'Deskripsi contoh',
+                  reporterName: 'Budi Santoso',
+                  reporterTitle: 'Manajer Proyek',
+                  decidedAt: '2026-10-14T03:24:00.000Z',
+                  evidence: [{ id: expect.any(String), fileName: 'foto.jpg', mime: 'image/jpeg', kind: 'file' }],
+                },
+              ],
             },
           ],
         },
@@ -613,7 +631,12 @@ describe('GET /api/sh/overview', () => {
     }
     signIn('u-superuser')
     const yesterday = await json(await overviewGet(req('/api/sh/overview?date=2026-10-13')))
-    expect(yesterday.subholdings[0].pts[0].reports[0].kegiatan).toBe('Disetujui kemarin')
+    expect(yesterday.subholdings[0].pts[0].reports[0]).toMatchObject({
+      kegiatan: 'Disetujui kemarin',
+      reporterName: 'Pelapor',
+      reporterTitle: 'Kepala Keuangan',
+      decidedAt: null,
+    })
     expect((await overviewGet(req('/api/sh/overview?date=kemarin'))).status).toBe(422)
   })
 

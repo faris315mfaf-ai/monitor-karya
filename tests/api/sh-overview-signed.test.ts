@@ -280,4 +280,37 @@ describe('GET /api/sh/overview — kind dan urutan', () => {
     expect(body.subholdings[1]).toEqual({ id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [] })
     expect(body.subholdings[2].pts[0].reports[0].evidence[0].kind).toBe('file')
   })
+
+  it('setiap laporan membawa reporterName, reporterTitle (label jadi), decidedAt ISO; hanya DISETUJUI', async () => {
+    const decided = new Date('2026-10-14T03:24:00Z')
+    const approved = seedReport({
+      kegiatan: 'Disetujui',
+      status: 'DISETUJUI',
+      reporterName: 'Budi Santoso',
+      reporterTitleKind: 'MANAJER',
+      reporterTitleField: 'Proyek',
+      decidedAt: decided,
+    })
+    // Laporan lama tanpa decidedAt tetap tampil dengan decidedAt null.
+    const legacy = seedReport({ kegiatan: 'Lama', status: 'DISETUJUI', submittedAt: new Date(T0.getTime() + 60_000) })
+    for (const status of ['MENUNGGU', 'PERLU_PERBAIKAN']) {
+      seedReport({ kegiatan: `Rahasia ${status}`, status, reporterName: `Orang ${status}`, decidedAt: decided })
+    }
+
+    signIn('u-superuser')
+    const text = await (await overviewGet(new NextRequest('http://localhost/api/sh/overview'))).text()
+    expect(text).not.toContain('Rahasia')
+    expect(text).not.toContain('Orang ')
+    const reports = (JSON.parse(text) as Json).subholdings
+      .flatMap((s: Json) => s.pts)
+      .flatMap((p: Json) => p.reports)
+    expect(reports.map((r: Json) => r.id).sort()).toEqual([approved, legacy].sort())
+    const byId = new Map(reports.map((r: Json) => [r.id, r]))
+    expect(byId.get(approved)).toMatchObject({
+      reporterName: 'Budi Santoso',
+      reporterTitle: 'Manajer Proyek',
+      decidedAt: '2026-10-14T03:24:00.000Z',
+    })
+    expect(byId.get(legacy)).toMatchObject({ reporterName: 'Pelapor', reporterTitle: 'Kepala Keuangan', decidedAt: null })
+  })
 })
