@@ -12,10 +12,15 @@ import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
  *
  * HANYA laporan DISETUJUI pada `reportDate` itu. Semua subholding aktif tampil
  * walau 0 laporan. `ptCount` = jumlah PT yang punya laporan disetujui pada
- * tanggal itu ("3 laporan · 2 PT" di kartu); `pts` = PT tersebut (urut nama).
+ * tanggal itu ("3 laporan · 2 PT" di kartu); `pts` = PT tersebut.
  * → { date, subholdings: [{ id, name, count, ptCount,
- *       pts: [{ id, name, reports: [{ id, kegiatan, deskripsi, evidence: [{ id, fileName, mime }] }] }] }] }
- * Berkas bukti dibuka lewat GET /api/evidence/:id (URL bertanda tangan).
+ *       pts: [{ id, name, reports: [{ id, kegiatan, deskripsi,
+ *         evidence: [{ id, fileName, mime, kind: 'file' | 'link' }] }] }] }] }
+ * Urutan (kontrak Opsi A, 15 Okt 2026): subholding menurut nama, PT menurut
+ * nama, laporan menurut `decidedAt` lalu `submittedAt`; bukti menurut waktu unggah.
+ * `kind: 'link'` = bukti tautan lama (kolom `url`); URL-nya sendiri TIDAK
+ * dikirim di sini — berkas/tautan dibuka lewat POST /api/evidence/signed
+ * (batch) atau GET /api/evidence/:id.
  */
 export async function GET(req: NextRequest) {
   const user = await requireShUser()
@@ -40,21 +45,24 @@ export async function GET(req: NextRequest) {
     const [evidence, ptNames] = await Promise.all([
       db.evidence.findMany({
         where: { targetType: SH_EVIDENCE_TARGET, targetId: { in: reportIds } },
-        select: { id: true, targetId: true, fileName: true, mime: true },
+        select: { id: true, targetId: true, fileName: true, mime: true, url: true },
         orderBy: { createdAt: 'asc' },
       }),
       db.entity.findMany({ where: { id: { in: ptIds } }, select: { id: true, name: true } }),
     ])
 
-    const evidenceBy = new Map<string, { id: string; fileName: string; mime: string }[]>()
+    type EvidenceItem = { id: string; fileName: string; mime: string; kind: 'file' | 'link' }
+    const evidenceBy = new Map<string, EvidenceItem[]>()
     for (const e of evidence) {
       const list = evidenceBy.get(e.targetId) ?? []
-      list.push({ id: e.id, fileName: e.fileName, mime: e.mime })
+      list.push({ id: e.id, fileName: e.fileName, mime: e.mime, kind: e.url ? 'link' : 'file' })
       evidenceBy.set(e.targetId, list)
     }
     const ptName = new Map(ptNames.map((p) => [p.id, p.name]))
 
-    const subholdings = subs.map((s) => {
+    // Urutan nama ditegaskan di sini juga (collation DB bisa berbeda dari 'id').
+    const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'id')
+    const subholdings = [...subs].sort(byName).map((s) => {
       const mine = reports.filter((r) => r.subholdingId === s.id)
       const byPt = new Map<string, typeof mine>()
       for (const r of mine) byPt.set(r.ptId, [...(byPt.get(r.ptId) ?? []), r])
@@ -69,7 +77,7 @@ export async function GET(req: NextRequest) {
             evidence: evidenceBy.get(r.id) ?? [],
           })),
         }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'id'))
+        .sort(byName)
       return {
         id: s.id,
         name: s.name,

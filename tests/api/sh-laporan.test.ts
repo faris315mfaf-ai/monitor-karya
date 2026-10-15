@@ -604,7 +604,7 @@ describe('GET /api/sh/overview', () => {
             {
               id: 'pt-a1',
               name: 'PT Alfa Satu',
-              reports: [{ id: ok, kegiatan: 'Disetujui A1', deskripsi: 'Deskripsi contoh', evidence: [{ id: expect.any(String), fileName: 'foto.jpg', mime: 'image/jpeg' }] }],
+              reports: [{ id: ok, kegiatan: 'Disetujui A1', deskripsi: 'Deskripsi contoh', evidence: [{ id: expect.any(String), fileName: 'foto.jpg', mime: 'image/jpeg', kind: 'file' }] }],
             },
           ],
         },

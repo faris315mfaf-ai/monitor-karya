@@ -31,6 +31,10 @@ const ALLOWED: Record<string, string> = {
   // termasuk auditor (rantai ADMIN_PT → DIREKTUR_ENTITAS, seperti PIC).
   // Satu-satunya tulisan auditor; route lain tetap harus menolaknya.
   'projects:POST': 'pengajuan proyek dibuka untuk semua peran (9 Okt 2026)',
+  // Baca berkelompok URL bukti bertanda tangan (15 Okt 2026): POST hanya karena
+  // daftar id di badan permintaan; tidak menulis apa pun, hak baca per bukti
+  // diuji di sh-overview-signed.test.ts.
+  'evidence/signed:POST': 'membaca URL bukti bertanda tangan secara berkelompok, tanpa menulis',
 }
 const METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 
