@@ -67,7 +67,8 @@ async function floodFromManyIps(username: string, count = 30) {
   }
 }
 
-describe('plafon login lintas-IP (M1)', () => {
+// Tiap percobaan memverifikasi scrypt N=2^16 (±100 ms): 30 kegagalan melewati batas 5 dtk bawaan di mesin sibuk.
+describe('plafon login lintas-IP (M1)', { timeout: 30_000 }, () => {
   it('penyerang terdistribusi mendapat 429 SEBELUM kata sandi diperiksa — tanpa sinyal benar/salah', async () => {
     db.user.findFirst.mockResolvedValue(account('plafon-a'))
     await floodFromManyIps('plafon-a')

@@ -112,7 +112,8 @@ describe('POST /api/auth/login', () => {
       expect((await login({ identifier: `orang-${i}`, password: 'x' }, '192.0.2.77')).status).toBe(401)
     }
     expect((await login({ identifier: 'orang-baru', password: 'x' }, '192.0.2.77')).status).toBe(429)
-  })
+    // 30 verifikasi scrypt tiruan (N=2^16) melampaui 5 dtk saat suite paralel penuh.
+  }, 30_000)
 
   it('kata sandi raksasa ditolak tanpa hashing', async () => {
     const res = await login({ identifier: 'rina', password: 'x'.repeat(10_000) })
