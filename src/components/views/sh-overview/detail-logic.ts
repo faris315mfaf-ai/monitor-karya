@@ -1,5 +1,6 @@
 /**
- * Logika murni pop-up rincian laporan (Opsi A, 15 Okt 2026) dan pengambil URL
+ * Logika murni pop-up rincian laporan (Opsi A lalu minimalis, 15 Okt 2026):
+ * label jam/persetujuan WIB dan ringkasan bukti, serta pengambil URL
  * bukti bertanda tangan yang mengelompokkan permintaan. Tanpa React supaya
  * bisa diuji di Node: `fetch` dan penjadwal disuntikkan.
  */
@@ -35,6 +36,56 @@ export function photoAlt(index: number, length: number, kegiatan: string): strin
 /** Label tombol dokumen menurut jenis bukti. */
 export function docActionLabel(kind: SignedKind | null | undefined): string {
   return kind === 'link' ? 'Buka tautan' : 'Buka berkas'
+}
+
+/* ---------- Label waktu & bukti (minimalis, 15 Okt 2026) ---------- */
+
+/** WIB = UTC+7 tanpa musim panas: hitung manual agar sama di mesin berzona waktu mana pun. */
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'] as const
+const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const
+
+/** Komponen kalender WIB dari ISO; null bila kosong/tidak sah. */
+function wibParts(iso: string | null | undefined) {
+  if (typeof iso !== 'string' || !iso.trim()) return null
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return null
+  const d = new Date(ms + WIB_OFFSET_MS)
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth(),
+    day: d.getUTCDate(),
+    weekday: d.getUTCDay(),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes(),
+  }
+}
+
+const two = (n: number) => String(n).padStart(2, '0')
+
+/** Jam WIB, mis. "10.24" (kosong bila iso kosong/tidak sah). */
+export function timeLabel(iso: string | null | undefined): string {
+  const p = wibParts(iso)
+  return p ? `${two(p.hour)}.${two(p.minute)}` : ''
+}
+
+/** Waktu persetujuan WIB, mis. "10.24 · Kamis, 15 Okt 2026" (kosong bila iso kosong/tidak sah). */
+export function approvedLabel(iso: string | null | undefined): string {
+  const p = wibParts(iso)
+  if (!p) return ''
+  return `${two(p.hour)}.${two(p.minute)} · ${HARI[p.weekday]}, ${p.day} ${BULAN[p.month]} ${p.year}`
+}
+
+const count = (n: number) => (Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0)
+
+/** Ringkasan bukti, mis. "3 foto · 1 dokumen"; bagian bernilai 0 dihilangkan, keduanya 0 → "". */
+export function buktiLabel(photoCount: number, docCount: number): string {
+  const parts: string[] = []
+  const p = count(photoCount)
+  const d = count(docCount)
+  if (p) parts.push(`${p} foto`)
+  if (d) parts.push(`${d} dokumen`)
+  return parts.join(' · ')
 }
 
 /* ---------- Pengelompokan permintaan URL ---------- */

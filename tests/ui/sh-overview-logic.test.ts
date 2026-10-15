@@ -30,6 +30,13 @@ describe('groupByPt', () => {
     expect(out[0].reports[1].evidence).toHaveLength(2)
   })
 
+  it('normalizePts meneruskan pelapor, jabatan, dan waktu setuju (tanpa ptId/ptName)', () => {
+    const rep = { ...r('1', 'a', 'PT Alfa'), reporterName: 'Budi Santoso', reporterTitle: 'Manajer Proyek', decidedAt: '2026-10-15T03:24:00.000Z' }
+    const out = normalizePts([{ id: 'a', name: 'PT Alfa', reports: [rep] }])
+    expect(out[0].reports[0]).toMatchObject({ reporterName: 'Budi Santoso', reporterTitle: 'Manajer Proyek', decidedAt: '2026-10-15T03:24:00.000Z' })
+    expect(out[0].reports[0]).not.toHaveProperty('ptName')
+  })
+
   it('daftar kosong menghasilkan tanpa PT', () => {
     expect(groupByPt([])).toEqual([])
   })

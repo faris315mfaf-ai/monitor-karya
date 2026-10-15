@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
  */
 
 import {
-  SIGNED_BATCH_MAX, SIGNED_TTL_MS, batchUnsupported, chunkIds, clampIndex, createSignedFetcher, docActionLabel,
-  mergeSigned, photoAlt, signedFromSingle,
+  SIGNED_BATCH_MAX, SIGNED_TTL_MS, approvedLabel, batchUnsupported, buktiLabel, chunkIds, clampIndex, createSignedFetcher,
+  docActionLabel, mergeSigned, photoAlt, signedFromSingle, timeLabel,
 } from '@/components/views/sh-overview/detail-logic'
 
 describe('clampIndex', () => {
@@ -35,6 +35,65 @@ describe('teks', () => {
     expect(docActionLabel('link')).toBe('Buka tautan')
     expect(docActionLabel('file')).toBe('Buka berkas')
     expect(docActionLabel(null)).toBe('Buka berkas')
+  })
+})
+
+describe('label waktu WIB', () => {
+  it('jam WIB dua digit dengan titik', () => {
+    expect(timeLabel('2026-10-15T03:24:00.000Z')).toBe('10.24')
+    expect(timeLabel('2026-10-15T02:05:00Z')).toBe('09.05')
+    expect(timeLabel('2026-10-15T10:24:00+07:00')).toBe('10.24')
+  })
+
+  it('waktu persetujuan lengkap dengan hari dan tanggal', () => {
+    expect(approvedLabel('2026-10-15T03:24:00.000Z')).toBe('10.24 · Kamis, 15 Okt 2026')
+    expect(approvedLabel('2026-08-03T02:05:00Z')).toBe('09.05 · Senin, 3 Agu 2026')
+  })
+
+  it('lintas tengah malam UTC/WIB memakai hari WIB', () => {
+    // 17.30 UTC tgl 14 = 00.30 WIB tgl 15
+    expect(approvedLabel('2026-10-14T17:30:00Z')).toBe('00.30 · Kamis, 15 Okt 2026')
+    expect(approvedLabel('2026-10-15T16:59:00Z')).toBe('23.59 · Kamis, 15 Okt 2026')
+    expect(approvedLabel('2026-10-15T17:00:00Z')).toBe('00.00 · Jumat, 16 Okt 2026')
+    // 00.30 UTC masih hari yang sama di WIB (07.30)
+    expect(approvedLabel('2026-10-15T00:30:00Z')).toBe('07.30 · Kamis, 15 Okt 2026')
+    // pergantian tahun
+    expect(approvedLabel('2025-12-31T17:05:00Z')).toBe('00.05 · Kamis, 1 Jan 2026')
+  })
+
+  it('sama di mesin berzona waktu mana pun', () => {
+    const prev = process.env.TZ
+    try {
+      for (const tz of ['UTC', 'America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Kiritimati']) {
+        process.env.TZ = tz
+        expect(timeLabel('2026-10-14T17:30:00Z')).toBe('00.30')
+        expect(approvedLabel('2026-10-14T17:30:00Z')).toBe('00.30 · Kamis, 15 Okt 2026')
+      }
+    } finally {
+      if (prev === undefined) delete process.env.TZ
+      else process.env.TZ = prev
+    }
+  })
+
+  it('kosong atau tidak sah → teks kosong', () => {
+    for (const v of [null, undefined, '', '   ', 'bukan tanggal']) {
+      expect(timeLabel(v)).toBe('')
+      expect(approvedLabel(v)).toBe('')
+    }
+  })
+})
+
+describe('buktiLabel', () => {
+  it('menggabungkan foto dan dokumen, bagian nol dihilangkan', () => {
+    expect(buktiLabel(3, 1)).toBe('3 foto · 1 dokumen')
+    expect(buktiLabel(2, 0)).toBe('2 foto')
+    expect(buktiLabel(0, 4)).toBe('4 dokumen')
+    expect(buktiLabel(0, 0)).toBe('')
+  })
+
+  it('nilai tidak sah dianggap nol', () => {
+    expect(buktiLabel(-1, Number.NaN)).toBe('')
+    expect(buktiLabel(2.9, Number.POSITIVE_INFINITY)).toBe('2 foto')
   })
 })
 

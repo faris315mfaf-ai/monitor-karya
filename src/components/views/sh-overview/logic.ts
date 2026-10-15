@@ -11,6 +11,12 @@ export type OverviewReport = {
   id: string
   kegiatan: string
   deskripsi: string
+  /** Nama pelapor (GET /api/sh/overview). */
+  reporterName?: string
+  /** Label jabatan jadi, mis. "Manajer Proyek". */
+  reporterTitle?: string
+  /** Waktu disetujui (ISO) atau null. */
+  decidedAt?: string | null
   evidence: OverviewEvidence[]
 }
 
@@ -55,7 +61,9 @@ export function groupByPt(reports: FlatReport[]): OverviewPt[] {
       pt = { id: r.ptId, name: r.ptName, reports: [] }
       map.set(key, pt)
     }
-    pt.reports.push({ id: r.id, kegiatan: r.kegiatan, deskripsi: r.deskripsi, evidence: r.evidence ?? [] })
+    // Semua field laporan diteruskan (pelapor, jabatan, waktu setuju); hanya ptId/ptName yang dilepas.
+    const { ptId: _ptId, ptName: _ptName, ...report } = r
+    pt.reports.push({ ...report, evidence: r.evidence ?? [] })
   }
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'id-ID'))
 }

@@ -1,13 +1,15 @@
 'use client'
 
 /**
- * Pop-up rincian laporan subholding (kontrak Opsi A "Mosaik", 15 Okt 2026).
+ * Pop-up rincian laporan subholding (kontrak minimalis, 15 Okt 2026).
  *
- * ≥600px: dialog di tengah (lebar maks 760) di atas latar redup + blur.
- * <600px: lembar dari bawah setinggi layar dikurangi 48px, dengan pegangan.
- * Isi: foto besar + lencana "Foto 1 dari 3" (klik → lightbox pada foto itu),
- * deretan thumbnail pilih foto, chip subholding & PT, judul, deskripsi utuh,
- * lalu daftar "Dokumen" untuk bukti bukan gambar. Tanpa status/komentar/pelapor.
+ * ≥600px: dialog di tengah (lebar maks 1000) dua kolom yang membungkus —
+ * kiri foto (besar 4:3 + lencana "Foto 1 dari 3" + deretan pilih foto bila
+ * lebih dari satu), kanan info. Tanpa foto → hanya kolom info (maks 560).
+ * <600px: lembar dari bawah setinggi layar dikurangi 48px, foto di atas.
+ * Info: inisial + nama subholding & tombol Tutup, judul, daftar bergaris
+ * (PT pelaksana, Pelapor, Disetujui, Bukti — baris kosong disembunyikan),
+ * deskripsi utuh, lalu dokumen yang dibuka di tab baru.
  *
  * Radix Dialog menjaga fokus (terkunci, kembali ke pemicu), Esc, klik latar,
  * dan kunci gulir halaman. Animasi masuk lewat @starting-style, hanya bila
@@ -16,10 +18,10 @@
 
 import { useId, useRef, useState, type RefObject } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { Icon, Skeleton, cx } from '@/components/mk'
+import { Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { EvidenceThumb, useSignedUrl } from './evidence'
 import { docsOf, heroLabel, initialOf, photosOf, toneVars, type OverviewEvidence } from './logic'
-import { clampIndex, docActionLabel, photoAlt } from './detail-logic'
+import { approvedLabel, buktiLabel, clampIndex, docActionLabel, photoAlt } from './detail-logic'
 
 export type DetailReport = {
   id: string
@@ -29,6 +31,12 @@ export type DetailReport = {
   subholdingName: string
   tone: 1 | 2 | 3 | 4 | 5 | 6
   evidence: OverviewEvidence[]
+  /** Nama pelapor; kosong/tidak ada → baris "Pelapor" disembunyikan. */
+  reporterName?: string
+  /** Label jabatan jadi, mis. "Manajer Proyek" (baris kedua di bawah nama). */
+  reporterTitle?: string
+  /** Waktu disetujui (ISO); kosong → baris "Disetujui" disembunyikan. */
+  decidedAt?: string | null
 }
 
 export function ReportDetail({
@@ -45,6 +53,7 @@ export function ReportDetail({
   // overlay, sehingga pengembalian fokus bawaan Radix tidak sampai ke pemicu.
   const returnTo = useRef<HTMLElement | null>(null)
   const descId = useId()
+  const hasPhoto = report ? photosOf(report.evidence).length > 0 : false
 
   return (
     <DialogPrimitive.Root open={report !== null} onOpenChange={(o) => !o && onClose()}>
@@ -70,9 +79,10 @@ export function ReportDetail({
                 }
               }}
               className={cx(
-                'relative flex w-full flex-col overflow-y-auto overscroll-contain bg-surface text-ink shadow-[var(--shadow-sheet)] outline-none',
+                'relative flex w-full flex-wrap content-start overflow-y-auto overscroll-contain bg-surface text-ink shadow-[var(--shadow-sheet)] outline-none',
                 'h-[calc(100dvh-48px)] rounded-t-[var(--radius-xl)]',
-                'min-[600px]:h-auto min-[600px]:max-h-full min-[600px]:max-w-[760px] min-[600px]:rounded-[var(--radius-xl)] min-[600px]:border min-[600px]:border-line',
+                'min-[600px]:h-auto min-[600px]:max-h-full min-[600px]:rounded-[var(--radius-xl)] min-[600px]:border min-[600px]:border-line',
+                hasPhoto ? 'min-[600px]:max-w-[1000px]' : 'min-[600px]:max-w-[560px]',
                 'motion-safe:transition-[opacity,translate] motion-safe:duration-[var(--dur-slow)] motion-safe:ease-[var(--ease-standard)]',
                 'motion-safe:starting:translate-y-full min-[600px]:motion-safe:starting:translate-y-4 min-[600px]:motion-safe:starting:opacity-0'
               )}
@@ -104,45 +114,30 @@ function DetailBody({
   const index = clampIndex(picked, photos.length)
   const hero = photos[index] ?? null
   const tone = toneVars(report.tone)
-  const docsHeadId = useId()
 
-  const close = (
-    <DialogPrimitive.Close asChild>
-      <button
-        type="button"
-        aria-label="Tutup"
-        className={cx(
-          'absolute right-3 top-3 z-[1] flex h-11 w-11 items-center justify-center rounded-full cursor-pointer',
-          'bg-glass text-ink shadow-[var(--shadow-float)] backdrop-blur-[20px]',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
-        )}
-      >
-        <Icon name="tutup" size={18} strokeWidth={2.4} />
-      </button>
-    </DialogPrimitive.Close>
-  )
+  const reporter = report.reporterName?.trim() ?? ''
+  const reporterTitle = report.reporterTitle?.trim() ?? ''
+  const rows: Array<{ key: string; label: string; value: string; sub?: string }> = [
+    { key: 'pt', label: 'PT pelaksana', value: report.ptName.trim() },
+    { key: 'pelapor', label: 'Pelapor', value: reporter, sub: reporterTitle || undefined },
+    { key: 'disetujui', label: 'Disetujui', value: approvedLabel(report.decidedAt) },
+    { key: 'bukti', label: 'Bukti', value: buktiLabel(photos.length, docs.length) },
+  ].filter((r) => r.value)
 
   return (
     <>
-      <span aria-hidden className="mx-auto mb-1.5 mt-2 h-[5px] w-10 shrink-0 rounded-full bg-fill-2 min-[600px]:hidden" />
-
       {hero ? (
-        <>
-          <div className="relative shrink-0 px-2.5 min-[600px]:px-3 min-[600px]:pt-3">
-            <div className="relative">
-              <HeroPhoto
-                key={hero.id}
-                item={hero}
-                index={index}
-                length={photos.length}
-                kegiatan={report.kegiatan}
-                onOpen={() => onOpenPhoto(index)}
-              />
-              {close}
-            </div>
-          </div>
+        <div className="flex min-w-0 flex-[1_1_440px] flex-col gap-2.5 p-2.5 min-[600px]:p-3">
+          <HeroPhoto
+            key={hero.id}
+            item={hero}
+            index={index}
+            length={photos.length}
+            kegiatan={report.kegiatan}
+            onOpen={() => onOpenPhoto(index)}
+          />
           {photos.length > 1 ? (
-            <div role="group" aria-label="Foto bukti" className="scrollbar-thin flex shrink-0 gap-2 overflow-x-auto px-2.5 pb-1 pt-2.5 min-[600px]:px-3 min-[600px]:pt-3">
+            <div role="group" aria-label="Foto bukti" className="scrollbar-thin flex gap-2 overflow-x-auto px-1 py-1">
               {photos.map((p, i) => (
                 <EvidenceThumb
                   key={p.id}
@@ -152,40 +147,36 @@ function DetailBody({
                   onOpen={() => setPicked(i)}
                   label={`Tampilkan foto ${i + 1} dari ${photos.length}`}
                   className={cx(
-                    'my-1',
-                    i === index
-                      ? 'outline-2 outline-offset-2 outline-[var(--ink)]'
-                      : 'opacity-60 hover:opacity-100'
+                    'my-0.5',
+                    i === index ? 'outline-2 outline-offset-2 outline-[var(--ink)]' : 'opacity-50 hover:opacity-100'
                   )}
                 />
               ))}
             </div>
           ) : null}
-        </>
-      ) : (
-        close
-      )}
+        </div>
+      ) : null}
 
       <div
         className={cx(
-          'flex flex-col gap-3.5 px-5 pt-5 pb-[calc(var(--space-8)+env(safe-area-inset-bottom))] min-[600px]:px-8 min-[600px]:pb-8 min-[600px]:pt-[22px]',
-          !hero && 'pr-16 min-[600px]:pr-16 min-[600px]:pt-8'
+          'flex min-w-0 flex-[1_1_340px] flex-col gap-4 px-5 pt-5 pb-[calc(var(--space-8)+env(safe-area-inset-bottom))]',
+          'min-[600px]:gap-[18px] min-[600px]:px-[30px] min-[600px]:pt-7 min-[600px]:pb-[30px]'
         )}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex min-h-8 max-w-full items-center gap-2 rounded-full bg-fill-1 py-1 pl-1 pr-3 t-callout font-semibold text-ink">
+        <div className="-my-1.5 flex items-center justify-between gap-3">
+          <span className="inline-flex min-w-0 items-center gap-2 t-callout text-ink-2">
             <span
               aria-hidden
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full t-caption font-extrabold"
+              className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full t-caption font-bold!"
               style={{ background: tone.bg, color: tone.fg }}
             >
               {initialOf(report.subholdingName)}
             </span>
             <span className="min-w-0 truncate">{report.subholdingName}</span>
           </span>
-          <span className="inline-flex min-h-8 max-w-full items-center rounded-full bg-fill-1 px-3 py-1 t-callout font-semibold text-ink-2">
-            <span className="min-w-0 truncate">{report.ptName}</span>
-          </span>
+          <DialogPrimitive.Close asChild>
+            <IconButton icon="tutup" label="Tutup" variant="filled" className="-mr-2 shrink-0" />
+          </DialogPrimitive.Close>
         </div>
 
         <DialogPrimitive.Title
@@ -196,6 +187,20 @@ function DetailBody({
           {report.kegiatan}
         </DialogPrimitive.Title>
 
+        {rows.length ? (
+          <dl className="m-0 flex flex-col border-t border-line">
+            {rows.map((r) => (
+              <div key={r.key} className="flex items-start justify-between gap-4 border-b border-line py-[11px] t-callout">
+                <dt className="shrink-0 text-ink-2 font-normal!">{r.label}</dt>
+                <dd className="m-0 min-w-0 break-words text-right text-ink">
+                  {r.value}
+                  {r.sub ? <span className="block text-ink-2 font-normal!">{r.sub}</span> : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
         {report.deskripsi.trim() ? (
           <DialogPrimitive.Description id={descId} className="m-0 whitespace-pre-line break-words t-body-lg text-ink">
             {report.deskripsi}
@@ -203,23 +208,18 @@ function DetailBody({
         ) : null}
 
         {docs.length ? (
-          <section aria-labelledby={docsHeadId} className="flex flex-col gap-2 pt-2">
-            <h3 id={docsHeadId} className="t-headline text-ink">
-              Dokumen
-            </h3>
-            <ul className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-fill-1 p-0">
-              {docs.map((d, i) => (
-                <DocRow key={d.id} item={d} first={i === 0} />
-              ))}
-            </ul>
-          </section>
+          <ul aria-label="Dokumen" className="m-0 flex list-none flex-col gap-2 p-0">
+            {docs.map((d) => (
+              <DocRow key={d.id} item={d} />
+            ))}
+          </ul>
         ) : null}
       </div>
     </>
   )
 }
 
-/** Foto besar: gambar asli lewat URL bertanda tangan, kerangka saat dimuat, ikon bila gagal. */
+/** Foto besar 4:3: gambar asli lewat URL bertanda tangan, kerangka saat dimuat, ikon bila gagal. */
 function HeroPhoto({
   item,
   index,
@@ -246,8 +246,7 @@ function HeroPhoto({
       onClick={onOpen}
       aria-label={`Perbesar ${alt.charAt(0).toLowerCase()}${alt.slice(1)}`}
       className={cx(
-        'relative block w-full overflow-hidden rounded-[var(--radius-lg)] bg-fill-1 p-0 cursor-zoom-in',
-        'h-[270px] min-[600px]:h-[400px] min-[1024px]:h-[380px]',
+        'relative block aspect-[4/3] w-full overflow-hidden rounded-[var(--radius-lg)] bg-fill-1 p-0 cursor-zoom-in',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
       )}
     >
@@ -274,11 +273,8 @@ function HeroPhoto({
       ) : null}
       <span
         aria-hidden
-        className="absolute bottom-3 left-3 inline-flex min-h-[30px] items-center gap-1.5 rounded-full bg-glass px-3 t-caption font-semibold text-ink backdrop-blur-[12px]"
+        className="absolute bottom-3 left-3 inline-flex min-h-[26px] items-center rounded-full bg-glass px-2.5 t-caption font-semibold! text-ink backdrop-blur-[12px]"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-        </svg>
         {heroLabel(index, length)}
       </span>
     </button>
@@ -286,41 +282,33 @@ function HeroPhoto({
 }
 
 /** Baris dokumen: membuka URL bertanda tangan di tab baru (tautan disiapkan saat pop-up dibuka). */
-function DocRow({ item, first }: { item: OverviewEvidence; first: boolean }) {
+function DocRow({ item }: { item: OverviewEvidence }) {
   const { url, kind, failed, loading } = useSignedUrl(item.id)
   const k = item.kind ?? kind
-  const action = docActionLabel(k)
-  const row = 'flex min-h-11 items-center gap-3 px-4 py-2.5'
-  const icon = (
-    <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-surface text-ink-2">
-      <Icon name="dokumen" size={18} />
-    </span>
-  )
+  const row = 'flex min-h-12 items-center gap-3 rounded-[var(--radius-md)] bg-fill-1 px-3.5 py-2 t-callout'
+  const icon = <Icon name="dokumen" size={18} className="shrink-0 text-ink-2" />
 
   return (
-    <li className={cx(!first && 'border-t border-line')}>
+    <li>
       {url && !failed ? (
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`${action}: ${item.fileName} (tab baru)`}
+          aria-label={`${docActionLabel(k)}: ${item.fileName} (tab baru)`}
           className={cx(
             row,
-            'text-ink no-underline hover:bg-fill-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus)]'
+            'text-ink no-underline hover:bg-fill-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
           )}
         >
           {icon}
-          <span className="min-w-0 flex-1 truncate t-body-strong">{item.fileName}</span>
-          <span className="inline-flex shrink-0 items-center gap-1 t-callout text-accent">
-            {action}
-            <Icon name={k === 'link' ? 'kanan' : 'unduh'} size={16} strokeWidth={2} />
-          </span>
+          <span className="min-w-0 flex-1 truncate">{item.fileName}</span>
+          <span className="shrink-0 t-footnote text-ink-2">Buka</span>
         </a>
       ) : (
         <div className={cx(row, 'text-ink')}>
           {icon}
-          <span className="min-w-0 flex-1 truncate t-body-strong">{item.fileName}</span>
+          <span className="min-w-0 flex-1 truncate">{item.fileName}</span>
           <span className="shrink-0 t-footnote text-ink-2" aria-live="polite">
             {loading ? 'Menyiapkan tautan' : 'Belum bisa dibuka'}
           </span>

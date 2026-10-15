@@ -1,47 +1,36 @@
 'use client'
 
 /**
- * Dashboard Superuser & Manajemen — Opsi A "Mosaik" (kontrak
- * docs/zcode/KONTRAK-SUPERUSER-OPSI-A.md, 15 Okt 2026).
+ * Dashboard Superuser & Manajemen — versi minimalis (kontrak
+ * docs/zcode/KONTRAK-SUPERUSER-MINIMALIS.md, 15 Okt 2026).
  *
- * Hanya laporan yang sudah DISETUJUI supervisor. Semua kartu subholding yang
- * berisi laporan terbuka sekaligus: 2 kolom bergaya masonry di desktop
- * (≥1024), 1 kolom di bawahnya. Klik judul laporan membuka pop-up rincian;
- * klik thumbnail membuka lightbox langsung pada foto itu. Tanpa angka KPI.
+ * Hanya laporan yang sudah DISETUJUI supervisor. Kartu subholding dalam grid
+ * auto-fill (3/2/1 kolom sesuai lebar); subholding tanpa laporan tampil pudar
+ * di akhir. Klik judul laporan membuka pop-up rincian; klik thumbnail membuka
+ * lightbox pada foto pertama. Tanpa angka KPI.
  *
  * Data: GET /api/sh/overview?date=YYYY-MM-DD.
  */
 
-import { useMemo, useState, type MouseEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useResource } from '@/hooks/use-resource'
 import { useApp } from '@/components/app-provider'
 import { Card, EmptyNote, ErrorNote, Icon, SegmentedControl, Skeleton, cx } from '@/components/mk'
 import { ROLE_LABELS } from '@/lib/constants'
 import { formatDateLong } from '@/lib/format'
-import { EvidenceLightbox, EvidenceThumb, type LightboxState } from './evidence'
+import { EvidenceLightbox, useSignedUrl, type LightboxState } from './evidence'
 import { ReportDetail, type DetailReport } from './report-detail'
+import { timeLabel } from './detail-logic'
 import {
-  anchorId, cardMeta, dateFromKey, displayName, docsOf, initialOf, normalizePts, photosOf,
-  splitSubholdings, subholdingLabel, thumbStack, toneOf, toneVars, wibDateKey,
-  type OverviewData, type OverviewPt, type OverviewReport, type OverviewSubholding, type Tone,
+  dateFromKey, displayName, initialOf, normalizePts, photosOf, splitSubholdings, subholdingLabel,
+  toneOf, toneVars, wibDateKey,
+  type OverviewData, type OverviewEvidence, type OverviewPt, type OverviewReport, type OverviewSubholding,
 } from './logic'
 
 type Day = 'today' | 'yesterday'
 
-/** Jangkar baris "Belum ada laporan disetujui" (tujuan chip subholding kosong). */
-const EMPTY_ANCHOR = 'sh-belum-melapor'
-
-const headingId = (target: string) => `${target}-judul`
-
-/** Gulir ke kartu tujuan (halus kecuali reduced-motion) lalu fokus ke judulnya. */
-function jumpTo(e: MouseEvent<HTMLAnchorElement>, target: string) {
-  const el = document.getElementById(target)
-  if (!el) return
-  e.preventDefault()
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
-  document.getElementById(headingId(target))?.focus({ preventScroll: true })
-}
+const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
+const GRID = 'grid items-start gap-5 grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))]'
 
 /** Jumlah laporan kartu: hitungan API atau isi PT, mana yang lebih besar. */
 function reportCount(sh: OverviewSubholding): number {
@@ -49,17 +38,9 @@ function reportCount(sh: OverviewSubholding): number {
   return Math.max(sh.count ?? 0, fromPts)
 }
 
-function Monogram({ name, tone, className }: { name: string; tone: Tone; className: string }) {
-  const t = toneVars(tone)
-  return (
-    <span
-      aria-hidden
-      className={cx('flex shrink-0 items-center justify-center font-extrabold!', className)}
-      style={{ color: t.fg, background: t.bg }}
-    >
-      {initialOf(name)}
-    </span>
-  )
+/** Meta baris laporan: "10.24 · Budi Santoso"; bagian kosong dibuang. */
+function rowMeta(r: OverviewReport): string {
+  return [timeLabel(r.decidedAt ?? null), r.reporterName?.trim()].filter(Boolean).join(' · ')
 }
 
 export function ShOverviewView() {
@@ -81,7 +62,9 @@ export function ShOverviewView() {
     setLightbox(null)
   }
 
-  const openDetail = (sh: OverviewSubholding, pt: OverviewPt, r: OverviewReport) =>
+  const openDetail = (sh: OverviewSubholding, pt: OverviewPt, r: OverviewReport) => {
+    // Field tambahan dikirim lewat spread: opsional di DetailReport (kontrak B4).
+    const extra = { reporterName: r.reporterName, reporterTitle: r.reporterTitle, decidedAt: r.decidedAt }
     setDetail({
       id: r.id,
       kegiatan: r.kegiatan,
@@ -90,7 +73,9 @@ export function ShOverviewView() {
       subholdingName: subholdingLabel(sh.name),
       tone: toneOf(sh.id),
       evidence: r.evidence ?? [],
+      ...extra,
     })
+  }
 
   const openPhoto = (r: { kegiatan: string; evidence: OverviewReport['evidence'] }, index: number) => {
     const items = photosOf(r.evidence)
@@ -98,14 +83,15 @@ export function ShOverviewView() {
   }
 
   return (
-    <div className="flex flex-col gap-5 min-[600px]:gap-6">
+    <div className="flex flex-col gap-6 min-[600px]:gap-8">
       <header className="mk-pagehead">
-        <div className="min-w-0">
-          <p className="mk-pagehead__ctx">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <p className="m-0 [font:var(--text-callout)] text-ink-2">
             {roleName} · {formatDateLong(dateFromKey(date))}
           </p>
-          <h1 className="mk-pagehead__title">Laporan subholding</h1>
-          <p className="t-body text-ink-2 mt-1">Hanya laporan yang sudah disetujui supervisor.</p>
+          <h1 className="m-0 text-ink [font:var(--text-title-2)] tracking-[-0.025em] min-[600px]:[font:var(--text-large-title)]">
+            Laporan subholding
+          </h1>
         </div>
         <div className="mk-pagehead__tools">
           <SegmentedControl
@@ -122,17 +108,10 @@ export function ShOverviewView() {
       </header>
 
       {loading && !data ? (
-        <div className="flex flex-col gap-5" aria-busy="true" aria-label="Memuat laporan">
-          <div className="flex gap-2 overflow-hidden">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} h={44} w={150} r={999} className="shrink-0" />
-            ))}
-          </div>
-          <div className="lg:columns-2 lg:gap-x-5">
-            {[300, 220, 260, 200].map((h, i) => (
-              <Skeleton key={i} h={h} r={28} className="mb-4 break-inside-avoid lg:mb-5" />
-            ))}
-          </div>
+        <div className={GRID} aria-busy="true" aria-label="Memuat laporan">
+          {[260, 200, 230].map((h, i) => (
+            <Skeleton key={i} h={h} r={28} />
+          ))}
         </div>
       ) : error || !data ? (
         <Card>
@@ -144,79 +123,27 @@ export function ShOverviewView() {
         </Card>
       ) : (
         <div
-          className={cx('flex flex-col gap-5 transition-opacity min-[600px]:gap-6', loading && 'opacity-60')}
+          className={cx('flex flex-col gap-5 transition-opacity', loading && 'opacity-60')}
           aria-busy={loading || undefined}
         >
-          <nav aria-label="Lompat ke subholding" className="-mx-1">
-            <ul className="flex gap-2 overflow-x-auto px-1 py-0.5 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible">
-              {[...filled, ...empty].map((sh) => {
-                const label = subholdingLabel(sh.name)
-                const count = reportCount(sh)
-                const target = count > 0 ? anchorId(sh.id) : EMPTY_ANCHOR
-                return (
-                  <li key={sh.id} className="shrink-0">
-                    <a
-                      href={`#${target}`}
-                      onClick={(e) => jumpTo(e, target)}
-                      aria-label={`${label}, ${count} laporan`}
-                      className="inline-flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-full bg-surface py-1 pl-1.5 pr-3.5 text-ink shadow-[var(--shadow-card)] hover:bg-fill-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
-                    >
-                      <Monogram name={label} tone={toneOf(sh.id)} className="h-8 w-8 rounded-full [font:var(--text-footnote)]" />
-                      <span className="t-body-strong max-[599px]:hidden">{label}</span>
-                      <span className="t-callout tabular-nums text-ink-2">{count}</span>
-                    </a>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
-
           {filled.length === 0 ? (
             <Card>
               <EmptyNote icon="dokumen">Belum ada laporan yang disetujui pada tanggal ini.</EmptyNote>
             </Card>
-          ) : (
-            <div className="lg:columns-2 lg:gap-x-5">
-              {filled.map((sh) => (
-                <SubholdingCard
-                  key={sh.id}
-                  sh={sh}
-                  onDetail={(pt, r) => openDetail(sh, pt, r)}
-                  onPhoto={openPhoto}
-                />
-              ))}
-            </div>
-          )}
-
-          {empty.length > 0 ? (
-            <section
-              id={EMPTY_ANCHOR}
-              aria-labelledby={headingId(EMPTY_ANCHOR)}
-              className="flex scroll-mt-4 flex-wrap items-center gap-2.5 rounded-[var(--radius-lg)] border border-dashed border-[color-mix(in_srgb,var(--line-strong)_55%,transparent)] p-4 min-[600px]:scroll-mt-24 min-[600px]:px-5 lg:scroll-mt-6"
-            >
-              <h2
-                id={headingId(EMPTY_ANCHOR)}
-                tabIndex={-1}
-                className="mr-1.5 rounded-[var(--radius-xs)] t-body-strong text-ink-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
-              >
-                Belum ada laporan disetujui
-              </h2>
-              <ul className="flex flex-wrap gap-2.5">
-                {empty.map((sh) => {
-                  const label = subholdingLabel(sh.name)
-                  return (
-                    <li
-                      key={sh.id}
-                      className="inline-flex min-h-[36px] items-center gap-2 rounded-full bg-surface py-1 pl-1 pr-3.5 t-callout font-semibold! text-ink"
-                    >
-                      <Monogram name={label} tone={toneOf(sh.id)} className="h-7 w-7 rounded-full [font:var(--text-caption)]" />
-                      {label}
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
           ) : null}
+          <div className={GRID}>
+            {filled.map((sh) => (
+              <SubholdingCard
+                key={sh.id}
+                sh={sh}
+                onDetail={(pt, r) => openDetail(sh, pt, r)}
+                onPhoto={(r) => openPhoto(r, 0)}
+              />
+            ))}
+            {empty.map((sh) => (
+              <SubholdingCard key={sh.id} sh={sh} />
+            ))}
+          </div>
         </div>
       )}
 
@@ -237,102 +164,119 @@ function SubholdingCard({
   onPhoto,
 }: {
   sh: OverviewSubholding
-  onDetail: (pt: OverviewPt, r: OverviewReport) => void
-  onPhoto: (r: OverviewReport, index: number) => void
+  onDetail?: (pt: OverviewPt, r: OverviewReport) => void
+  onPhoto?: (r: OverviewReport) => void
 }) {
-  const id = anchorId(sh.id)
   const label = subholdingLabel(sh.name)
-  const tone = toneOf(sh.id)
-  const pts = normalizePts(sh.pts ?? [])
+  const t = toneVars(toneOf(sh.id))
+  const count = reportCount(sh)
+  const pts = count > 0 ? normalizePts(sh.pts ?? []) : []
+  const headingId = `sh-${sh.id}-judul`
   return (
     <section
-      id={id}
-      aria-labelledby={headingId(id)}
-      className="mb-4 flex scroll-mt-4 break-inside-avoid flex-col gap-5 rounded-[var(--radius-xl)] bg-surface p-4 shadow-[var(--shadow-card)] min-[600px]:scroll-mt-24 min-[600px]:p-6 lg:mb-5 lg:scroll-mt-6"
+      aria-labelledby={headingId}
+      className={cx(
+        'flex min-w-0 flex-col rounded-[var(--radius-xl)] bg-surface px-[22px] pb-2.5 pt-[22px] shadow-[var(--shadow-card)]',
+        count === 0 && 'opacity-60'
+      )}
     >
-      <div className="flex items-center gap-3 min-[600px]:gap-4">
-        <Monogram
-          name={label}
-          tone={tone}
-          className="h-11 w-11 rounded-[var(--radius-md)] [font:var(--text-headline)] min-[600px]:h-14 min-[600px]:w-14 min-[600px]:[font:var(--text-title-3)]"
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="t-caption font-bold! uppercase tracking-[0.08em]! text-ink-2 max-[599px]:hidden">Subholding</span>
-          <h2
-            id={headingId(id)}
-            tabIndex={-1}
-            className="t-title-3 text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] rounded-[var(--radius-xs)]"
-          >
-            {label}
-          </h2>
-          <span className="t-footnote text-ink-2">{cardMeta(sh)}</span>
-        </div>
+      <div className="flex items-center gap-3 pb-3.5">
+        <span
+          aria-hidden
+          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full [font:var(--text-footnote)] font-bold!"
+          style={{ color: t.fg, background: t.bg }}
+        >
+          {initialOf(label)}
+        </span>
+        <h2 id={headingId} className="m-0 min-w-0 flex-1 truncate text-ink [font:var(--text-headline)] tracking-[-0.01em]">
+          {label}
+        </h2>
+        {count > 0 ? <span className="shrink-0 [font:var(--text-footnote)] tabular-nums text-ink-2">{count} laporan</span> : null}
       </div>
 
-      {pts.map((pt) => (
-        <div key={pt.id || pt.name} className="flex flex-col gap-2.5">
-          <h3 className="flex items-center gap-2 px-1 t-caption font-bold! uppercase tracking-[0.08em]! text-ink-2">
-            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: toneVars(tone).fg }} />
-            <span className="min-w-0 truncate">{displayName(pt.name)}</span>
-          </h3>
-          <ul className="overflow-hidden rounded-[var(--radius-lg)] bg-fill-1 [&>li+li]:border-t [&>li+li]:border-[var(--line)]">
-            {pt.reports.map((r) => (
-              <ReportRow key={r.id} r={r} onDetail={() => onDetail(pt, r)} onPhoto={(i) => onPhoto(r, i)} />
-            ))}
-          </ul>
-        </div>
-      ))}
+      {count === 0 ? (
+        <p className="m-0 border-t border-[var(--line)] pb-4 pt-3.5 [font:var(--text-callout)] font-normal! text-ink-2">
+          Belum ada laporan disetujui.
+        </p>
+      ) : (
+        pts.map((pt) => (
+          <div key={pt.id || pt.name} className="border-t border-[var(--line)] pb-1 pt-3">
+            <h3 className="m-0 truncate pb-0.5 [font:var(--text-caption)] text-ink-2">{displayName(pt.name)}</h3>
+            <ul className="m-0 list-none p-0">
+              {pt.reports.map((r) => (
+                <ReportRow key={r.id} r={r} onDetail={() => onDetail?.(pt, r)} onPhoto={() => onPhoto?.(r)} />
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
     </section>
   )
 }
 
-function ReportRow({ r, onDetail, onPhoto }: { r: OverviewReport; onDetail: () => void; onPhoto: (i: number) => void }) {
-  const { shown, more } = thumbStack(r.evidence, 3)
-  const total = shown.length + more
-  const docs = docsOf(r.evidence).length
+function ReportRow({ r, onDetail, onPhoto }: { r: OverviewReport; onDetail: () => void; onPhoto: () => void }) {
+  const photos = photosOf(r.evidence)
+  const meta = rowMeta(r)
   return (
-    <li className="flex flex-col gap-2.5 p-3.5 min-[600px]:flex-row min-[600px]:items-center min-[600px]:gap-4 min-[600px]:pl-[18px]">
+    <li className="flex min-h-[52px] items-center gap-3">
       <button
         type="button"
         onClick={onDetail}
-        className="group flex min-h-[44px] min-w-0 flex-1 cursor-pointer flex-col items-start gap-1 rounded-[var(--radius-sm)] py-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+        className={cx(
+          'group flex min-h-[44px] min-w-0 flex-1 cursor-pointer flex-col items-start justify-center gap-px rounded-[var(--radius-xs)] py-1.5 text-left',
+          FOCUS_RING
+        )}
       >
-        <span className="t-body-strong text-ink underline-offset-4 group-hover:underline">{r.kegiatan}</span>
-        {r.deskripsi ? <span className="t-footnote text-ink-2 line-clamp-2">{r.deskripsi}</span> : null}
-        {docs > 0 ? (
-          <span className="inline-flex items-center gap-1 t-caption text-ink-2">
-            <Icon name="dokumen" size={14} />
-            {docs} dokumen
-          </span>
-        ) : null}
+        <span className="max-w-full truncate text-ink [font:var(--text-body)] font-medium! underline-offset-4 group-hover:underline">
+          {r.kegiatan}
+        </span>
+        {meta ? <span className="max-w-full truncate [font:var(--text-caption)] font-normal! text-ink-2">{meta}</span> : null}
       </button>
-      {total > 0 ? (
-        <div className="flex shrink-0 items-center gap-1.5 min-[600px]:gap-0">
-          {shown.map((e, i) => (
-            <EvidenceThumb
-              key={e.id}
-              item={e}
-              size="stack"
-              onOpen={() => onPhoto(i)}
-              label={`Perbesar foto ${i + 1} dari ${total}`}
-              className={cx(
-                'cursor-zoom-in min-[600px]:ring-[3px] min-[600px]:ring-[var(--fill-1)]',
-                i > 0 && 'min-[600px]:-ml-[18px]'
-              )}
-            />
-          ))}
-          {more > 0 ? (
-            <button
-              type="button"
-              onClick={() => onPhoto(shown.length)}
-              aria-label={`Lihat semua ${total} foto`}
-              className="flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-md)] bg-fill-2 t-body-strong text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] min-[600px]:-ml-[18px] min-[600px]:ring-[3px] min-[600px]:ring-[var(--fill-1)]"
-            >
-              +{more}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {photos.length > 0 ? <RowThumb photo={photos[0]} total={photos.length} title={r.kegiatan} onOpen={onPhoto} /> : null}
     </li>
+  )
+}
+
+/** Satu thumbnail 44px (foto pertama) dengan lencana jumlah foto bila lebih dari satu. */
+function RowThumb({
+  photo,
+  total,
+  title,
+  onOpen,
+}: {
+  photo: OverviewEvidence
+  total: number
+  title: string
+  onOpen: () => void
+}) {
+  const { url, failed, loading } = useSignedUrl(photo.id)
+  const [broken, setBroken] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Perbesar foto ${title}, ${total} foto`}
+      title={photo.fileName}
+      className={cx(
+        'relative flex h-11 w-11 shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-[11px] bg-fill-1 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]',
+        FOCUS_RING
+      )}
+    >
+      {url && !failed && !broken ? (
+        <img src={url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" onError={() => setBroken(true)} />
+      ) : loading ? (
+        <Skeleton h="100%" r={0} className="absolute inset-0" />
+      ) : (
+        <Icon name="dokumen" size={18} />
+      )}
+      {total > 1 ? (
+        <span
+          aria-hidden
+          className="absolute bottom-[3px] right-[3px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--ink)] px-1 text-[var(--surface)] [font:var(--text-caption)] font-bold! leading-none! tabular-nums"
+        >
+          {total}
+        </span>
+      ) : null}
+    </button>
   )
 }
