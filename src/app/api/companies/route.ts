@@ -3,7 +3,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { can, canManageAccounts, canManageAllAccounts, manageableRoles } from '@/lib/rbac'
-import { createAccount, isValidEmail, parseLogo, readPosition, slugify, uniqueEntityCode, type PositionInput } from '@/lib/companies'
+import {
+  createAccount,
+  createSubholdingAdmin,
+  deskRoles,
+  EntityMoveError,
+  isValidEmail,
+  MOVABLE_ENTITY_TYPES,
+  moveEntity,
+  parseLogo,
+  readPosition,
+  roleScopeProblem,
+  slugify,
+  subholdingSlug,
+  uniqueEntityCode,
+  type PositionInput,
+} from '@/lib/companies'
 import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-error'
 
 /**
@@ -11,11 +26,23 @@ import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-
  * membuka versi terbatasnya: hanya PT-nya sendiri dan akun di dalamnya.
  * Menambah/mengubah perusahaan tetap milik Super Admin.
  *
- *   GET            — holding & anak perusahaan beserta akun, divisi, proyek, dan jumlah datanya
- *   POST           — tambah perusahaan (identitas, logo) sekaligus posisi/akun pertamanya
- *   PATCH  { id }  — ubah identitas, logo, induk, atau status aktif
+ *   GET            — holding, subholding & anak perusahaan beserta akun, divisi, proyek, dan jumlah datanya
+ *   POST           — tambah perusahaan (identitas, logo) sekaligus posisi/akun pertamanya.
+ *                    Model 16 Okt 2026 (docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md):
+ *                    `type: 'SUB_HOLDING'` membuat subholding di bawah holding
+ *                    (PT BIKE Tbk) dan SATU akun Admin subholding otomatis;
+ *                    PT boleh di bawah holding/subholding/keturunannya dan
+ *                    TIDAK lagi mendapat akun otomatis (hanya posisi yang dikirim).
+ *   PATCH  { id }  — ubah identitas, logo, atau status aktif; `parentId` memindah
+ *                    PT/SECTOR/REGION ke holding/subholding/keturunannya (path
+ *                    entitas + keturunan ditulis ulang, AuditLog MOVE_COMPANY)
  *   DELETE ?id=    — hapus perusahaan yang belum punya data laporan
  */
+
+/** Jenis entitas yang dikelola meja perusahaan (urutan = urutan tampil). */
+const COMPANY_TYPES = ['HOLDING', 'SUB_HOLDING', 'PT'] as const
+/** Induk yang sah untuk PT: holding, subholding, atau keturunan subholding. */
+const PT_PARENT_TYPES = ['HOLDING', 'SUB_HOLDING', 'SECTOR', 'REGION']
 
 function forbid(message = 'Hanya Super Admin yang mengelola perusahaan & akun') {
   return NextResponse.json({ error: message }, { status: 403 })
@@ -48,7 +75,7 @@ export async function GET() {
 
   const [entities, users, divisions, projects, daily, weekly] = await Promise.all([
     db.entity.findMany({
-      where: full ? { type: { in: ['HOLDING', 'PT'] } } : { id: user.scopeEntityId! },
+      where: full ? { type: { in: [...COMPANY_TYPES] } } : { id: user.scopeEntityId! },
       select: {
         id: true, code: true, name: true, type: true, parentId: true, logoData: true, address: true, phone: true,
         email: true, website: true, isActive: true, createdAt: true,
@@ -92,8 +119,9 @@ export async function GET() {
     }
   }
 
-  // Holding-order first, then the subsidiaries by name.
-  const sorted = [...entities].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'HOLDING' ? -1 : 1))
+  // Holding dulu, lalu subholding, lalu PT — masing-masing urut nama.
+  const rank = (t: string) => Math.max(0, COMPANY_TYPES.indexOf(t as (typeof COMPANY_TYPES)[number]))
+  const sorted = [...entities].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : rank(a.type) - rank(b.type)))
 
   return NextResponse.json({
     companies: sorted.map((e) => ({
@@ -116,7 +144,7 @@ export async function GET() {
     // Seberapa jauh meja ini boleh dipakai pemiliknya.
     scope: full ? 'ALL' : 'ENTITY',
     canManageCompanies: full,
-    manageableRoles: [...manageableRoles(user.role)],
+    manageableRoles: deskRoles({ full, roles: manageableRoles(user.role) }),
   })
 }
 
@@ -149,17 +177,30 @@ export async function POST(req: NextRequest) {
 
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '' // [T12] nama dibatasi 120 karakter
   if (name.length < 2) return NextResponse.json({ error: 'Nama perusahaan wajib diisi.' }, { status: 422 })
-  const isHolding = body.isHolding === true
+  const kind: 'HOLDING' | 'SUB_HOLDING' | 'PT' =
+    body.type === 'SUB_HOLDING' || body.isSubholding === true
+      ? 'SUB_HOLDING'
+      : body.type === 'HOLDING' || body.isHolding === true
+        ? 'HOLDING'
+        : 'PT'
+  const isHolding = kind === 'HOLDING'
+  const isSubholding = kind === 'SUB_HOLDING'
   const identity = readIdentity(body)
   if ('error' in identity) return NextResponse.json({ error: identity.error }, { status: 422 })
   const logo = parseLogo(body.logoData)
   if (!logo.ok) return NextResponse.json({ error: logo.error }, { status: 422 })
 
   const positionsRaw = Array.isArray(body.positions) ? body.positions : []
+  // Subholding: akunnya satu, dibuat otomatis — posisi tambahan ditolak.
+  if (isSubholding && positionsRaw.length > 0) {
+    return NextResponse.json({ error: 'Akun Admin subholding dibuat otomatis. Jangan kirim daftar posisi untuk subholding.' }, { status: 422 })
+  }
   const positions: PositionInput[] = []
   for (const raw of positionsRaw) {
     const p = readPosition(raw, { holding: isHolding })
     if (typeof p === 'string') return NextResponse.json({ error: p }, { status: 422 })
+    const problem = roleScopeProblem(p.role, { type: kind })
+    if (problem) return NextResponse.json({ error: problem }, { status: 422 })
     positions.push(p)
   }
   const usernames = positions.map((p) => p.username)
@@ -169,29 +210,36 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await db.$transaction(async (tx) => {
-      // Induk: holding yang dipilih, atau holding pertama yang aktif.
+      // Induk: subholding → holding (PT BIKE Tbk); PT → holding, subholding, atau
+      // keturunan subholding (SECTOR/REGION). Tanpa pilihan: holding pertama yang aktif.
       let parent: { id: string; path: string } | null = null
       if (!isHolding) {
         const requested = typeof body.parentId === 'string' && body.parentId ? body.parentId : null
+        const parentTypes = isSubholding ? ['HOLDING'] : PT_PARENT_TYPES
         parent = requested
-          ? await tx.entity.findFirst({ where: { id: requested, type: 'HOLDING' }, select: { id: true, path: true } })
+          ? await tx.entity.findFirst({ where: { id: requested, type: { in: parentTypes } }, select: { id: true, path: true } })
           : await tx.entity.findFirst({ where: { type: 'HOLDING', isActive: true }, select: { id: true, path: true }, orderBy: { createdAt: 'asc' } })
-        if (!parent) throw new Error('Holding induk tidak ditemukan. Buat holding terlebih dahulu.')
+        if (!parent) {
+          throw new Error(
+            requested
+              ? isSubholding
+                ? 'Induk subholding harus sebuah holding.'
+                : 'Induk PT harus holding, subholding, atau bagian di bawah subholding.'
+              : 'Holding induk tidak ditemukan. Buat holding terlebih dahulu.'
+          )
+        }
       }
 
-      const slug = slugify(name.replace(/^(pt|holding)\s+/i, '')) || slugify(name) || 'baru'
+      const slug = isSubholding ? subholdingSlug(name) : slugify(name.replace(/^(pt|holding)\s+/i, '')) || slugify(name) || 'baru'
       const requestedCode = typeof body.code === 'string' ? body.code.trim().toUpperCase() : ''
-      const base = requestedCode && /^[A-Z0-9-]{2,32}$/.test(requestedCode)
-        ? requestedCode
-        : isHolding
-          ? `HOLDING-${slug.toUpperCase()}`
-          : `PT-${slug.toUpperCase()}`
+      const prefix = isHolding ? 'HOLDING' : isSubholding ? 'SH' : 'PT'
+      const base = requestedCode && /^[A-Z0-9-]{2,32}$/.test(requestedCode) ? requestedCode : `${prefix}-${slug.toUpperCase()}`
       const code = await uniqueEntityCode(tx, base)
       const path = isHolding ? `/${slug}/` : `${parent!.path}${code}/`
 
       const entity = await tx.entity.create({
         data: {
-          type: isHolding ? 'HOLDING' : 'PT',
+          type: kind,
           parentId: parent?.id ?? null,
           code,
           name,
@@ -204,6 +252,8 @@ export async function POST(req: NextRequest) {
 
       const accounts: Awaited<ReturnType<typeof createAccount>>[] = []
       for (const p of positions) accounts.push(await createAccount(tx, entity, p))
+      // Subholding baru → akun Admin subholding utama dalam transaksi yang sama.
+      const admin = isSubholding ? await createSubholdingAdmin(tx, entity) : null
 
       await tx.auditLog.create({
         data: {
@@ -211,13 +261,25 @@ export async function POST(req: NextRequest) {
           action: 'CREATE_COMPANY',
           targetType: 'ENTITY',
           targetId: entity.id,
-          afterData: JSON.stringify({ code, name, type: isHolding ? 'HOLDING' : 'PT', accounts: accounts.map((a) => a.username) }),
+          // Tanpa sandi: hanya username akun yang dibuat.
+          afterData: JSON.stringify({
+            code,
+            name,
+            type: kind,
+            accounts: accounts.map((a) => a.username),
+            ...(admin ? { adminAccount: admin.username } : {}),
+          }),
           ip: clientIp(req),
         },
       })
-      return { entity, accounts }
+      return { entity, accounts, admin }
     })
-    return NextResponse.json({ ok: true, ...result })
+    const { admin, ...rest } = result
+    return NextResponse.json({
+      ok: true,
+      ...rest,
+      ...(admin ? { adminAccount: { id: admin.id, username: admin.username, defaultPassword: admin.defaultPassword } } : {}),
+    })
   } catch (err) {
     if (isSafeClientMessage(err)) return NextResponse.json({ error: err.message }, { status: 422 })
     return serverError(err, 'Gagal menambah perusahaan. Coba lagi.', 'companies POST')
@@ -236,8 +298,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Permintaan tidak valid' }, { status: 400 })
   }
   const id = typeof body.id === 'string' ? body.id : ''
+  // Pindah induk (SH-PINDAH-PT): `parentId` = induk tujuan. SECTOR/REGION juga
+  // boleh dipindah, tetapi hanya lewat permintaan pindah.
+  const wantsMove = body.parentId !== undefined
+  if (wantsMove && (typeof body.parentId !== 'string' || !body.parentId)) {
+    return NextResponse.json({ error: 'Pilih induk tujuan.' }, { status: 422 })
+  }
   const existing = await db.entity.findUnique({ where: { id } })
-  if (!existing || !['HOLDING', 'PT'].includes(existing.type)) {
+  const patchable = wantsMove ? [...COMPANY_TYPES, ...MOVABLE_ENTITY_TYPES] : COMPANY_TYPES
+  if (!existing || !(patchable as readonly string[]).includes(existing.type)) {
     return NextResponse.json({ error: 'Perusahaan tidak ditemukan' }, { status: 404 })
   }
 
@@ -258,6 +327,8 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.region === 'string') data.region = body.region.trim().slice(0, 120) || null
   if (typeof body.isActive === 'boolean') data.isActive = body.isActive
 
+  if (wantsMove) return patchWithMove(req, user.id, existing, body.parentId as string, data)
+
   const updated = await db.entity.update({ where: { id }, data, select: { id: true, name: true, code: true, isActive: true } })
 
   await db.auditLog.create({
@@ -275,6 +346,89 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true, entity: updated })
 }
 
+/**
+ * PATCH dengan `parentId` (SH-PINDAH-PT): pindah induk + perubahan identitas
+ * lain dalam SATU transaksi. Path entitas dan seluruh keturunannya ditulis
+ * ulang oleh `moveEntity`; AuditLog `MOVE_COMPANY` mencatat dari → ke.
+ *
+ * Laporan subholding (SubholdingReport) TIDAK dipindah: `ptId` tetap sah
+ * (id PT tidak berubah) dan `subholdingId` tetap subholding lama — riwayat
+ * tetap milik subholding yang membuatnya. Jumlahnya dikembalikan agar Super
+ * Admin tahu bila masih ada laporan terbuka milik subholding lama.
+ */
+async function patchWithMove(
+  req: NextRequest,
+  actorId: string,
+  existing: { id: string; name: string; isActive: boolean },
+  parentId: string,
+  data: Record<string, unknown>
+) {
+  const id = existing.id
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const move = await moveEntity(tx, { id, parentId })
+      const updated = Object.keys(data).length
+        ? await tx.entity.update({ where: { id }, data, select: { id: true, name: true, code: true, isActive: true, parentId: true, path: true } })
+        : await tx.entity.findUnique({ where: { id }, select: { id: true, name: true, code: true, isActive: true, parentId: true, path: true } })
+
+      const [shReports, shOpen] = move.moved
+        ? await Promise.all([
+            tx.subholdingReport.count({ where: { ptId: id } }),
+            tx.subholdingReport.count({ where: { ptId: id, status: { in: ['MENUNGGU', 'PERLU_PERBAIKAN'] } } }),
+          ])
+        : [0, 0]
+
+      if (move.moved) {
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'MOVE_COMPANY',
+            targetType: 'ENTITY',
+            targetId: id,
+            beforeData: JSON.stringify({ parentId: move.from.parentId, parentName: move.from.parentName, parentType: move.from.parentType, path: move.from.path }),
+            afterData: JSON.stringify({
+              parentId: move.to.parentId,
+              parentName: move.to.parentName,
+              parentType: move.to.parentType,
+              path: move.to.path,
+              descendants: move.descendants,
+              subholdingReportsKept: shReports,
+            }),
+            ip: clientIp(req),
+          },
+        })
+      }
+      if (Object.keys(data).length) {
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'UPDATE_COMPANY',
+            targetType: 'ENTITY',
+            targetId: id,
+            beforeData: JSON.stringify({ name: existing.name, isActive: existing.isActive }),
+            afterData: JSON.stringify({ ...data, logoData: data.logoData === undefined ? undefined : data.logoData ? '(logo)' : null }),
+            ip: clientIp(req),
+          },
+        })
+      }
+      return { move, updated, shReports, shOpen }
+    })
+    const { move, updated, shReports, shOpen } = result
+    return NextResponse.json({
+      ok: true,
+      entity: updated,
+      moved: move.moved,
+      from: { parentId: move.from.parentId, parentName: move.from.parentName },
+      to: { parentId: move.to.parentId, parentName: move.to.parentName },
+      descendants: move.descendants,
+      subholdingReports: { kept: shReports, open: shOpen },
+    })
+  } catch (err) {
+    if (err instanceof EntityMoveError) return NextResponse.json({ error: err.message }, { status: err.status })
+    return serverError(err, 'Gagal memindah perusahaan. Coba lagi.', 'companies PATCH move')
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const user = await requireApiUser()
   if (user instanceof NextResponse) return user
@@ -282,25 +436,27 @@ export async function DELETE(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get('id') || ''
   const existing = await db.entity.findUnique({ where: { id }, select: { id: true, name: true, code: true, type: true } })
-  if (!existing || !['HOLDING', 'PT'].includes(existing.type)) {
+  if (!existing || !(COMPANY_TYPES as readonly string[]).includes(existing.type)) {
     return NextResponse.json({ error: 'Perusahaan tidak ditemukan' }, { status: 404 })
   }
   if (user.scopeEntityId === id) {
     return NextResponse.json({ error: 'Anda tidak bisa menghapus perusahaan tempat akun Anda sendiri terdaftar.' }, { status: 409 })
   }
 
-  const [children, daily, weekly, progress, tasks, escalations] = await Promise.all([
+  const [children, daily, weekly, progress, tasks, escalations, shReports] = await Promise.all([
     db.entity.count({ where: { parentId: id } }),
     db.dailyProjectReport.count({ where: { entityId: id } }),
     db.weeklyDivisionReport.count({ where: { entityId: id } }),
     db.projectProgressReport.count({ where: { entityId: id } }),
     db.task.count({ where: { entityId: id } }),
     db.escalation.count({ where: { entityId: id } }),
+    db.subholdingReport.count({ where: { OR: [{ subholdingId: id }, { ptId: id }] } }),
   ])
   if (children > 0) {
-    return NextResponse.json({ error: 'Holding ini masih punya anak perusahaan. Pindahkan atau hapus dulu anak perusahaannya.' }, { status: 409 })
+    const what = existing.type === 'SUB_HOLDING' ? 'Subholding' : 'Holding'
+    return NextResponse.json({ error: `${what} ini masih punya anak perusahaan. Pindahkan atau hapus dulu anak perusahaannya.` }, { status: 409 })
   }
-  const activity = daily + weekly + progress + tasks + escalations
+  const activity = daily + weekly + progress + tasks + escalations + shReports
   if (activity > 0) {
     return NextResponse.json(
       { error: `Perusahaan ini sudah punya ${activity} data laporan/task. Nonaktifkan saja agar riwayatnya tetap utuh.` },

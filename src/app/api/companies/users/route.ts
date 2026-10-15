@@ -4,9 +4,22 @@ import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
 import { ENTITY_ROLES } from '@/lib/rbac'
-import { accountDesk as desk, deskReachError, entityRef, isLastSuperadmin as lastSuperadmin, roleOutOfReachMessage } from '@/lib/account-desk'
+import { accountDesk as desk, deskReachError, isLastSuperadmin as lastSuperadmin, roleOutOfReachMessage } from '@/lib/account-desk'
 import { passwordProblem } from '@/lib/password-policy'
-import { USERNAME_RE, assignPosition, createAccount, isKnownRole, isValidEmail, readPosition } from '@/lib/companies'
+import {
+  ADMIN_SUBHOLDING_ROLE,
+  USERNAME_RE,
+  accountEntity,
+  assertSingleSubholdingAdmin,
+  assignPosition,
+  createAccount,
+  deskRoles,
+  isKnownRole,
+  isUnscopedGroupRole,
+  isValidEmail,
+  readPosition,
+  roleScopeProblem,
+} from '@/lib/companies'
 import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-error'
 
 /**
@@ -24,6 +37,11 @@ import { clientErrorMessage, isSafeClientMessage, serverError } from '@/lib/api-
  * ADMIN_PT / KEPALA_DIVISI / PIC_PROYEK — Direktur Entitas dan akun tingkat
  * grup tetap milik Super Admin, supaya tak seorang pun bisa membuat
  * penyetujunya sendiri.
+ *
+ * Model 16 Okt 2026 (docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md): Super Admin juga
+ * membuat/mengubah SUPERVISOR, KETUA_UMUM, MANAJEMEN (tanpa cakupan) dan
+ * ADMIN_SUBHOLDING (cakupan wajib entitas SUB_HOLDING, satu akun aktif per
+ * subholding). Aturannya di roleScopeProblem (src/lib/companies.ts).
  */
 
 function forbid(message = 'Peran Anda tidak mengelola akun') {
@@ -80,17 +98,24 @@ export async function POST(req: NextRequest) {
     return forbid('Anda hanya dapat menambah akun di perusahaan Anda sendiri.')
   }
   try {
-    const entity = await entityRef(entityId)
-    const p = readPosition(body, { holding: entity === null || (await db.entity.count({ where: { id: entityId!, type: 'HOLDING' } })) > 0 })
+    const entity = await accountEntity(db, entityId)
+    // Pesan yang jelas untuk peran yang dikenal tetapi salah tempat (mis. Admin subholding di PT).
+    const rawRole = typeof body.role === 'string' ? body.role.trim() : ''
+    const misplaced = isKnownRole(rawRole) ? roleScopeProblem(rawRole, entity) : null
+    if (misplaced) return NextResponse.json({ error: misplaced }, { status: 422 })
+    const p = readPosition(body, { holding: entity === null || entity.type === 'HOLDING', subholding: entity?.type === 'SUB_HOLDING' })
     if (typeof p === 'string') return NextResponse.json({ error: p }, { status: 422 })
     if (!entity && (ENTITY_ROLES as readonly string[]).includes(p.role)) {
       return NextResponse.json({ error: 'Posisi ini harus ditempatkan di sebuah perusahaan.' }, { status: 422 })
     }
-    if (!access.roles.includes(p.role)) return roleOutOfReach(p.role)
+    if (!deskRoles(access).includes(p.role)) return roleOutOfReach(p.role)
+    const scopeProblem = roleScopeProblem(p.role, entity)
+    if (scopeProblem) return NextResponse.json({ error: scopeProblem }, { status: 422 })
     const member = body.memberDivisionId === undefined ? undefined : await readMemberDivision(body.memberDivisionId, entity?.id ?? null)
     if (member && typeof member === 'object') return NextResponse.json({ error: member.error }, { status: 422 })
 
     const account = await db.$transaction(async (tx) => {
+      if (p.role === ADMIN_SUBHOLDING_ROLE) await assertSingleSubholdingAdmin(tx, entity!.id)
       const created = await createAccount(tx, entity, p)
       if (typeof member === 'string') await tx.user.update({ where: { id: created.id }, data: { divisionId: member } }) // [F2-ADMIN]
       await tx.auditLog.create({
@@ -194,10 +219,11 @@ export async function PATCH(req: NextRequest) {
     audit.role = role
   }
 
+  let targetEntity: { id: string; type: string } | null | undefined
   if (body.entityId !== undefined) {
     const entityId = typeof body.entityId === 'string' && body.entityId ? body.entityId : null
     try {
-      await entityRef(entityId)
+      targetEntity = await accountEntity(db, entityId)
     } catch (err) {
       return NextResponse.json({ error: clientErrorMessage(err, 'Perusahaan tidak ditemukan', 'companies/users PATCH') }, { status: 422 })
     }
@@ -227,7 +253,45 @@ export async function PATCH(req: NextRequest) {
   }
 
   const finalRole = (data.role as string | undefined) ?? existing.role
-  const finalEntityId = (data.scopeEntityId as string | null | undefined) ?? existing.scopeEntityId
+  // Model subholding (16 Okt): periksa pasangan peran–tempat bila salah satunya berubah.
+  const roleChanged = data.role !== undefined
+  const reactivated = data.isActive === true
+  if (roleChanged || targetEntity !== undefined || (reactivated && finalRole === ADMIN_SUBHOLDING_ROLE)) {
+    let finalEntity = targetEntity
+    // Tempat lama hanya dibaca bila menyangkut subholding (masuk/keluar peran
+    // Admin subholding); peran lain yang tetap di tempatnya tidak berubah aturannya.
+    const touchesSubholding = finalRole === ADMIN_SUBHOLDING_ROLE || existing.role === ADMIN_SUBHOLDING_ROLE
+    if (finalEntity === undefined && !touchesSubholding) finalEntity = null
+    if (finalEntity === undefined) {
+      finalEntity = existing.scopeEntityId
+        ? await db.entity.findUnique({ where: { id: existing.scopeEntityId }, select: { id: true, type: true } })
+        : null
+    }
+    if (isUnscopedGroupRole(finalRole) && targetEntity === undefined) {
+      // Ganti peran ke Supervisor/Ketua Umum/Manajemen tanpa memilih tempat: lepas cakupannya.
+      if (roleChanged && existing.scopeEntityId) {
+        data.scopeEntityId = null
+        audit.entityId = null
+      }
+    } else {
+      const problem = roleScopeProblem(finalRole, finalEntity)
+      if (problem) return NextResponse.json({ error: problem }, { status: 422 })
+      if (isUnscopedGroupRole(finalRole) && finalEntity) {
+        // Holding dianggap tanpa cakupan untuk peran tingkat grup.
+        data.scopeEntityId = null
+        audit.entityId = null
+      }
+    }
+    const willBeActive = typeof data.isActive === 'boolean' ? data.isActive : existing.isActive
+    if (finalRole === ADMIN_SUBHOLDING_ROLE && willBeActive && finalEntity) {
+      try {
+        await assertSingleSubholdingAdmin(db, finalEntity.id, id)
+      } catch (err) {
+        return NextResponse.json({ error: clientErrorMessage(err, 'Subholding ini sudah punya akun Admin subholding.', 'companies/users PATCH') }, { status: 409 })
+      }
+    }
+  }
+  const finalEntityId = data.scopeEntityId !== undefined ? (data.scopeEntityId as string | null) : existing.scopeEntityId
   // [F2-ADMIN] keanggotaan divisi; pindah PT melepas keanggotaan lama.
   if (body.memberDivisionId !== undefined) {
     const member = await readMemberDivision(body.memberDivisionId, data.scopeEntityId !== undefined ? (data.scopeEntityId as string | null) : existing.scopeEntityId)

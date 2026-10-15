@@ -31,6 +31,9 @@ async function main() {
 
   // Zona CX5: bersihkan anak sebelum induk, termasuk tabel tanpa FK.
   await client.$transaction([
+    // Model SUBHOLDING (16 Okt 2026): komentar → laporan, sebelum akun & entitas.
+    client.subholdingReportComment.deleteMany(),
+    client.subholdingReport.deleteMany(),
     client.undoToken.deleteMany(),
     client.dailyReportRead.deleteMany(),
     client.weeklyReportRead.deleteMany(),
@@ -149,7 +152,8 @@ async function main() {
   // ============================================================
   console.log('🏢 Creating entity hierarchy...')
   const holding = await client.entity.create({
-    data: { type: 'HOLDING', code: 'HOLDING-01', name: 'PT Karya Nusantara Holding', path: '/holding/' },
+    // Superholding model 16 Okt 2026 (docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md).
+    data: { type: 'HOLDING', code: 'HOLDING-01', name: 'PT BIKE Tbk', path: '/holding/' },
   })
 
   const subHoldings = [
@@ -290,7 +294,33 @@ async function main() {
     )
   )
 
-  const allUsers = [managementUser, direkturSDM, auditorUser, tiUser, ...direkturEntitas, ...adminPts]
+  // Model SUBHOLDING (16 Okt 2026): satu akun Admin subholding bersama per
+  // subholding (admin.<slug>), satu Supervisor (direksi, tanpa cakupan), satu
+  // Ketua Umum. Manajemen memakai akun managementUser di atas.
+  const shSlug = (name: string) => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '').slice(0, 24)
+  const adminSubholdings = await Promise.all(
+    sh.map((s, i) =>
+      client.user.create({
+        data: {
+          username: `admin.${shSlug(s.name)}`,
+          email: `admin.${shSlug(s.name)}@karya.co.id`,
+          name: `Admin ${s.name}`,
+          title: 'Admin subholding',
+          role: 'ADMIN_SUBHOLDING',
+          scopeEntityId: s.id,
+          avatarColor: avatarColors[(i + 5) % avatarColors.length],
+        },
+      })
+    )
+  )
+  const supervisorUser = await client.user.create({
+    data: { username: 'supervisor', email: 'supervisor@karya.co.id', name: 'Bpk. Surya Atmaja', title: 'Direktur Operasional', role: 'SUPERVISOR', avatarColor: avatarColors[6] },
+  })
+  const ketuaUmumUser = await client.user.create({
+    data: { username: 'ketua.umum', email: 'ketua.umum@karya.co.id', name: 'Bpk. Bambang Hadi', title: 'Ketua Umum', role: 'KETUA_UMUM', avatarColor: avatarColors[7] },
+  })
+
+  const allUsers = [managementUser, direkturSDM, auditorUser, tiUser, ...direkturEntitas, ...adminPts, ...adminSubholdings, supervisorUser, ketuaUmumUser]
 
   // ============================================================
   // DIVISIONS, ADMIN APPOINTMENTS, PROJECTS per PT
@@ -873,10 +903,90 @@ async function main() {
   console.log('  ✓ Contoh model terbaru dan relasi divisi selesai dibuat')
 
   // ============================================================
+  // LAPORAN SUBHOLDING (model 16 Okt 2026) — hari ini & kemarin (00.00 WIB),
+  // status campuran + komentar; laporan DISETUJUI selalu punya bukti.
+  // ============================================================
+  console.log('🗂️  Creating subholding reports...')
+  const shKegiatan = [
+    { kegiatan: 'Inspeksi jalur pipa distribusi', deskripsi: 'Pemeriksaan visual dan uji tekanan pada 3 km jalur pipa; tidak ditemukan kebocoran.' },
+    { kegiatan: 'Rapat koordinasi kontraktor', deskripsi: 'Penyelarasan jadwal pengiriman material dan pembagian area kerja minggu ini.' },
+    { kegiatan: 'Pemasangan panel surya blok B', deskripsi: 'Pemasangan 120 panel selesai; pengujian inverter dijadwalkan besok pagi.' },
+    { kegiatan: 'Panen dan penimbangan TBS', deskripsi: 'Panen 42 ton TBS dari afdeling 3; seluruh hasil sudah ditimbang dan dikirim ke pabrik.' },
+    { kegiatan: 'Audit stok gudang', deskripsi: 'Pencocokan stok fisik dan catatan sistem; selisih 2 item sudah ditelusuri.' },
+    { kegiatan: 'Pelatihan K3 operator', deskripsi: 'Pelatihan keselamatan kerja untuk 18 operator baru, termasuk simulasi evakuasi.' },
+  ]
+  const shPelapor = [
+    { name: 'Agus Salim', kind: 'MANAJER', field: 'Proyek' },
+    { name: 'Rina Kartika', kind: 'KEPALA', field: 'Keuangan' },
+    { name: 'Hendra Wijaya', kind: 'MANAJER', field: 'Operasional' },
+    { name: 'Sari Lestari', kind: 'KEPALA', field: 'Produksi' },
+  ]
+  const shStatusPola = ['DISETUJUI', 'MENUNGGU', 'PERLU_PERBAIKAN', 'DISETUJUI', 'MENUNGGU']
+  let shCount = 0
+  for (const [si, subholding] of sh.entries()) {
+    const admin = adminSubholdings[si]
+    const shPts = pts.filter((pt) => pt.path.startsWith(subholding.path))
+    for (const dayOffset of [0, -1]) {
+      const reportDate = later(dayOffset)
+      for (let k = 0; k < Math.min(4, shPts.length); k++) {
+        const idx = si * 4 + k + (dayOffset === 0 ? 0 : 2)
+        const status = shStatusPola[idx % shStatusPola.length]
+        const isi = shKegiatan[idx % shKegiatan.length]
+        const pelapor = shPelapor[idx % shPelapor.length]
+        const submittedAt = new Date(reportDate.getTime() + (9 + k) * 3600000)
+        const decidedAt = status === 'MENUNGGU' ? null : new Date(submittedAt.getTime() + 2 * 3600000)
+        const report = await client.subholdingReport.create({ data: {
+          subholdingId: subholding.id, ptId: shPts[k].id, reportDate,
+          kegiatan: isi.kegiatan, deskripsi: isi.deskripsi,
+          reporterName: pelapor.name, reporterTitleKind: pelapor.kind, reporterTitleField: pelapor.field,
+          status, createdById: admin.id, submittedAt,
+          decidedById: decidedAt ? supervisorUser.id : null, decidedAt,
+        } })
+        // Bukti tautan saja (seed tidak mengunggah berkas); DISETUJUI wajib ≥ 1 bukti.
+        if (status !== 'MENUNGGU' || k % 2 === 0) {
+          await client.evidence.create({ data: {
+            targetType: 'SUBHOLDING_REPORT', targetId: report.id,
+            storageKey: `link:SUBHOLDING_REPORT:${report.id}:seed`,
+            fileName: `Dokumentasi ${isi.kegiatan.toLowerCase()}`, mime: 'text/uri-list', size: 0,
+            url: 'https://example.com/bukti-kegiatan', uploadedById: admin.id,
+          } })
+        }
+        if (status === 'PERLU_PERBAIKAN') {
+          await client.subholdingReportComment.create({ data: {
+            reportId: report.id, authorId: supervisorUser.id, kind: 'PERBAIKAN',
+            body: 'Lengkapi foto hasil pekerjaan dan sebutkan volume yang tercapai.', createdAt: decidedAt!,
+          } })
+        } else if (status === 'DISETUJUI') {
+          await client.subholdingReportComment.create({ data: {
+            reportId: report.id, authorId: supervisorUser.id, kind: 'SETUJU',
+            body: 'Laporan lengkap, terima kasih.', createdAt: decidedAt!, readAt: k === 0 ? decidedAt : null,
+          } })
+        } else if (k === 1) {
+          await client.subholdingReportComment.create({ data: {
+            reportId: report.id, authorId: supervisorUser.id, kind: 'KOMENTAR',
+            body: 'Mohon tambahkan rencana tindak lanjut untuk besok.', createdAt: new Date(submittedAt.getTime() + 3600000),
+          } })
+          await client.subholdingReportComment.create({ data: {
+            reportId: report.id, authorId: admin.id, kind: 'BALASAN',
+            body: 'Baik, rencana tindak lanjut sudah kami tambahkan di deskripsi.', createdAt: new Date(submittedAt.getTime() + 5400000),
+          } })
+        }
+        shCount++
+      }
+    }
+  }
+  console.log(`  ✓ Created ${shCount} subholding reports`)
+
+  // ============================================================
   // KATA SANDI (F1-C, 6 Okt 2026): tanpa "1234" bawaan. SEED_PASSWORD wajib
   // >= 8 karakter, atau kosong = dibuat acak lalu dicetak sekali di bawah.
   // ============================================================
   await client.user.updateMany({ data: { passwordHash: await hashPassword(seedPw.password), mustChangePassword: true } })
+  // Akun demo model SUBHOLDING tidak dipaksa ganti sandi agar uji alur lokal mudah.
+  await client.user.updateMany({
+    where: { role: { in: ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'KETUA_UMUM', 'MANAJEMEN'] } },
+    data: { mustChangePassword: false },
+  })
 
   console.log('\n✅ Seed completed successfully!')
   console.log(`  - ${pts.length} PT entities in hierarchy`)
@@ -884,6 +994,7 @@ async function main() {
   console.log(`  - ${allProjects.length} active projects`)
   console.log(`  - ${dailyCount} daily project reports`)
   console.log(`  - ${weeklyCount} weekly division reports`)
+  console.log(`  - ${shCount} subholding reports; akun demo: ${adminSubholdings.map((u) => u.username).join(', ')}, supervisor, ketua.umum, manajemen@karya.co.id`)
   console.log(
     seedPw.generated
       ? `  - kata sandi semua akun (acak, SEED_PASSWORD kosong): ${seedPw.password}`
