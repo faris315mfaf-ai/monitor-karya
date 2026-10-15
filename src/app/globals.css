@@ -179,9 +179,12 @@
 }
 
 /* ============================================================
-   Gaya teks dari token (dipakai sebagai kelas utilitas).
+   Gaya teks dari token. Di @layer components (bukan utilities): utilitas
+   yang dipasang bersama — font-semibold, tracking-…, text-sm — selalu menang
+   atas shorthand `font` di sini. Sebelumnya .t-* berada di layer utilities
+   sesudah utilitas Tailwind sehingga bobot huruf diam-diam tertimpa.
    ============================================================ */
-@layer utilities {
+@layer components {
   .t-large-title { font: var(--text-large-title); letter-spacing: -0.025em; }
   .t-title-1 { font: var(--text-title-1); letter-spacing: -0.02em; }
   .t-title-2 { font: var(--text-title-2); letter-spacing: -0.02em; }
