@@ -13,7 +13,7 @@ import { ROLE_LABELS } from '@/lib/constants'
  *           dan penempatan diatur TI, bukan oleh pemilik akun.
  */
 export async function GET() {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   const [row, entity, projects, divisions] = await Promise.all([
@@ -74,7 +74,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   let body: Record<string, unknown>

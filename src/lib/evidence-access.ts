@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
-import { isMasterRole } from '@/lib/rbac'
+import { can, isMasterRole } from '@/lib/rbac'
 import { isGlobalRole, scopeEntityIds, type SessionUser } from '@/lib/auth'
 import {
   isProgressLocked,
@@ -13,6 +13,9 @@ import {
 import { dailyGate, frozenMessage, FORWARDED_FROZEN_MESSAGE } from '@/lib/daily-rollup'
 import { getReportSettings, isDailyLockedWith } from '@/lib/report-settings'
 import { activeUnlockFor } from '@/lib/unlock-requests'
+import { evidenceWritable, SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
+import { SH_EVIDENCE_LOCKED_MESSAGE } from '@/lib/subholding/evidence'
+import { ownsSubholding } from '@/lib/subholding/scope'
 
 /**
  * Who may attach evidence to a report line, and who may read it back.
@@ -23,7 +26,53 @@ import { activeUnlockFor } from '@/lib/unlock-requests'
  * minted for a file inside the caller's own subtree.
  */
 
-export const EVIDENCE_TARGETS = new Set(['DAILY_REPORT', 'WEEKLY_ITEM', 'PROJECT_CLOSING', 'TASK', 'PROGRESS_REPORT', 'OUTPUT'])
+export const EVIDENCE_TARGETS = new Set([
+  'DAILY_REPORT',
+  'WEEKLY_ITEM',
+  'PROJECT_CLOSING',
+  'TASK',
+  'PROGRESS_REPORT',
+  'OUTPUT',
+  SH_EVIDENCE_TARGET, // laporan subholding (16 Okt 2026)
+])
+
+/**
+ * Laporan subholding (16 Okt 2026) punya aturan sendiri, terpisah dari
+ * cakupan entitas lama:
+ *  - tulis (unggah/tautan/hapus): Admin subholding pemilik laporan saat
+ *    MENUNGGU/PERLU_PERBAIKAN; Super Admin kapan pun. TI tidak.
+ *  - baca: Admin subholding pemilik, peninjau (`shreport:review`: Supervisor,
+ *    Super Admin) semua laporan; Ketua Umum/Manajemen (`shreport:view-approved`)
+ *    hanya laporan DISETUJUI. Diperiksa SEBELUM jalur peran global, jadi
+ *    Manajemen/TI/Auditor tidak membaca bukti laporan yang belum disetujui.
+ */
+async function shReportTarget(reportId: string) {
+  return db.subholdingReport.findUnique({ where: { id: reportId }, select: { subholdingId: true, status: true } })
+}
+
+async function canWriteShEvidence(user: SessionUser, reportId: string): Promise<Result> {
+  const r = await shReportTarget(reportId)
+  if (!r) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }
+  const superadmin = user.role === 'SUPERADMIN'
+  if (!superadmin && !(can(user.role, 'shreport:write') && ownsSubholding(user, r.subholdingId))) {
+    return { ok: false, status: 403, error: 'Bukti ini di luar tanggung jawab Anda' }
+  }
+  if (!superadmin && !evidenceWritable(r.status)) {
+    return { ok: false, status: 409, error: SH_EVIDENCE_LOCKED_MESSAGE }
+  }
+  return { ok: true, entityId: r.subholdingId }
+}
+
+async function canReadShEvidence(user: SessionUser, reportId: string): Promise<Result> {
+  const r = await shReportTarget(reportId)
+  if (!r) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }
+  const allowed =
+    (can(user.role, 'shreport:write') && ownsSubholding(user, r.subholdingId)) ||
+    can(user.role, 'shreport:review') ||
+    (can(user.role, 'shreport:view-approved') && r.status === 'DISETUJUI')
+  if (!allowed) return { ok: false, status: 403, error: 'Bukti ini di luar cakupan Anda' }
+  return { ok: true, entityId: r.subholdingId }
+}
 
 type Result = { ok: true; entityId: string } | { ok: false; status: number; error: string }
 
@@ -199,6 +248,7 @@ export async function canWriteEvidence(
   if (!EVIDENCE_TARGETS.has(targetType)) {
     return { ok: false, status: 400, error: 'Target bukti tidak valid' }
   }
+  if (targetType === SH_EVIDENCE_TARGET) return canWriteShEvidence(user, targetId)
 
   const target = await targetEntity(targetType, targetId)
   if (!target) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }
@@ -241,6 +291,7 @@ export async function canReadEvidence(
   if (!EVIDENCE_TARGETS.has(targetType)) {
     return { ok: false, status: 400, error: 'Target bukti tidak valid' }
   }
+  if (targetType === SH_EVIDENCE_TARGET) return canReadShEvidence(user, targetId)
 
   const target = await targetEntity(targetType, targetId)
   if (!target) return { ok: false, status: 404, error: 'Data induk bukti tidak ditemukan' }

@@ -19,7 +19,7 @@ import { serverError } from '@/lib/api-error'
  */
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireApiUser()
+    const user = await requireApiUser({ allowSubholdingRoles: true })
     if (user instanceof NextResponse) return user
     const sp = req.nextUrl.searchParams
 
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   let body: Record<string, unknown>

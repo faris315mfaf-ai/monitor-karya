@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { ensureTemporaryAccessCurrent } from '@/lib/access-requests'
 import { MUST_CHANGE_PASSWORD_CODE, MUST_CHANGE_PASSWORD_MESSAGE, blocksForPasswordChange } from '@/lib/password-policy'
+import { isSubholdingOnlyRole } from '@/lib/rbac'
 
 const IS_PROD = process.env.NODE_ENV === 'production'
 
@@ -272,9 +273,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
  * rute, kecuali rute yang memanggil dengan `allowPendingPasswordChange`
  * (hanya /api/profile/password). /api/auth/logout & /api/auth/me memakai
  * getSessionUser langsung.
+ *
+ * Model subholding (16 Okt 2026): peran ADMIN_SUBHOLDING, SUPERVISOR, dan
+ * KETUA_UMUM ditolak 403 di semua rute, kecuali rute yang ikut serta dengan
+ * `allowSubholdingRoles` (/api/sh/**, /api/evidence/**, profil, notifikasi
+ * sendiri, nav-badges). Gagal-tertutup: rute lama yang lupa memeriksa
+ * kapabilitas tidak bisa membocorkan data ke peran baru.
  */
 export async function requireApiUser(
-  opts: { allowPendingPasswordChange?: boolean } = {}
+  opts: { allowPendingPasswordChange?: boolean; allowSubholdingRoles?: boolean } = {}
 ): Promise<SessionUser | NextResponse> {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
@@ -284,8 +291,14 @@ export async function requireApiUser(
       { status: 403 }
     )
   }
+  if (isSubholdingOnlyRole(user.role) && !opts.allowSubholdingRoles) {
+    return NextResponse.json({ error: SUBHOLDING_ROLE_REFUSAL }, { status: 403 })
+  }
   return user
 }
+
+/** Pesan 403 untuk peran subholding yang membuka rute di luar modulnya. */
+export const SUBHOLDING_ROLE_REFUSAL = 'Fitur ini tidak tersedia untuk peran Anda.'
 
 // ------------------------------------------------------------------
 // Data scoping
@@ -308,8 +321,14 @@ export function resolveScopeEntityId(
   requested: string | null
 ): string | null {
   if (isGlobalRole(user.role)) return requested
+  // Peran subholding tidak memegang cakupan lama: entitas yang tidak ada,
+  // bukan subholding-nya (subpohon itu bukan untuk dibaca lewat rute lama).
+  if (isSubholdingOnlyRole(user.role)) return NO_LEGACY_SCOPE
   return user.scopeEntityId
 }
+
+/** Id entitas yang tidak pernah ada — cakupan kosong untuk peran subholding. */
+const NO_LEGACY_SCOPE = '__tanpa-cakupan-lama__'
 
 /**
  * The 403 to return when a scoped role has no entity to be scoped to, or null
@@ -317,6 +336,9 @@ export function resolveScopeEntityId(
  * path prefix, because an empty prefix would otherwise mean "everything".
  */
 export function refuseUnscoped(user: SessionUser): NextResponse | null {
+  if (isSubholdingOnlyRole(user.role)) {
+    return NextResponse.json({ error: SUBHOLDING_ROLE_REFUSAL }, { status: 403 })
+  }
   if (isGlobalRole(user.role) || user.scopeEntityId) return null
   return NextResponse.json(
     { error: 'Akun Anda belum ditautkan ke entitas mana pun. Hubungi Tim TI holding.' },
@@ -344,6 +366,9 @@ export async function scopePathPrefix(scopeEntityId: string | null): Promise<str
  */
 export async function scopeEntityIds(user: SessionUser): Promise<string[] | null> {
   if (isGlobalRole(user.role)) return null
+  // Peran subholding membaca lewat /api/sh/** (src/lib/subholding/scope.ts),
+  // tidak pernah lewat cakupan lama.
+  if (isSubholdingOnlyRole(user.role)) return []
   // A scoped account with no entity is misconfigured. Reading nothing is the
   // safe answer; reading the whole group would be a leak.
   if (!user.scopeEntityId) return []

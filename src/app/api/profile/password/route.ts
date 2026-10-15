@@ -23,7 +23,7 @@ const FAIL_WINDOW_MS = 15 * 60_000
  * berhasil, tanda itu dihapus dan aplikasi bisa dipakai.
  */
 export async function POST(req: NextRequest) {
-  const user = await requireApiUser({ allowPendingPasswordChange: true })
+  const user = await requireApiUser({ allowPendingPasswordChange: true, allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   let body: Record<string, unknown>

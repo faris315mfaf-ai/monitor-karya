@@ -26,6 +26,10 @@ export type Capability =
   | 'accounts:manage' // Admin PT: meja akun terbatas PT-nya sendiri (5 Okt 2026)
   | 'audit:read'
   | 'group:read' // may read beyond their own entity
+  // Model laporan subholding (16 Okt 2026) — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md
+  | 'shreport:write' // Admin subholding: tambah/ubah/tarik laporan subholding-nya
+  | 'shreport:review' // Supervisor (+ Super Admin): setujui / minta perbaikan / komentar
+  | 'shreport:view-approved' // dashboard laporan DISETUJUI seluruh subholding
 
 const ALL_CAPABILITIES: Capability[] = [
   'daily:input',
@@ -111,14 +115,38 @@ export const ROLE_CAPABILITIES: Record<string, Capability[]> = {
 
   // Super Admin (10 Sep 2026): the owner's account. Adds companies, positions
   // and accounts, resets passwords — and may open every other module.
-  SUPERADMIN: ALL_CAPABILITIES,
+  // Subholding (16 Okt 2026): meninjau dan melihat laporan, tetapi tidak menulis
+  // laporan (itu milik Admin subholding). Kapabilitas shreport:* sengaja tidak
+  // masuk ALL_CAPABILITIES supaya TI tidak ikut mendapatkannya.
+  SUPERADMIN: [...ALL_CAPABILITIES, 'shreport:review', 'shreport:view-approved'],
 
   // Receives reports, decides escalated issues, watches compliance.
-  MANAJEMEN: ['escalation:decide', 'escalation:followup', 'project:propose', 'project:approve', 'audit:read', 'group:read'],
+  // Kontrak subholding 16 Okt 2026: tab Manajemen hanya dashboard laporan
+  // DISETUJUI (sh-overview); kapabilitas lama dibiarkan agar data lama tetap
+  // terbaca bila dibutuhkan.
+  MANAJEMEN: [
+    'escalation:decide',
+    'escalation:followup',
+    'project:propose',
+    'project:approve',
+    'audit:read',
+    'group:read',
+    'shreport:view-approved',
+  ],
 
   // Telaah data & jejak audit (baca). Boleh mengajukan proyek sejak keputusan
   // pemilik 9 Okt 2026 — rantainya ADMIN_PT lalu DIREKTUR_ENTITAS, sama seperti PIC.
   AUDITOR: ['audit:read', 'group:read', 'project:propose'],
+
+  // Model laporan subholding (16 Okt 2026). Peran ini TIDAK memegang
+  // kapabilitas lama apa pun, dan requireApiUser menolaknya di rute lama
+  // (lihat SUBHOLDING_ONLY_ROLES di bawah).
+  // Satu akun per subholding, dipakai bersama banyak pelapor.
+  ADMIN_SUBHOLDING: ['shreport:write'],
+  // Direksi di luar subholding: meninjau laporan semua subholding.
+  SUPERVISOR: ['shreport:review', 'shreport:view-approved'],
+  // Hanya dashboard laporan yang sudah disetujui.
+  KETUA_UMUM: ['shreport:view-approved'],
 }
 
 /**
@@ -171,8 +199,12 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
     'audit',
     'system',
   ],
-  MANAJEMEN: ['dashboard', 'pesan', 'escalations', 'projects', 'divisions', 'approvals', 'entities', 'audit'], // [F2-DIREKTUR] + Persetujuan
+  // Kontrak subholding 16 Okt 2026: Manajemen hanya dashboard laporan disetujui.
+  MANAJEMEN: ['sh-overview'],
   AUDITOR: ['dashboard', 'pesan', 'projects', 'divisions', 'entities', 'audit'],
+  ADMIN_SUBHOLDING: ['sh-dashboard', 'sh-inbox', 'sh-history'],
+  SUPERVISOR: ['sh-review'],
+  KETUA_UMUM: ['sh-overview'],
 }
 
 const FALLBACK_TABS: NavTabId[] = ['dashboard']
@@ -184,7 +216,6 @@ const FALLBACK_TABS: NavTabId[] = ['dashboard']
  */
 export const ROLE_COMPACT_TABS: Record<string, NavTabId[]> = {
   DIREKTUR_ENTITAS: ['dashboard', 'projects', 'escalations', 'divisions'],
-  MANAJEMEN: ['dashboard', 'projects', 'approvals', 'divisions'],
 }
 
 export function compactTabsFor(role: string): NavTabId[] | null {
@@ -273,11 +304,26 @@ export function isMasterRole(role: string): boolean {
   return (MASTER_ROLES as readonly string[]).includes(role)
 }
 
-/** Peran yang cakupannya satu entitas (dibuat Super Admin lewat "posisi"). */
-export const ENTITY_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK', 'DIREKTUR_ENTITAS'] as const
+/** Peran yang cakupannya satu entitas (dibuat Super Admin lewat "posisi").
+ *  ADMIN_SUBHOLDING terpaku pada satu entitas SUB_HOLDING (16 Okt 2026). */
+export const ENTITY_ROLES = ['ADMIN_PT', 'KEPALA_DIVISI', 'PIC_PROYEK', 'DIREKTUR_ENTITAS', 'ADMIN_SUBHOLDING'] as const
 
 /** Peran tingkat holding, tanpa entitas tertentu. */
-export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR'] as const
+export const HOLDING_ROLES = ['MANAJEMEN', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'TI', 'AUDITOR', 'SUPERVISOR', 'KETUA_UMUM'] as const
+
+/**
+ * Peran model laporan subholding (16 Okt 2026) yang HANYA memakai modul
+ * /api/sh/** (+ bukti, profil, notifikasi sendiri). requireApiUser menolak
+ * peran ini (403) di semua rute lain kecuali rute itu ikut serta dengan
+ * `allowSubholdingRoles`, dan scopeEntityIds/refuseUnscoped menutup cakupan
+ * lama — jadi Admin subholding tidak pernah membaca subpohon entitasnya lewat
+ * rute lama. MANAJEMEN tidak termasuk: perannya peran lama (global).
+ */
+export const SUBHOLDING_ONLY_ROLES = ['ADMIN_SUBHOLDING', 'SUPERVISOR', 'KETUA_UMUM'] as const
+
+export function isSubholdingOnlyRole(role: string): boolean {
+  return (SUBHOLDING_ONLY_ROLES as readonly string[]).includes(role)
+}
 
 export const ALL_ROLES = [...ENTITY_ROLES, ...HOLDING_ROLES] as const
 
@@ -339,4 +385,8 @@ export const ROLE_DUTIES: Record<string, string> = {
   MANAJEMEN:
     'Terima laporan, putuskan isu yang dieskalasi, dan pantau indikator kepatuhan seluruh grup.',
   AUDITOR: 'Telaah data dan jejak audit seluruh grup secara baca-saja.',
+  ADMIN_SUBHOLDING:
+    'Tambahkan laporan kegiatan harian PT di subholding Anda beserta buktinya, lalu tindak lanjuti permintaan perbaikan.',
+  SUPERVISOR: 'Tinjau laporan seluruh subholding: setujui, minta perbaikan, atau beri komentar.',
+  KETUA_UMUM: 'Pantau laporan yang sudah disetujui di seluruh subholding.',
 }

@@ -5,6 +5,8 @@ import { canReadEvidence, canWriteEvidence } from '@/lib/evidence-access'
 import { syncEvidenceCount } from '@/lib/daily-rollup'
 import { cleanText, clientIp, safeDisplayName, safeEvidenceUrl } from '@/lib/security'
 import { serverError } from '@/lib/api-error'
+import { ShEvidenceRefusal, lockShReportForEvidence } from '@/lib/subholding/evidence'
+import { SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
 
 /**
  * Supporting evidence attached to a report line.
@@ -28,7 +30,7 @@ function isHttpUrl(raw: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   const targetType = req.nextUrl.searchParams.get('targetType') || ''
@@ -45,7 +47,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
   let body: Record<string, unknown>
   try {
@@ -78,6 +80,10 @@ export async function POST(req: NextRequest) {
   // lagi meninggalkan evidenceCount basi, dan bukti tak tercipta tanpa jejak audit.
   try {
     const { evidence, count } = await db.$transaction(async (tx) => {
+      // Laporan subholding: status diperiksa ulang dengan baris laporan terkunci.
+      if (targetType === SH_EVIDENCE_TARGET) {
+        await lockShReportForEvidence(tx, targetId, { bypassLock: user.role === 'SUPERADMIN' })
+      }
       const evidence = await tx.evidence.create({
         data: {
           targetType,
@@ -106,6 +112,7 @@ export async function POST(req: NextRequest) {
     }, { isolationLevel: 'ReadCommitted' })
     return NextResponse.json({ ok: true, evidence, evidenceCount: count })
   } catch (err) {
+    if (err instanceof ShEvidenceRefusal) return NextResponse.json({ error: err.message }, { status: err.status })
     return serverError(err, 'Gagal menyimpan bukti. Coba lagi.', 'evidence POST')
   }
 }

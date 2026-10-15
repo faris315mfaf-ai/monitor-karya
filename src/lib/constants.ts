@@ -12,6 +12,10 @@ export const ROLE_LABELS: Record<string, string> = {
   TI: 'Tim TI',
   SUPERADMIN: 'Super Admin',
   AUDITOR: 'Auditor',
+  // Model laporan subholding (16 Okt 2026) — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md
+  ADMIN_SUBHOLDING: 'Admin subholding',
+  SUPERVISOR: 'Supervisor',
+  KETUA_UMUM: 'Ketua Umum',
 }
 
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -24,6 +28,9 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   TI: 'Kelola akun & assignment; eksekusi buka kunci',
   SUPERADMIN: 'Kelola perusahaan, posisi, akun, dan kata sandi seluruh grup',
   AUDITOR: 'Read-only seluruh data + audit trail',
+  ADMIN_SUBHOLDING: 'Menambah laporan kegiatan harian PT di subholding-nya beserta bukti',
+  SUPERVISOR: 'Meninjau laporan seluruh subholding: setujui, minta perbaikan, atau beri komentar',
+  KETUA_UMUM: 'Melihat laporan yang sudah disetujui di seluruh subholding',
 }
 
 /**
@@ -50,6 +57,8 @@ export const HOLDING_POSITION_OPTIONS: { role: string; label: string; hint: stri
   { role: 'SUPERADMIN', label: 'Super Admin', hint: 'Kelola perusahaan & akun seluruh grup' },
   { role: 'TI', label: 'Tim TI', hint: 'Konsol sistem & akses' },
   { role: 'AUDITOR', label: 'Auditor', hint: 'Baca-saja + jejak audit' },
+  { role: 'SUPERVISOR', label: 'Supervisor', hint: 'Menyetujui laporan seluruh subholding' },
+  { role: 'KETUA_UMUM', label: 'Ketua Umum', hint: 'Dashboard laporan yang disetujui' },
 ]
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
@@ -118,6 +127,11 @@ export const NOTIFICATION_TEMPLATE_LABELS: Record<string, string> = {
   PENGINGAT_MINGGUAN_DIVISI: 'Pengingat laporan mingguan divisi',
   PENGINGAT_HARIAN_PIC: 'Pengingat laporan harian PIC',
   RINGKASAN_MINGGUAN_DIVISI: 'Ringkasan mingguan kepala divisi', // [F2-KADIV]
+  // Laporan subholding (16 Okt 2026)
+  SH_LAPORAN_BARU: 'Laporan subholding baru',
+  SH_LAPORAN_KIRIM_ULANG: 'Laporan subholding dikirim ulang',
+  SH_KEPUTUSAN: 'Keputusan laporan subholding',
+  SH_KOMENTAR: 'Komentar laporan subholding',
 }
 
 /** Nama slot di rantai persetujuan proyek; slot Manajemen = satu tingkat di atas Direktur. */
@@ -219,6 +233,13 @@ export const NAV_TABS = [
   { id: 'entities', label: 'Entitas', short: 'Entitas' },
   { id: 'audit', label: 'Log aktivitas', short: 'Log' },
   { id: 'system', label: 'Sistem & akses', short: 'Sistem' },
+  // Model laporan subholding (16 Okt 2026): Admin subholding, Supervisor,
+  // Ketua Umum & Manajemen — docs/zcode/KONTRAK-SUBHOLDING-16-OKT.md.
+  { id: 'sh-dashboard', label: 'Dashboard', short: 'Dashboard' },
+  { id: 'sh-inbox', label: 'Kotak masuk', short: 'Pesan' },
+  { id: 'sh-history', label: 'Riwayat', short: 'Riwayat' },
+  { id: 'sh-review', label: 'Persetujuan', short: 'Persetujuan' },
+  { id: 'sh-overview', label: 'Dashboard', short: 'Dashboard' },
   // [BERALIH] pengujian Super Admin (10 Okt 2026)
 ] as const
 

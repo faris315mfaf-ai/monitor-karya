@@ -13,6 +13,8 @@ import {
   uploadEvidence,
 } from '@/lib/storage'
 import { serverError } from '@/lib/api-error'
+import { ShEvidenceRefusal, lockShReportForEvidence } from '@/lib/subholding/evidence'
+import { SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
 import { findIdempotentReplay, isUniqueViolation, readIdempotencyKey, recordIdempotentResponse } from '@/lib/idempotency'
 
 const IDEMPOTENT_ROUTE = 'POST /api/evidence/upload'
@@ -48,7 +50,7 @@ const EXTENSIONS_FOR_MIME: Record<string, string[]> = {
  * berkas dibaca/diunggah, jadi tidak ada bukti ganda. Tanpa header: tidak berubah.
  */
 export async function POST(req: NextRequest) {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
 
   const idem = readIdempotencyKey(req)
@@ -152,6 +154,10 @@ export async function POST(req: NextRequest) {
   let payload
   try {
     payload = await db.$transaction(async (tx) => {
+      // Laporan subholding: status diperiksa ulang dengan baris laporan terkunci.
+      if (targetType === SH_EVIDENCE_TARGET) {
+        await lockShReportForEvidence(tx, targetId, { bypassLock: user.role === 'SUPERADMIN' })
+      }
       const created = await tx.evidence.create({
         data: {
           targetType,
@@ -200,6 +206,7 @@ export async function POST(req: NextRequest) {
       const winner = await findIdempotentReplay(db, user.id, idemKey, IDEMPOTENT_ROUTE)
       if (winner) return winner
     }
+    if (err instanceof ShEvidenceRefusal) return NextResponse.json({ error: err.message }, { status: err.status })
     return serverError(err, 'Gagal menyimpan berkas. Coba lagi.', 'evidence/upload create', 500)
   }
 

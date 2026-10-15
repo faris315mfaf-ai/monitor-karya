@@ -45,6 +45,20 @@ const REL_MODEL: Record<string, string> = {
   weeklyReport: 'weeklyDivisionReport',
 }
 
+/**
+ * Relasi to-one yang namanya hanya berlaku untuk model tertentu (laporan
+ * subholding, 16 Okt 2026) — supaya nama umum seperti `report`/`pt` tidak
+ * mengubah perilaku model lain.
+ */
+const REL_BY_MODEL: Record<string, Record<string, string>> = {
+  subholdingReport: { subholding: 'entity', pt: 'entity', createdBy: 'user' },
+  subholdingReportComment: { report: 'subholdingReport', author: 'user' },
+}
+
+function relModel(model: string, rel: string): string | undefined {
+  return REL_BY_MODEL[model]?.[rel] ?? REL_MODEL[rel]
+}
+
 /** Relasi to-many: `${model}.${nama}` → [model anak, kunci asing di anak]. */
 const MANY: Record<string, [string, string]> = {
   'project.dailyReports': ['dailyProjectReport', 'projectId'],
@@ -56,6 +70,7 @@ const MANY: Record<string, [string, string]> = {
   'entity.children': ['entity', 'parentId'],
   'entity.divisions': ['division', 'entityId'],
   'entity.projects': ['project', 'entityId'],
+  'subholdingReport.comments': ['subholdingReportComment', 'reportId'],
 }
 
 const DEFAULTS: Record<string, Row> = {
@@ -74,6 +89,8 @@ const DEFAULTS: Record<string, Row> = {
   approvalRequest: { status: 'DIAJUKAN', decidedById: null, decidedAt: null, decisionNote: null, appliedData: null, amount: null, divisionId: null, projectId: null, startDate: null, endDate: null },
   weeklyReportComment: { readAt: null },
   reminderRule: { enabled: true, time: null, weekday: null, params: null, lastRunAt: null, updatedById: null },
+  subholdingReport: { status: 'MENUNGGU', decidedById: null, decidedAt: null },
+  subholdingReportComment: { kind: 'KOMENTAR', readAt: null },
 }
 
 let seq = 0
@@ -118,6 +135,8 @@ function stripRelations(data: Row, current: Row = {}): Row {
       else if ('increment' in op) out[k] = Number(current[k] ?? 0) + Number(op.increment)
       else if ('decrement' in op) out[k] = Number(current[k] ?? 0) - Number(op.decrement)
       else if ('push' in op) out[k] = [...((current[k] as unknown[]) ?? []), op.push]
+      // Kolom JSON (mis. IdempotencyKey.responseBody): objek tanpa kunci operasi disimpan apa adanya.
+      else if (!Object.keys(op).some((x) => NESTED_WRITE_KEYS.has(x))) out[k] = structuredClone(op)
       // connect/create bertingkat tidak didukung — diabaikan.
       continue
     }
@@ -125,6 +144,8 @@ function stripRelations(data: Row, current: Row = {}): Row {
   }
   return out
 }
+
+const NESTED_WRITE_KEYS = new Set(['connect', 'create', 'connectOrCreate', 'disconnect', 'upsert', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'set', 'unset'])
 
 function isPlain(v: unknown): v is Row {
   return typeof v === 'object' && v !== null && !(v instanceof Date) && !Array.isArray(v)
@@ -194,7 +215,7 @@ function matchScalar(value: unknown, filter: unknown): boolean {
 }
 
 function related(model: string, row: Row, rel: string): Row | null {
-  const target = REL_MODEL[rel]
+  const target = relModel(model, rel)
   const fk = row[`${rel}Id`]
   if (!target || fk === null || fk === undefined) return null
   return table(target).find((r) => r.id === fk) ?? null
@@ -233,8 +254,8 @@ export function matches(model: string, row: Row, where: Where | undefined): bool
       if (c.every !== undefined && !kids.every((x) => matches(many[0], x, c.every as Where))) return false
       continue
     }
-    if (REL_MODEL[k] && !(k in row)) {
-      const target = REL_MODEL[k]
+    if (relModel(model, k) && !(k in row)) {
+      const target = relModel(model, k)!
       const r = related(model, row, k)
       if (cond === null) {
         if (r) return false
@@ -304,9 +325,9 @@ function shape(model: string, row: Row, args: { select?: unknown; include?: unkn
       base[k] = kids.map((x) => shape(many[0], x, opts))
       continue
     }
-    if (REL_MODEL[k] && `${k}Id` in row) {
+    if (relModel(model, k) && `${k}Id` in row) {
       const r = related(model, row, k)
-      base[k] = r ? shape(REL_MODEL[k], r, isPlain(v) ? v : {}) : null
+      base[k] = r ? shape(relModel(model, k)!, r, isPlain(v) ? v : {}) : null
       continue
     }
     if (sel) base[k] = structuredClone(row[k] ?? null)

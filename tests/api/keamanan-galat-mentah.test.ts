@@ -305,7 +305,11 @@ describe('500 tanpa err.message mentah', () => {
       expect(typeof mod[method]).toBe('function')
       const scoped = ['access-requests/options', 'admin/compliance/remind', 'work-desk'].includes(key)
       const pic = key === 'my-dashboard' || key === 'nav-badges' || (key === 'approval-requests' && method === 'POST')
-      mocks.user.value = { ...SUPER, id: `security-${key}-${method}`, role: pic ? 'PIC_PROYEK' : scoped ? 'ADMIN_PT' : 'SUPERADMIN', scopeEntityId: scoped || pic ? 'pt-a' : null }
+      // Model subholding (16 Okt 2026): rute khusus Admin subholding.
+      const shAdmin = ['sh/options', 'sh/reports', 'sh/inbox', 'sh/inbox/read'].includes(key)
+      mocks.user.value = shAdmin
+        ? { ...SUPER, id: `security-${key}-${method}`, role: 'ADMIN_SUBHOLDING', scopeEntityId: 'sh-1' }
+        : { ...SUPER, id: `security-${key}-${method}`, role: pic ? 'PIC_PROYEK' : scoped ? 'ADMIN_PT' : 'SUPERADMIN', scopeEntityId: scoped || pic ? 'pt-a' : null }
       const data: Record<string, unknown> = {
         id: 'row-1', projectId: 'p-1', entityId: 'pt-a', divisionId: 'd-1', weeklyReportId: 'wr-1', reportId: 'row-1',
         action: 'approve', decision: 'DISETUJUI', role: 'PIC_PROYEK', type: 'PINDAH_PERAN', targetType: 'DAILY_REPORT', targetId: 'row-1',

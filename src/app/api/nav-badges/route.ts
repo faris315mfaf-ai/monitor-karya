@@ -4,6 +4,8 @@ import { requireApiUser } from '@/lib/auth'
 import { startOfWibDay } from '@/lib/lock'
 import { getReportSettings, isDailyLockedWith, isWorkingDayWith } from '@/lib/report-settings'
 import { oversightBadges } from '@/lib/oversight-badges' // [F2-DIREKTUR]
+import { isSubholdingOnlyRole } from '@/lib/rbac'
+import { subholdingBadges } from '@/lib/subholding/badges'
 
 /**
  * GET /api/nav-badges — angka kecil di samping item navigasi (6 Okt 2026).
@@ -19,8 +21,12 @@ import { oversightBadges } from '@/lib/oversight-badges' // [F2-DIREKTUR]
  * badge lain.
  */
 export async function GET() {
-  const user = await requireApiUser()
+  const user = await requireApiUser({ allowSubholdingRoles: true })
   if (user instanceof NextResponse) return user
+
+  // Model subholding (16 Okt 2026): angka tab sh-inbox (pesan belum dibaca)
+  // dan sh-review (laporan menunggu); peran ini tidak memakai badge lama.
+  if (isSubholdingOnlyRole(user.role)) return NextResponse.json({ badges: await subholdingBadges(user) })
 
   const badges: Record<string, number> = {}
   const now = new Date()
