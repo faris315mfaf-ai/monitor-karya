@@ -16,6 +16,7 @@ import { call, roleLabel, type Company, type UserRow } from '@/lib/accounts'
 import { PROJECT_LIFECYCLE_LABELS } from '@/lib/constants'
 import { formatNumber, formatRelative } from '@/lib/format'
 import { CompanyLogo, Field, InfoLine, LogoPicker, SectionTitle, SwitchRow, UserAvatar, useConfirm } from './parts'
+import { canMoveCompany, entityKindLabel, isHoldingLike } from './subholding'
 
 export type CompanyTab = 'ringkasan' | 'akun' | 'divisi' | 'proyek' | 'pengaturan'
 
@@ -24,9 +25,9 @@ export function completeness(c: Company) {
   const items = [
     { key: 'logo', label: 'Logo perusahaan', done: Boolean(c.logoData), tab: 'pengaturan' as CompanyTab },
     { key: 'contact', label: 'Alamat, telepon, dan email', done: Boolean(c.address && c.phone && c.email), tab: 'pengaturan' as CompanyTab },
-    { key: 'admin', label: 'Admin PT yang aktif', done: c.type === 'HOLDING' || c.users.some((u) => u.role === 'ADMIN_PT' && u.isActive), tab: 'akun' as CompanyTab },
-    { key: 'director', label: 'Direktur perusahaan', done: c.type === 'HOLDING' || c.users.some((u) => u.role === 'DIREKTUR_ENTITAS'), tab: 'akun' as CompanyTab },
-    { key: 'division', label: 'Minimal satu divisi', done: c.type === 'HOLDING' || c.divisions.length > 0, tab: 'divisi' as CompanyTab },
+    { key: 'admin', label: 'Admin PT yang aktif', done: isHoldingLike(c) || c.users.some((u) => u.role === 'ADMIN_PT' && u.isActive), tab: 'akun' as CompanyTab },
+    { key: 'director', label: 'Direktur perusahaan', done: isHoldingLike(c) || c.users.some((u) => u.role === 'DIREKTUR_ENTITAS'), tab: 'akun' as CompanyTab },
+    { key: 'division', label: 'Minimal satu divisi', done: isHoldingLike(c) || c.divisions.length > 0, tab: 'divisi' as CompanyTab },
     { key: 'heads', label: 'Setiap divisi punya kepala', done: c.divisions.every((d) => d.headUserId), tab: 'divisi' as CompanyTab },
   ]
   const done = items.filter((i) => i.done).length
@@ -42,6 +43,7 @@ export function CompanySheet({
   onClose,
   onChanged,
   onOpenUser,
+  onMove,
 }: {
   company: Company | null
   tab: CompanyTab
@@ -52,6 +54,8 @@ export function CompanySheet({
   onClose: () => void
   onChanged: () => void
   onOpenUser: (user: UserRow | null, company: Company) => void
+  /** Super Admin: pindahkan PT ke subholding/holding lain (SH-PINDAH-PT). */
+  onMove?: (company: Company) => void
 }) {
   const [last, setLast] = useState<Company | null>(company)
   if (company && company !== last) setLast(company)
@@ -64,7 +68,7 @@ export function CompanySheet({
       size="wide"
       backLabel="Perusahaan"
       title={c?.name ?? ''}
-      subtitle={c ? `${c.code} · ${c.type === 'HOLDING' ? 'Holding' : `Anak perusahaan${c.parentName ? ` dari ${c.parentName}` : ''}`}` : undefined}
+      subtitle={c ? `${c.code} · ${c.type === 'HOLDING' ? 'Holding' : `${entityKindLabel(c)}${c.parentName ? ` dari ${c.parentName}` : ''}`}` : undefined}
       eyebrow={
         c ? (
           <span className="flex items-center gap-2">
@@ -95,7 +99,7 @@ export function CompanySheet({
             {tab === 'akun' && <Accounts c={c} me={me} onOpenUser={onOpenUser} />}
             {tab === 'divisi' && <Divisions c={c} onOpenUser={onOpenUser} />}
             {tab === 'proyek' && <Projects c={c} onOpenUser={onOpenUser} />}
-            {tab === 'pengaturan' && canManage && <Settings key={c.id} c={c} onChanged={onChanged} onDeleted={onClose} />}
+            {tab === 'pengaturan' && canManage && <Settings key={c.id} c={c} onChanged={onChanged} onDeleted={onClose} onMove={onMove && canMoveCompany(c) ? () => onMove(c) : undefined} />}
           </div>
         </>
       ) : null}
@@ -166,7 +170,7 @@ function Overview({ c, onTab, onOpenUser }: { c: Company; onTab: (t: CompanyTab)
         <SectionTitle icon="gedung">Identitas</SectionTitle>
         <div className="mk-inset flex flex-col gap-2">
           <InfoLine icon="titik">
-            <span className="font-mono">{c.code}</span> · {c.type === 'HOLDING' ? 'Holding' : 'Anak perusahaan'}
+            <span className="font-mono">{c.code}</span> · {entityKindLabel(c)}
             {c.parentName ? ` dari ${c.parentName}` : ''}
           </InfoLine>
           <InfoLine icon="gedung">{c.address || <span className="text-ink-2">Alamat belum diisi</span>}</InfoLine>
@@ -342,7 +346,7 @@ function Projects({ c, onOpenUser }: { c: Company; onOpenUser: (u: UserRow | nul
 
 /* ---------- Pengaturan ---------- */
 
-function Settings({ c, onChanged, onDeleted }: { c: Company; onChanged: () => void; onDeleted: () => void }) {
+function Settings({ c, onChanged, onDeleted, onMove }: { c: Company; onChanged: () => void; onDeleted: () => void; onMove?: () => void }) {
   const [name, setName] = useState(c.name)
   const [address, setAddress] = useState(c.address ?? '')
   const [phone, setPhone] = useState(c.phone ?? '')
@@ -449,6 +453,21 @@ function Settings({ c, onChanged, onDeleted }: { c: Company; onChanged: () => vo
           </Button>
         </div>
       </section>
+
+      {onMove ? (
+        <section className="mk-formsec">
+          <SectionTitle icon="alur">Induk perusahaan</SectionTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="min-w-0 flex-1 t-footnote text-ink-2">
+              Sekarang di bawah <strong className="text-ink">{c.parentName ?? 'holding'}</strong>. Pindahkan ke subholding agar PT ini bisa
+              dilaporkan Admin subholding. Laporan yang sudah ada tetap milik subholding asalnya.
+            </p>
+            <Button size="sm" icon="alur" disabled={busy !== null} onClick={onMove}>
+              Pindahkan ke subholding
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mk-formsec">
         <SectionTitle icon="pengaturan">Status</SectionTitle>

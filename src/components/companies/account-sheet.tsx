@@ -12,9 +12,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/mk/forms'
 import { Button, Icon, Sheet, StatusBadge, cx } from '@/components/mk'
-import { DEFAULT_PASSWORD, call, isEntityRole, positionsFor, slugify, type Company, type UserRow } from '@/lib/accounts'
+import { DEFAULT_PASSWORD, call, isEntityRole, slugify, type Company, type UserRow } from '@/lib/accounts'
 import { formatRelative } from '@/lib/format'
 import { Field, SectionTitle, SwitchRow, UserAvatar, generatePassword, selectCls, useConfirm } from './parts'
+import { entityKindLabel, placementProblem, positionsForPlacement } from './subholding'
 
 const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -107,7 +108,9 @@ function AccountForm({
 
   const [entityId, setEntityId] = useState(target.company?.id ?? '')
   const company = useMemo(() => companies.find((c) => c.id === entityId) ?? null, [companies, entityId])
-  const options = positionsFor(company, allowedRoles)
+  // Subholding (16 Okt 2026): penempatan menentukan posisi — subholding = Admin subholding;
+  // tingkat grup = termasuk Supervisor, Ketua Umum, Manajemen.
+  const options = positionsForPlacement(company, allowedRoles)
 
   const [role, setRole] = useState(user?.role ?? options[0]?.role ?? 'ADMIN_PT')
   const [name, setName] = useState(user?.name ?? '')
@@ -150,7 +153,7 @@ function AccountForm({
     username: !USERNAME_RE.test(username) ? '3–32 huruf kecil atau angka; boleh titik, garis bawah, strip.' : null,
     email: email && !EMAIL_RE.test(email) ? 'Format email belum benar.' : null,
     password: password && password.length < 8 ? 'Minimal 8 karakter.' : null,
-    placement: isEntityRole(role) && !company ? 'Posisi ini harus ditempatkan di sebuah perusahaan.' : null,
+    placement: isEntityRole(role) && !company ? 'Posisi ini harus ditempatkan di sebuah perusahaan.' : placementProblem(role, company),
   }
   const invalid = Object.values(errors).some(Boolean)
   const show = (k: keyof typeof errors) => (touched[k] || touched.submit ? errors[k] : null)
@@ -158,7 +161,7 @@ function AccountForm({
   function changeEntity(id: string) {
     setEntityId(id)
     const next = companies.find((c) => c.id === id) ?? null
-    const allowed = positionsFor(next, allowedRoles)
+    const allowed = positionsForPlacement(next, allowedRoles)
     if (!allowed.some((o) => o.role === role)) setRole(allowed[0]?.role ?? 'ADMIN_PT')
     setDivisionId('')
     setProjectId('')
@@ -273,13 +276,13 @@ function AccountForm({
       <section className="mk-formsec">
         <SectionTitle icon="gedung">Penempatan & posisi</SectionTitle>
         {!lockCompany && companies.length > 0 ? (
-          <Field label="Perusahaan" htmlFor="ac-entity" error={show('placement')} hint="Akun tingkat grup membaca seluruh holding; akun perusahaan terbatas pada perusahaannya.">
+          <Field label="Perusahaan" htmlFor="ac-entity" error={show('placement')} hint="Supervisor, Ketua Umum, dan Manajemen: tingkat grup. Admin subholding: pilih subholding-nya. Akun perusahaan terbatas pada perusahaannya.">
             <select id="ac-entity" className={selectCls} value={entityId} onChange={(e) => changeEntity(e.target.value)} onBlur={() => setTouched((x) => ({ ...x, placement: true }))}>
               <option value="">Tingkat grup (tanpa perusahaan)</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.type === 'HOLDING' ? ' · holding' : ''}
+                  {c.type !== 'PT' ? ` · ${entityKindLabel(c).toLowerCase()}` : ''}
                   {c.isActive ? '' : ' · nonaktif'}
                 </option>
               ))}

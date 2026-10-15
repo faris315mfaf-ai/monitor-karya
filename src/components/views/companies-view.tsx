@@ -21,11 +21,15 @@ import { AccountSheet, type AccountTarget } from '@/components/companies/account
 import { CompanySheet, UserRowButton, completeness, type CompanyTab } from '@/components/companies/company-sheet'
 import { CompanyWizard } from '@/components/companies/company-wizard'
 import { CompanyLogo, InfoLine, selectCls } from '@/components/companies/parts'
+import { SubholdingPanel } from '@/components/companies/subholding-panel'
+import { SubholdingPtSheet, SubholdingSheet } from '@/components/companies/subholding-sheet'
+import { MoveCompanySheet } from '@/components/companies/move-company-sheet'
+import { entityKindLabel, isSubholding } from '@/components/companies/subholding'
 import { call, initialsOf, roleLabel, type CompaniesData, type Company, type UserRow } from '@/lib/accounts'
 import { ALL_ROLES } from '@/lib/rbac'
 import { formatNumber } from '@/lib/format'
 
-type View = 'perusahaan' | 'akun' | 'struktur'
+type View = 'subholding' | 'perusahaan' | 'akun' | 'struktur'
 type CoFilter = 'all' | 'holding' | 'pt' | 'incomplete' | 'inactive'
 type AccFilter = 'all' | 'active' | 'never' | 'nopass' | 'inactive'
 
@@ -33,11 +37,16 @@ const tones = ['data-1', 'data-2', 'data-3', 'data-4', 'data-5', 'data-6'] as co
 
 export function CompaniesView() {
   const { data, loading, error, reload } = useResource<CompaniesData>('/api/companies')
-  const [view, setView] = useState<View>('perusahaan')
+  // Model laporan subholding (16 Okt 2026): Super Admin mulai dari struktur subholding.
+  const [view, setView] = useState<View>('subholding')
   const [q, setQ] = useState('')
   const [wizard, setWizard] = useState(false)
   const [openCo, setOpenCo] = useState<{ id: string; tab: CompanyTab } | null>(null)
   const [account, setAccount] = useState<AccountTarget | null>(null)
+  const [shSheet, setShSheet] = useState(false)
+  const [ptFor, setPtFor] = useState<Company | null>(null)
+  // Pindahkan PT ke subholding (SH-PINDAH-PT): id saja, data diambil segar dari `companies`.
+  const [moveId, setMoveId] = useState<string | null>(null)
 
   // Tombol "Tambah perusahaan" di dashboard Super Admin meninggalkan penanda ini.
   useEffect(() => {
@@ -63,6 +72,8 @@ export function CompaniesView() {
 
   const full = data.scope !== 'ENTITY'
   const canManage = Boolean(data.canManageCompanies)
+  // Admin PT tidak punya tampilan Subholding.
+  const shown: View = !canManage && view === 'subholding' ? 'perusahaan' : view
   const companies = data.companies
   const holdings = companies.filter((c) => c.type === 'HOLDING')
   const allUsers = [...data.holdingUsers, ...companies.flatMap((c) => c.users)]
@@ -77,6 +88,7 @@ export function CompaniesView() {
   const neverIn = activeUsers.filter((u) => !u.lastLoginAt && u.hasPassword)
   const issues = neverIn.length + noPass.length + headless.length + picless.length + incomplete.length
   const openCompany = openCo ? (companies.find((c) => c.id === openCo.id) ?? null) : null
+  const moveCompany = moveId ? (companies.find((c) => c.id === moveId) ?? null) : null
   const companyOf = (u: UserRow) => companies.find((c) => c.id === u.scopeEntityId) ?? null
 
   const support = [
@@ -97,9 +109,14 @@ export function CompaniesView() {
         tools={
           <>
             {canManage ? (
-              <Button variant="secondary" size="sm" icon="tambah" onClick={() => setWizard(true)}>
-                Tambah perusahaan
-              </Button>
+              <>
+                <Button variant="secondary" size="sm" icon="tambah" onClick={() => setShSheet(true)}>
+                  Tambah subholding
+                </Button>
+                <Button variant="secondary" size="sm" icon="tambah" onClick={() => setWizard(true)}>
+                  Tambah perusahaan
+                </Button>
+              </>
             ) : (
               <Button variant="secondary" size="sm" icon="tambah" onClick={() => setAccount({ user: null, company: companies[0] ?? null })}>
                 Tambah akun
@@ -113,7 +130,7 @@ export function CompaniesView() {
       />
 
       <Hero
-        eyebrow={full ? `${holdings.length} holding · ${companies.length - holdings.length} anak perusahaan` : 'Akun di perusahaan Anda'}
+        eyebrow={full ? `${holdings.length} holding · ${companies.filter(isSubholding).length} subholding · ${companies.filter((c) => c.type === 'PT').length} anak perusahaan` : 'Akun di perusahaan Anda'}
         answer={
           full
             ? `${formatNumber(activeCos.length)} perusahaan aktif dengan ${formatNumber(activeUsers.length)} akun.`
@@ -165,9 +182,10 @@ export function CompaniesView() {
       <div className="mk-toolbar">
         <SegmentedControl
           label="Tampilan"
-          value={view}
+          value={shown}
           onChange={(v) => setView(v as View)}
           options={[
+            ...(canManage ? [{ value: 'subholding', label: 'Subholding' }] : []),
             { value: 'perusahaan', label: 'Perusahaan' },
             { value: 'akun', label: 'Akun' },
             { value: 'struktur', label: 'Struktur' },
@@ -183,13 +201,25 @@ export function CompaniesView() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={view === 'akun' ? 'Cari nama, username, email, jabatan' : 'Cari perusahaan, kode, kota'}
+            placeholder={shown === 'akun' ? 'Cari nama, username, email, jabatan' : 'Cari perusahaan, kode, kota'}
           />
         </div>
       </div>
 
-      <div key={view} className="mk-tabpane">
-        {view === 'perusahaan' && (
+      <div key={shown} className="mk-tabpane">
+        {shown === 'subholding' && (
+          <SubholdingPanel
+            data={data}
+            q={q}
+            onAddSubholding={() => setShSheet(true)}
+            onAddPt={(s) => setPtFor(s)}
+            onOpenCompany={(c) => setOpenCo({ id: c.id, tab: 'ringkasan' })}
+            onOpenUser={(u, c) => setAccount({ user: u, company: c })}
+            onAddAccount={(c) => setAccount({ user: null, company: c })}
+            onMovePt={(p) => setMoveId(p.id)}
+          />
+        )}
+        {shown === 'perusahaan' && (
           <CompaniesGrid
             companies={companies}
             q={q}
@@ -199,7 +229,7 @@ export function CompaniesView() {
             onAdd={() => setWizard(true)}
           />
         )}
-        {view === 'akun' && (
+        {shown === 'akun' && (
           <AccountsPanel
             data={data}
             q={q}
@@ -208,7 +238,7 @@ export function CompaniesView() {
             onChanged={reload}
           />
         )}
-        {view === 'struktur' && (
+        {shown === 'struktur' && (
           <StructureTree data={data} q={q} onOpenCompany={(c, tab) => setOpenCo({ id: c.id, tab })} onOpenUser={(u) => setAccount({ user: u, company: companyOf(u) })} />
         )}
       </div>
@@ -222,6 +252,7 @@ export function CompaniesView() {
         onClose={() => setOpenCo(null)}
         onChanged={reload}
         onOpenUser={(u, c) => setAccount({ user: u, company: c })}
+        onMove={canManage ? (c) => setMoveId(c.id) : undefined}
       />
       <AccountSheet
         target={account}
@@ -233,9 +264,17 @@ export function CompaniesView() {
         onSaved={reload}
       />
       {canManage ? (
+        <>
+          <SubholdingSheet open={shSheet} holdings={holdings} onClose={() => setShSheet(false)} onSaved={reload} />
+          <SubholdingPtSheet subholding={ptFor} subholdings={companies.filter(isSubholding)} onClose={() => setPtFor(null)} onSaved={reload} />
+          <MoveCompanySheet company={moveCompany} companies={companies} onClose={() => setMoveId(null)} onSaved={reload} />
+        </>
+      ) : null}
+      {canManage ? (
         <CompanyWizard
           open={wizard}
           holdings={holdings}
+          parents={[...holdings, ...companies.filter(isSubholding)]}
           onClose={() => setWizard(false)}
           onSaved={(id) => {
             reload()
@@ -373,7 +412,7 @@ function CompanyCard({
         <div className="min-w-0 flex-1">
           <h3 className="mk-cocard__name">{c.name}</h3>
           <div className="mk-cocard__meta">
-            <span className={cx('mk-tag', c.type === 'HOLDING' && 'is-strong')}>{c.type === 'HOLDING' ? 'Holding' : 'Anak perusahaan'}</span>
+            <span className={cx('mk-tag', c.type !== 'PT' && 'is-strong')}>{entityKindLabel(c)}</span>
             <span className="font-mono">{c.code}</span>
           </div>
         </div>
@@ -655,7 +694,9 @@ function StructureTree({
   onOpenUser: (u: UserRow) => void
 }) {
   const holdings = data.companies.filter((c) => c.type === 'HOLDING')
-  const orphans = data.companies.filter((c) => c.type !== 'HOLDING' && !holdings.some((h) => h.id === c.parentId))
+  // Subholding (16 Okt 2026): PT di bawah subholding bersarang di subholding-nya, bukan yatim.
+  const known = new Set(data.companies.map((c) => c.id))
+  const orphans = data.companies.filter((c) => c.type !== 'HOLDING' && (!c.parentId || !known.has(c.parentId)))
   const [open, setOpen] = useState<Set<string>>(() => new Set(['grup', ...holdings.map((h) => h.id)]))
   const needle = q.trim().toLowerCase()
   const match = (c: Company) =>
@@ -704,11 +745,17 @@ function StructureTree({
         ) : null}
         {[...holdings, ...orphans].map((h) => {
           const kids = data.companies.filter((c) => c.parentId === h.id && c.type !== 'HOLDING')
-          if (!match(h) && !kids.some(match)) return null
+          if (!match(h) && !kids.some((k) => match(k) || data.companies.some((g) => g.parentId === k.id && match(g)))) return null
           return (
             <CompanyNode key={h.id} c={h} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany}>
-              {kids.filter(match).map((k) => (
-                <CompanyNode key={k.id} c={k} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany} />
+              {kids.filter((k) => match(k) || data.companies.some((g) => g.parentId === k.id && match(g))).map((k) => (
+                <CompanyNode key={k.id} c={k} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany}>
+                  {isSubholding(k)
+                    ? data.companies
+                        .filter((g) => g.parentId === k.id && match(g))
+                        .map((g) => <CompanyNode key={g.id} c={g} isOpen={isOpen} onToggle={toggle} onOpenCompany={onOpenCompany} />)
+                    : null}
+                </CompanyNode>
               ))}
             </CompanyNode>
           )

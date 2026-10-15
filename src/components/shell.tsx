@@ -48,6 +48,12 @@ const TAB_ICONS: Record<NavTabId, IconName> = {
   entities: 'gedung',
   audit: 'aktivitas',
   system: 'kunci',
+  // Model laporan subholding (16 Okt 2026): Dock sederhana ikon + label.
+  'sh-dashboard': 'ringkasan',
+  'sh-inbox': 'kirim',
+  'sh-history': 'kalender',
+  'sh-review': 'persetujuan',
+  'sh-overview': 'ringkasan',
 }
 
 /** Label nav per peran; PIC membuka harinya dengan "Hari ini". */

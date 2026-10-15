@@ -20,7 +20,8 @@ export function useNavBadges(role: string, activeTab: string): Record<string, nu
   const [badges, setBadges] = useState<Record<string, number>>({})
   const [tick, setTick] = useState(0)
   // [F2-DIREKTUR] Pengawas juga: Eskalasi / Laporan mingguan (tab Divisi) / Persetujuan.
-  const enabled = role === 'PIC_PROYEK' || ['MANAJEMEN', 'DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'SUPERADMIN'].includes(role)
+  // Model subholding (16 Okt 2026): Kotak masuk admin subholding, Persetujuan supervisor.
+  const enabled = role === 'PIC_PROYEK' || ['MANAJEMEN', 'DIREKTUR_ENTITAS', 'DIREKTUR_SDM_GA', 'SUPERADMIN', 'ADMIN_SUBHOLDING', 'SUPERVISOR'].includes(role)
 
   useEffect(() => {
     if (!enabled) return

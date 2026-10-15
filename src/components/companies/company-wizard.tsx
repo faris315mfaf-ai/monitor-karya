@@ -45,17 +45,20 @@ const STEPS = [
 export function CompanyWizard({
   open,
   holdings,
+  parents,
   onClose,
   onSaved,
 }: {
   open: boolean
   holdings: Company[]
+  /** Induk yang sah untuk PT: holding dan subholding (16 Okt 2026). Bawaan: holdings. */
+  parents?: Company[]
   onClose: () => void
   onSaved: (id?: string) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()} size="wide" backLabel="Perusahaan" title="Tambah perusahaan" subtitle="Identitas, kontak, lalu posisi dan akun pertamanya.">
-      {open ? <WizardBody holdings={holdings} onClose={onClose} onSaved={onSaved} /> : null}
+      {open ? <WizardBody holdings={parents && parents.length ? parents : holdings} onClose={onClose} onSaved={onSaved} /> : null}
     </Sheet>
   )
 }
@@ -63,8 +66,10 @@ export function CompanyWizard({
 function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClose: () => void; onSaved: (id?: string) => void }) {
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
+  // `holdings` = induk yang boleh dipilih (holding + subholding). Utamakan subholding:
+  // di model laporan subholding (16 Okt 2026) PT berada di bawah subholding.
   const [kind, setKind] = useState<'PT' | 'HOLDING'>(holdings.length ? 'PT' : 'HOLDING')
-  const [parentId, setParentId] = useState(holdings[0]?.id ?? '')
+  const [parentId, setParentId] = useState((holdings.find((h) => (h.type as string) === 'SUB_HOLDING') ?? holdings[0])?.id ?? '')
   const [code, setCode] = useState('')
   const [codeTouched, setCodeTouched] = useState(false)
   const [address, setAddress] = useState('')
@@ -72,7 +77,9 @@ function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClo
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [logo, setLogo] = useState<string | null>(null)
-  const [drafts, setDrafts] = useState<Draft[]>([newDraft('ADMIN_PT')])
+  // Model subholding (16 Okt 2026): PT tidak punya akun sendiri — laporannya diisi
+  // akun Admin subholding. Posisi tetap bisa ditambahkan manual bila perlu.
+  const [drafts, setDrafts] = useState<Draft[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [tried, setTried] = useState<Record<number, boolean>>({})
@@ -88,7 +95,7 @@ function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClo
   const stepErrors: Record<number, string[]> = {
     0: [
       name.trim().length < 2 ? 'Nama perusahaan minimal 2 huruf.' : '',
-      !isHolding && !parentId ? 'Pilih holding induknya.' : '',
+      !isHolding && !parentId ? 'Pilih induknya.' : '',
       shownCode && !/^[A-Z0-9-]{2,32}$/.test(shownCode) ? 'Kode hanya huruf besar, angka, dan strip.' : '',
     ].filter(Boolean),
     1: [email && !EMAIL_RE.test(email) ? 'Format email perusahaan belum benar.' : ''].filter(Boolean),
@@ -157,7 +164,7 @@ function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClo
       return
     }
     const entity = r.json.entity as { id?: string } | undefined
-    toast.success(`${name} ditambahkan dengan ${drafts.length} akun.`)
+    toast.success(drafts.length ? `${name} ditambahkan dengan ${drafts.length} akun.` : `${name} ditambahkan.`)
     onSaved(entity?.id)
     onClose()
   }
@@ -207,12 +214,13 @@ function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClo
                 <Input id="cw-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. PT Sigma Daya" />
               </Field>
               {!isHolding ? (
-                <Field label="Holding induk" htmlFor="cw-parent" required error={tried[0] && !parentId ? 'Pilih holding induk.' : null}>
+                <Field label="Induk" htmlFor="cw-parent" required hint="Subholding (atau holding) yang membawahi PT ini." error={tried[0] && !parentId ? 'Pilih induknya.' : null}>
                   <select id="cw-parent" className={selectCls} value={parentId} onChange={(e) => setParentId(e.target.value)}>
                     {holdings.length === 0 ? <option value="">Belum ada holding</option> : null}
                     {holdings.map((h) => (
                       <option key={h.id} value={h.id}>
                         {h.name}
+                        {(h.type as string) === 'SUB_HOLDING' ? ' · subholding' : ' · holding'}
                       </option>
                     ))}
                   </select>
@@ -272,7 +280,7 @@ function WizardBody({ holdings, onClose, onSaved }: { holdings: Company[]; onClo
               Posisi & akun pertama
             </SectionTitle>
             <p className="t-footnote text-ink-2">Username dan email dibuat dari nama. Kata sandi awal {DEFAULT_PASSWORD}; pemiliknya wajib menggantinya saat masuk pertama.</p>
-            {drafts.length === 0 ? <p className="mk-note-box bg-fill-1">Tanpa posisi. Akun bisa ditambahkan nanti dari detail perusahaan.</p> : null}
+            {drafts.length === 0 ? <p className="mk-note-box bg-fill-1">Tanpa posisi. PT di bawah subholding tidak butuh akun sendiri: laporannya diisi akun Admin subholding.</p> : null}
             {drafts.map((d, i) => {
               const label = options.find((o) => o.role === d.role)?.label ?? d.role
               return (
