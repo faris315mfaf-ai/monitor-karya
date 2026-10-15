@@ -38,6 +38,8 @@ model Entity {
   updatedAt DateTime @updatedAt
 
   divisions       Division[]
+  shReportsAsSubholding SubholdingReport[] @relation("ShReportSubholding")
+  shReportsAsPt         SubholdingReport[] @relation("ShReportPt")
   projects       Project[]
   dailyReports   DailyProjectReport[]
   weeklyReports  WeeklyDivisionReport[]
@@ -342,6 +344,9 @@ model User {
   outputsReviewed        Output[] @relation("OutputReviewer")
   // [P2-A] relasi catatan proyek / usulan tenggat
   projectNotes           ProjectNote[] @relation("ProjectNoteAuthor")
+  shReportsCreated       SubholdingReport[] @relation("ShReportCreator")
+  shReportsDecided       SubholdingReport[] @relation("ShReportDecider")
+  shReportComments       SubholdingReportComment[] @relation("ShReportCommentAuthor")
   deadlinesProposed      DeadlineProposal[] @relation("DeadlineProposer")
   deadlinesDecided       DeadlineProposal[] @relation("DeadlineDecider")
   // [P2-B] relasi anggota divisi / kehadiran ditambahkan di sini
@@ -1187,4 +1192,62 @@ model IdempotencyKey {
 
   @@unique([userId, key])
   @@index([createdAt])
+}
+
+/// Laporan kegiatan/proyek harian per SUBHOLDING (model 16 Okt 2026, PT BIKE Tbk
+/// superholding): satu akun Admin subholding dipakai bersama banyak pelapor;
+/// supervisor (direksi) menyetujui / meminta perbaikan / berkomentar; hanya
+/// laporan DISETUJUI tampil di Manajemen & Ketua Umum.
+/// Bukti: Evidence targetType 'SUBHOLDING_REPORT', targetId = id laporan.
+model SubholdingReport {
+  id               String   @id @default(cuid())
+  subholdingId     String
+  subholding       Entity   @relation("ShReportSubholding", fields: [subholdingId], references: [id])
+  /// PT pelaksana — harus keturunan subholding (dicek server).
+  ptId             String
+  pt               Entity   @relation("ShReportPt", fields: [ptId], references: [id])
+  /// Hari laporan (00.00 WIB sebagai instan UTC).
+  reportDate       DateTime
+  kegiatan         String
+  deskripsi        String
+  reporterName     String
+  /// MANAJER | KEPALA
+  reporterTitleKind  String
+  /// Bidang jabatan, mis. "Proyek", "Keuangan" → "Manajer Proyek".
+  reporterTitleField String
+  /// MENUNGGU | PERLU_PERBAIKAN | DISETUJUI
+  status           String   @default("MENUNGGU")
+  createdById      String
+  createdBy        User     @relation("ShReportCreator", fields: [createdById], references: [id])
+  submittedAt      DateTime @default(now())
+  decidedById      String?
+  decidedBy        User?    @relation("ShReportDecider", fields: [decidedById], references: [id])
+  decidedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  comments         SubholdingReportComment[]
+
+  @@index([subholdingId, reportDate])
+  @@index([status, reportDate])
+  @@index([ptId])
+  @@index([createdById])
+  @@index([decidedById])
+}
+
+/// Percakapan satu laporan: komentar supervisor/admin dan keputusan.
+model SubholdingReportComment {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     SubholdingReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation("ShReportCommentAuthor", fields: [authorId], references: [id])
+  /// KOMENTAR | PERBAIKAN | SETUJU | BALASAN
+  kind       String   @default("KOMENTAR")
+  body       String
+  /// Kapan pihak lawan (admin untuk pesan supervisor, supervisor untuk balasan admin) membacanya.
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([authorId])
 }
