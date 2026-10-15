@@ -5,42 +5,27 @@
  * (sebelumnya/berikutnya, Esc/tutup, fokus kembali ke pemicu). Dipakai
  * dashboard Superuser & Manajemen dan layar Persetujuan Supervisor.
  *
- * Berkas disimpan privat; tautannya diminta ke GET /api/evidence/:id (URL
- * bertanda tangan, berlaku 5 menit) dan disimpan sebentar di memori supaya
- * thumbnail dan lightbox tidak meminta dua kali.
+ * Berkas disimpan privat; tautannya diminta berkelompok ke
+ * POST /api/evidence/signed (cadangan GET /api/evidence/:id; URL bertanda
+ * tangan berlaku 5 menit) dan disimpan sebentar di memori supaya thumbnail,
+ * pop-up rincian, dan lightbox tidak meminta dua kali.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Button, Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { isImageMime, keyDelta, positionLabel, stepIndex, type OverviewEvidence } from './logic'
+import { createSignedFetcher } from './detail-logic'
 
 /* ---------- URL bertanda tangan ---------- */
 
-type Signed = { url: string; kind: 'file' | 'link'; until: number }
-const cache = new Map<string, Signed>()
-const pending = new Map<string, Promise<Signed | null>>()
-/** Sisakan 30 detik sebelum kedaluwarsa agar gambar tidak gagal di tengah jalan. */
-const TTL_MS = 270_000
-
-function fetchSigned(id: string): Promise<Signed | null> {
-  const hit = cache.get(id)
-  if (hit && hit.until > Date.now()) return Promise.resolve(hit)
-  const inflight = pending.get(id)
-  if (inflight) return inflight
-  const p = fetch(`/api/evidence/${encodeURIComponent(id)}`)
-    .then(async (r) => {
-      const j = (await r.json().catch(() => ({}))) as { url?: string; kind?: 'file' | 'link' }
-      if (!r.ok || !j.url) return null
-      const s: Signed = { url: j.url, kind: j.kind === 'link' ? 'link' : 'file', until: Date.now() + TTL_MS }
-      cache.set(id, s)
-      return s
-    })
-    .catch(() => null)
-    .finally(() => pending.delete(id))
-  pending.set(id, p)
-  return p
-}
+/**
+ * Satu pengambil untuk seluruh aplikasi: permintaan dari banyak thumbnail
+ * dalam satu tick digabung ke POST /api/evidence/signed (≤60 id per kiriman),
+ * dengan cadangan GET /api/evidence/:id bila endpoint itu belum tersedia.
+ * Header JSON cukup — perlindungan CSRF memeriksa Origin di proxy.
+ */
+const signed = createSignedFetcher({ fetch: (input, init) => fetch(input, init) })
 
 type SignedState = { id: string; url: string | null; kind: 'file' | 'link' | null; failed: boolean }
 
@@ -50,7 +35,7 @@ export function useSignedUrl(id: string | null, enabled = true) {
   useEffect(() => {
     if (!id || !enabled) return
     let alive = true
-    fetchSigned(id).then((s) => {
+    signed.get(id).then((s) => {
       if (alive) setState({ id, url: s?.url ?? null, kind: s?.kind ?? null, failed: !s })
     })
     return () => {
@@ -63,31 +48,50 @@ export function useSignedUrl(id: string | null, enabled = true) {
 
 /* ---------- Thumbnail ---------- */
 
+export type ThumbSize = 'sm' | 'md' | 'stack' | 'strip'
+
+const THUMB_BOX: Record<ThumbSize, string> = {
+  sm: 'h-12 w-16 rounded-[var(--radius-sm)]',
+  md: 'aspect-[4/3] w-full rounded-[var(--radius-sm)]',
+  stack: 'h-16 w-16 rounded-[var(--radius-md)]',
+  strip: 'h-14 w-[76px] rounded-[var(--radius-sm)]',
+}
+
+/**
+ * Thumbnail bukti. `stack` (64×64) untuk tumpukan di baris laporan — cincin
+ * pemisah diberikan pemanggil lewat `className`; `strip` (76×56) untuk deretan
+ * pilih foto di pop-up rincian, dengan `pressed` sebagai `aria-pressed`.
+ */
 export function EvidenceThumb({
   item,
   size = 'md',
   onOpen,
   label,
+  className,
+  pressed,
 }: {
   item: OverviewEvidence
-  size?: 'sm' | 'md'
+  size?: ThumbSize
   onOpen: () => void
   label: string
+  className?: string
+  pressed?: boolean
 }) {
   const image = isImageMime(item.mime)
   const { url, failed, loading } = useSignedUrl(item.id, image)
   const [broken, setBroken] = useState(false)
-  const box = size === 'sm' ? 'h-12 w-16' : 'aspect-[4/3] w-full'
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={label}
+      aria-pressed={pressed}
       title={item.fileName}
       className={cx(
-        'relative shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-fill-1 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]',
+        'relative shrink-0 overflow-hidden bg-fill-1 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]',
         'flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]',
-        box
+        THUMB_BOX[size],
+        className
       )}
     >
       {image && url && !failed && !broken ? (
@@ -96,7 +100,7 @@ export function EvidenceThumb({
         <Skeleton h="100%" r={0} className="absolute inset-0" />
       ) : (
         <>
-          <Icon name="dokumen" size={size === 'sm' ? 18 : 24} />
+          <Icon name="dokumen" size={size === 'md' ? 24 : size === 'sm' ? 18 : 20} />
           {size === 'md' ? <span className="t-caption max-w-full truncate px-2">{item.fileName}</span> : null}
         </>
       )}
@@ -121,6 +125,9 @@ export function EvidenceLightbox({ state, onChange }: { state: LightboxState; on
   const go = (delta: number) => {
     if (state && items.length > 1) onChange({ ...state, index: stepIndex(index, delta, items.length) })
   }
+  // Pemicu bisa berada di dialog lain (pop-up rincian). Radix tidak mengembalikan
+  // fokus ke sana karena kedua dialog bersaudara, jadi pemicu dicatat sendiri.
+  const returnTo = useRef<HTMLElement | null>(null)
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(o) => !o && onChange(null)}>
@@ -128,6 +135,17 @@ export function EvidenceLightbox({ state, onChange }: { state: LightboxState; on
         <DialogPrimitive.Overlay className="mk-scrim" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+          }}
+          onCloseAutoFocus={(e) => {
+            const el = returnTo.current
+            returnTo.current = null
+            if (el && el.isConnected) {
+              e.preventDefault()
+              el.focus()
+            }
+          }}
           onKeyDown={(e) => {
             const d = keyDelta(e.key)
             if (d) {

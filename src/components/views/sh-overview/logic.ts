@@ -4,7 +4,8 @@
  * dan navigasi lightbox bukti. Tanpa React supaya bisa diuji di Node.
  */
 
-export type OverviewEvidence = { id: string; fileName: string; mime: string | null }
+/** Bukti laporan. `kind` dari API: 'file' (berkas di penyimpanan) atau 'link' (tautan lama). */
+export type OverviewEvidence = { id: string; fileName: string; mime: string | null; kind?: 'file' | 'link' }
 
 export type OverviewReport = {
   id: string
@@ -67,25 +68,10 @@ export function normalizePts(pts: OverviewPt[]): OverviewPt[] {
   return groupByPt(pts.flatMap((p) => p.reports.map((r) => ({ ...r, ptId: p.id, ptName: p.name }))))
 }
 
-/** Kalimat ringkasan kartu: "3 laporan · 2 PT" atau "Belum ada laporan". */
-export function summaryLabel(sh: Pick<OverviewSubholding, 'count' | 'ptCount' | 'pts'>): string {
-  const pts = normalizePts(sh.pts ?? [])
-  const count = Math.max(sh.count ?? 0, pts.reduce((n, p) => n + p.reports.length, 0))
-  const ptCount = Math.max(sh.ptCount ?? 0, pts.length)
-  if (count === 0) return 'Belum ada laporan'
-  return `${count} laporan · ${ptCount} PT`
-}
-
 /** Huruf inisial kartu subholding: kata pertama setelah "PT"/"Subholding". */
 export function initialOf(name: string): string {
   const words = name.replace(/^(PT\.?|Sub-?holding)\s+/i, '').trim().split(/\s+/)
   return (words[0]?.[0] ?? 'S').toUpperCase()
-}
-
-/** Kartu yang terbuka bawaan: tetap pilihan sebelumnya bila masih ada, selain itu subholding pertama yang berisi. */
-export function defaultOpen(list: OverviewSubholding[], previous: string | null): string | null {
-  if (previous && list.some((s) => s.id === previous)) return previous
-  return list.find((s) => (s.count ?? 0) > 0)?.id ?? null
 }
 
 /* ---------- Bukti & lightbox ---------- */
@@ -111,4 +97,148 @@ export function keyDelta(key: string): -1 | 0 | 1 {
   if (key === 'ArrowLeft' || key === 'PageUp') return -1
   if (key === 'ArrowRight' || key === 'PageDown') return 1
   return 0
+}
+
+/** Teks di atas foto besar pop-up rincian, mis. "Foto 1 dari 3" (kosong bila tanpa foto). */
+export function heroLabel(index: number, length: number): string {
+  if (length <= 0) return ''
+  return `Foto ${positionLabel(index, length)}`
+}
+
+/**
+ * Foto = bukti bergambar yang berupa berkas. Tautan lama (`kind: 'link'`)
+ * tidak pernah dianggap foto walau mime-nya gambar: alamatnya dari luar dan
+ * tidak lewat URL bertanda tangan, jadi ditampilkan sebagai dokumen.
+ */
+function isPhoto(e: OverviewEvidence): boolean {
+  return e.kind !== 'link' && isImageMime(e.mime)
+}
+
+/** Bukti bergambar saja (urutan dipertahankan) — isi lightbox & tumpukan foto. */
+export function photosOf(evidence: OverviewEvidence[] | null | undefined): OverviewEvidence[] {
+  return (evidence ?? []).filter(isPhoto)
+}
+
+/** Bukti bukan gambar (PDF, dokumen, tautan) — ditampilkan sebagai baris dokumen. */
+export function docsOf(evidence: OverviewEvidence[] | null | undefined): OverviewEvidence[] {
+  return (evidence ?? []).filter((e) => !isPhoto(e))
+}
+
+/** Tumpukan miniatur di baris laporan: maksimal `max` foto, sisanya jadi "+n". */
+export function thumbStack(
+  evidence: OverviewEvidence[] | null | undefined,
+  max = 3,
+): { shown: OverviewEvidence[]; more: number } {
+  const photos = photosOf(evidence)
+  const limit = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 0
+  const shown = photos.slice(0, limit)
+  return { shown, more: photos.length - shown.length }
+}
+
+/* ---------- Kartu subholding ---------- */
+
+export type Tone = 1 | 2 | 3 | 4 | 5 | 6
+
+/**
+ * Nada warna stabil dari id (FNV-1a 32-bit atas unit UTF-16) → 1..6.
+ * Id yang sama selalu bernada sama di setiap muat ulang dan perangkat.
+ */
+export function toneOf(id: string): Tone {
+  let h = 0x811c9dc5
+  const s = id ?? ''
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (((h >>> 0) % 6) + 1) as Tone
+}
+
+/** Variabel warna nada: teks/ikon `fg` dan latar lembut `bg` dari token `--data-n`. */
+export function toneVars(tone: Tone): { fg: string; bg: string } {
+  const n = tone >= 1 && tone <= 6 ? Math.floor(tone) : 1
+  return {
+    fg: `var(--data-${n})`,
+    bg: `color-mix(in srgb, var(--data-${n}) 18%, transparent)`,
+  }
+}
+
+/** Singkatan bentuk badan usaha dengan ejaan baku. */
+const ACRONYMS: Record<string, string> = {
+  PT: 'PT',
+  CV: 'CV',
+  UD: 'UD',
+  TBK: 'Tbk',
+  PERSERO: 'Persero',
+  BUMN: 'BUMN',
+  BUMD: 'BUMD',
+}
+
+const ROMAN = /^(?=[IVX])X{0,3}(IX|IV|V?I{0,3})$/
+
+function caseWord(word: string): string {
+  const upper = word.toUpperCase()
+  if (ACRONYMS[upper]) return ACRONYMS[upper]
+  if (/\p{N}/u.test(word)) return word // mengandung angka: biarkan
+  if (ROMAN.test(upper)) return upper // II, III, IV, XI
+  const letters = Array.from(word)
+  if (letters.length <= 3 && !/[AEIOU]/i.test(word)) return upper // BPR, KSP
+  const [first, ...rest] = letters
+  return first.toUpperCase() + rest.join('').toLowerCase()
+}
+
+/**
+ * Nama tampilan: nama yang seluruh hurufnya kapital ("PT ANUGERAH JAYA TBK")
+ * dijadikan title case ("PT Anugerah Jaya Tbk"); singkatan badan usaha,
+ * angka romawi, dan singkatan ≤3 huruf tanpa vokal tetap kapital. Nama yang
+ * sudah campuran dibiarkan. Spasi dirapikan.
+ */
+export function displayName(name: string): string {
+  const s = (name ?? '').trim().replace(/\s+/g, ' ')
+  if (!/\p{Lu}/u.test(s) || /\p{Ll}/u.test(s)) return s
+  // Setiap rangkaian huruf/angka dikapitalisasi sendiri, jadi tanda hubung,
+  // garis miring, titik, dan kurung menjadi batas kata. Apostrof tetap di dalam kata.
+  return s.replace(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu, caseWord)
+}
+
+/** Label kartu: nama tampilan tanpa awalan "Subholding " (tetap utuh bila sisanya kosong). */
+export function subholdingLabel(name: string): string {
+  const full = displayName(name)
+  const short = full.replace(/^sub-?holding\s+/i, '').trim()
+  return short || full
+}
+
+function reportTotal(pts: OverviewPt[]): number {
+  return pts.reduce((n, p) => n + p.reports.length, 0)
+}
+
+/**
+ * Keterangan kartu: "3 laporan · 2 PT". Jumlah laporan memakai isi PT bila
+ * hitungan API tertinggal; PT = PT yang punya laporan (hitungan API dipakai
+ * bila rincian PT belum dimuat).
+ */
+export function cardMeta(sh: Pick<OverviewSubholding, 'count' | 'ptCount' | 'pts'>): string {
+  const pts = normalizePts(sh.pts ?? [])
+  const count = Math.max(sh.count ?? 0, reportTotal(pts))
+  if (count <= 0) return 'Belum ada laporan disetujui'
+  const ptCount = pts.length > 0 ? pts.length : Math.max(sh.ptCount ?? 0, 0)
+  return ptCount > 0 ? `${count} laporan · ${ptCount} PT` : `${count} laporan`
+}
+
+/** Pisahkan subholding berisi dan kosong; urutan masuk dipertahankan di keduanya. */
+export function splitSubholdings(list: OverviewSubholding[] | null | undefined): {
+  filled: OverviewSubholding[]
+  empty: OverviewSubholding[]
+} {
+  const filled: OverviewSubholding[] = []
+  const empty: OverviewSubholding[] = []
+  for (const sh of list ?? []) {
+    const has = (sh.count ?? 0) > 0 || reportTotal(sh.pts ?? []) > 0
+    ;(has ? filled : empty).push(sh)
+  }
+  return { filled, empty }
+}
+
+/** Id jangkar DOM kartu subholding (untuk lompat dari ringkasan). */
+export function anchorId(id: string): string {
+  return `sh-${id}`
 }

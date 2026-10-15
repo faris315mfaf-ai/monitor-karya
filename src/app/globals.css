@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Dokumentasi & laporan agen bukan kode UI: teks seperti contoh kelas
+   sembarang di sana pernah menghasilkan CSS rusak (15 Okt 2026). */
+@source not "../../docs";
+@source not "../../android";
+
 /* Sumber kebenaran visual: design-system/ (lihat DESIGN.md). Token dulu, lalu
    gaya komponen mk-…; keduanya tanpa layer sehingga menang atas utilitas lama. */
 @import "../../design-system/tokens.css";
