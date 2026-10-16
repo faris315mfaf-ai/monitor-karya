@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
  */
 
 import {
-  decisionGate, friendlyError, letterCount, nextAfterDecision, resolveSelected, shouldReload, totalWaiting,
+  HIGHLIGHT_NOTE_MAX, approveConsequence, approveLabel, decisionBody, decisionGate, friendlyError, highlightNoteCheck, isHighlighted,
+  letterCount, nextAfterDecision, resolveSelected, shouldReload, totalWaiting,
 } from '@/components/views/sh-review/logic'
 
 const base = { status: 'MENUNGGU' as const, note: '', evidenceCount: 2, busy: false }
@@ -80,5 +81,69 @@ describe('galat ramah', () => {
   })
   it('jumlah menunggu chip "Semua subholding"', () => {
     expect(totalWaiting([{ id: 'a', name: 'A', waiting: 2 }, { id: 'b', name: 'B', waiting: 3 }])).toBe(5)
+  })
+})
+
+describe('sorotan untuk manajemen', () => {
+  it('angka tidak dihitung sebagai huruf (sama dengan server)', () => {
+    expect(letterCount('12345')).toBe(0)
+    expect(letterCount('Ruas é 2')).toBe(5)
+  })
+  it('catatan sorotan wajib minimal 5 huruf', () => {
+    expect(highlightNoteCheck('').ok).toBe(false)
+    expect(highlightNoteCheck('abcd').hint).toMatch(/minimal 5 huruf/)
+    expect(highlightNoteCheck('12345 !!').ok).toBe(false)
+    expect(highlightNoteCheck('  abcde  ').ok).toBe(true)
+  })
+  it('maksimal 280 karakter setelah spasi tepi dibuang, dengan penghitung', () => {
+    const pas = 'a'.repeat(HIGHLIGHT_NOTE_MAX)
+    expect(highlightNoteCheck(`  ${pas}  `)).toMatchObject({ ok: true, length: 280, remaining: 0, counter: '280/280', tone: 'near' })
+    const lebih = highlightNoteCheck('a'.repeat(283))
+    expect(lebih).toMatchObject({ ok: false, remaining: -3, tone: 'over' })
+    expect(lebih.hint).toMatch(/Persingkat 3 karakter/)
+    expect(highlightNoteCheck('abcde').tone).toBe('normal')
+    expect(highlightNoteCheck('abcde').counter).toBe('5/280')
+  })
+  it('sakelar aktif: setujui menunggu catatan sah; sakelar mati: catatan diabaikan', () => {
+    expect(decisionGate({ ...base, highlight: true, highlightNote: 'ab' })).toMatchObject({ canApprove: false, approveHint: null })
+    expect(decisionGate({ ...base, highlight: true, highlightNote: 'ab' }).highlightHint).toMatch(/minimal 5 huruf/)
+    expect(decisionGate({ ...base, highlight: true, highlightNote: 'Risiko mundur seminggu' }).canApprove).toBe(true)
+    expect(decisionGate({ ...base, highlight: false, highlightNote: '' })).toMatchObject({ canApprove: true, highlightHint: null })
+  })
+  it('sorotan tidak memengaruhi minta perbaikan dan tidak berlaku setelah diputuskan', () => {
+    expect(decisionGate({ ...base, note: 'tolong lengkapi', highlight: true, highlightNote: '' }).canRevise).toBe(true)
+    expect(decisionGate({ ...base, status: 'DISETUJUI', highlight: true, highlightNote: '' }).highlightHint).toBeNull()
+  })
+  it('bukti kosong tetap menjadi penjelas utama tombol setujui', () => {
+    const g = decisionGate({ ...base, evidenceCount: 0, highlight: true, highlightNote: '' })
+    expect(g.canApprove).toBe(false)
+    expect(g.approveHint).toMatch(/tanpa bukti/)
+  })
+  it('label tombol dan teks akibat mengikuti sakelar', () => {
+    expect(approveLabel(true)).toBe('Setujui & sorot')
+    expect(approveLabel(false)).toBe('Setujui')
+    expect(approveConsequence(true)).toMatch(/Sorotan manajemen/)
+    expect(approveConsequence(false)).toMatch(/daftar biasa/)
+  })
+  it('isi permintaan setujui selalu menyebut highlight; catatan hanya bila aktif', () => {
+    expect(decisionBody('approve', { note: '', highlight: false, highlightNote: 'abaikan' })).toEqual({ action: 'approve', highlight: false })
+    expect(decisionBody('approve', { note: ' oke ', highlight: true, highlightNote: '  Risiko mundur  ' })).toEqual({
+      action: 'approve',
+      note: 'oke',
+      highlight: true,
+      highlightNote: 'Risiko mundur',
+    })
+  })
+  it('minta perbaikan tidak pernah membawa sorotan', () => {
+    expect(decisionBody('revise', { note: ' perbaiki foto ', highlight: true, highlightNote: 'abcde' })).toEqual({
+      action: 'revise',
+      note: 'perbaiki foto',
+    })
+  })
+  it('lencana Sorotan hanya untuk laporan disetujui yang ditandai', () => {
+    expect(isHighlighted({ status: 'DISETUJUI', highlight: true })).toBe(true)
+    expect(isHighlighted({ status: 'DISETUJUI', highlight: false })).toBe(false)
+    expect(isHighlighted({ status: 'DISETUJUI' })).toBe(false)
+    expect(isHighlighted({ status: 'MENUNGGU', highlight: true })).toBe(false)
   })
 })

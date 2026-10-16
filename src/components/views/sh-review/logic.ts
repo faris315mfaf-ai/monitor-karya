@@ -42,6 +42,9 @@ export type ShReport = {
   comments: ShComment[]
   canEdit?: boolean
   canWithdraw?: boolean
+  /** Sorotan untuk manajemen (diisi supervisor saat menyetujui). */
+  highlight?: boolean
+  highlightNote?: string | null
 }
 
 export type ReviewData = {
@@ -73,9 +76,63 @@ export const COMMENT_KIND_LABEL: Record<string, string> = {
 /** Minimal huruf komentar untuk "Minta perbaikan" (sama dengan API). */
 export const MIN_REVISE_LETTERS = 5
 
-/** Jumlah huruf/angka bermakna (spasi & tanda baca tidak dihitung). */
+/** Jumlah huruf (semua aksara) — sama dengan `letterCount` server; spasi, angka & tanda baca tidak dihitung. */
 export function letterCount(text: string): number {
-  return (text.match(/[\p{L}\p{N}]/gu) ?? []).length
+  return (text.match(/\p{L}/gu) ?? []).length
+}
+
+/** Catatan sorotan untuk manajemen: minimal sekian huruf, maksimal sekian karakter (sama dengan API). */
+export const HIGHLIGHT_NOTE_MIN_LETTERS = 5
+export const HIGHLIGHT_NOTE_MAX = 280
+
+export type HighlightNoteCheck = {
+  ok: boolean
+  /** Panjang setelah dirapikan (yang dihitung server terhadap batas maksimum). */
+  length: number
+  letters: number
+  /** Sisa karakter sebelum batas; negatif bila kelebihan. */
+  remaining: number
+  /** Penghitung "n/280". */
+  counter: string
+  /** Nada penghitung: biasa, hampir penuh (≤20 sisa), atau kelebihan. */
+  tone: 'normal' | 'near' | 'over'
+  /** Kalimat penjelas bila belum sah (null = sah). */
+  hint: string | null
+}
+
+/** Validasi catatan sorotan: ≥5 huruf dan ≤280 karakter setelah spasi tepi dibuang. */
+export function highlightNoteCheck(note: string): HighlightNoteCheck {
+  const clean = note.trim()
+  const length = clean.length
+  const letters = letterCount(clean)
+  const remaining = HIGHLIGHT_NOTE_MAX - length
+  const hint =
+    letters < HIGHLIGHT_NOTE_MIN_LETTERS
+      ? `Tulis catatan untuk manajemen minimal ${HIGHLIGHT_NOTE_MIN_LETTERS} huruf.`
+      : remaining < 0
+        ? `Catatan untuk manajemen maksimal ${HIGHLIGHT_NOTE_MAX} karakter. Persingkat ${-remaining} karakter lagi.`
+        : null
+  return {
+    ok: hint === null,
+    length,
+    letters,
+    remaining,
+    counter: `${length}/${HIGHLIGHT_NOTE_MAX}`,
+    tone: remaining < 0 ? 'over' : remaining <= 20 ? 'near' : 'normal',
+    hint,
+  }
+}
+
+/** Label tombol setujui sesuai sakelar sorotan. */
+export function approveLabel(highlight: boolean): string {
+  return highlight ? 'Setujui & sorot' : 'Setujui'
+}
+
+/** Teks kecil di bawah tombol: akibat menyetujui bagi dashboard manajemen. */
+export function approveConsequence(highlight: boolean): string {
+  return highlight
+    ? 'Laporan tampil di Sorotan manajemen setelah disetujui'
+    : 'Laporan tampil di daftar biasa manajemen'
 }
 
 export type DecisionAction = 'comment' | 'revise' | 'approve'
@@ -85,18 +142,29 @@ export type DecisionGate = {
   decidable: boolean
   canComment: boolean
   canRevise: boolean
+  /** Setujui sah: ada bukti, tidak sibuk, dan catatan sorotan sah bila sakelar aktif. */
   canApprove: boolean
   /** Kalimat penjelas kenapa tombol tidak bisa dipakai (null = bisa). */
   reviseHint: string | null
   approveHint: string | null
+  /** Penjelas catatan sorotan yang belum sah (null = sah atau sakelar mati). */
+  highlightHint: string | null
 }
 
 /**
  * Gerbang tombol: keputusan hanya untuk laporan MENUNGGU; minta perbaikan
- * wajib komentar ≥5 huruf; setujui wajib ≥1 bukti; komentar saja wajib isi.
+ * wajib komentar ≥5 huruf; setujui wajib ≥1 bukti, dan bila ditandai untuk
+ * manajemen wajib catatan sorotan 5–280; komentar saja wajib isi.
  * Selama satu permintaan berjalan, semua tombol dikunci.
  */
-export function decisionGate(input: { status: ShStatus; note: string; evidenceCount: number; busy: boolean }): DecisionGate {
+export function decisionGate(input: {
+  status: ShStatus
+  note: string
+  evidenceCount: number
+  busy: boolean
+  highlight?: boolean
+  highlightNote?: string
+}): DecisionGate {
   const decidable = input.status === 'MENUNGGU'
   const letters = letterCount(input.note)
   const reviseHint = !decidable
@@ -109,14 +177,42 @@ export function decisionGate(input: { status: ShStatus; note: string; evidenceCo
     : input.evidenceCount < 1
       ? 'Laporan tanpa bukti belum bisa disetujui. Minta perbaikan agar admin melampirkan bukti.'
       : null
+  const highlightHint = decidable && input.highlight ? highlightNoteCheck(input.highlightNote ?? '').hint : null
   return {
     decidable,
     canComment: !input.busy && input.note.trim().length > 0,
     canRevise: !input.busy && reviseHint === null,
-    canApprove: !input.busy && approveHint === null,
+    canApprove: !input.busy && approveHint === null && highlightHint === null,
     reviseHint,
     approveHint,
+    highlightHint,
   }
+}
+
+export type DecisionBody =
+  | { action: 'revise'; note?: string }
+  | { action: 'approve'; note?: string; highlight: boolean; highlightNote?: string }
+
+/**
+ * Isi POST /api/sh/reports/:id/decision. Minta perbaikan tidak pernah membawa
+ * sorotan; setujui selalu menyebut `highlight`, dan `highlightNote` hanya bila aktif.
+ */
+export function decisionBody(
+  action: 'revise' | 'approve',
+  input: { note: string; highlight?: boolean; highlightNote?: string }
+): DecisionBody {
+  const note = input.note.trim()
+  const withNote = note ? { note } : {}
+  if (action === 'revise') return { action, ...withNote }
+  const highlight = input.highlight === true
+  return highlight
+    ? { action, ...withNote, highlight, highlightNote: (input.highlightNote ?? '').trim() }
+    : { action, ...withNote, highlight }
+}
+
+/** Laporan disetujui yang ditandai sorotan (lencana bintang + catatan). */
+export function isHighlighted(r: Pick<ShReport, 'status' | 'highlight'>): boolean {
+  return r.status === 'DISETUJUI' && r.highlight === true
 }
 
 /**

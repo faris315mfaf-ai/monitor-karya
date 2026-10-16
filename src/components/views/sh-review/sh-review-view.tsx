@@ -10,32 +10,39 @@
  * komentar + "Kirim komentar saja" / "Minta perbaikan" (wajib ≥5 huruf) /
  * "Setujui" (wajib ≥1 bukti). Setelah keputusan pindah ke laporan berikutnya.
  *
+ * Sorotan (kontrak manajemen 16 Okt, papan Lapis-Supervisor-Ponsel): sakelar
+ * "Tandai untuk manajemen" + catatan wajib 5–280 → tombol "Setujui & sorot";
+ * laporan disetujui yang disorot memakai lencana bintang "Sorotan" + catatan.
+ * Di ponsel tombol keputusan menempel di bawah layar (di atas tab bar & area aman).
+ *
  * Data: GET /api/sh/review, POST /api/sh/reports/:id/comments,
  * POST /api/sh/reports/:id/decision.
  */
 
 import { useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
 import { refreshNavBadges } from '@/components/pic/nav-badges'
 import {
   Button, Card, Chip, EmptyNote, ErrorNote, PageHeader, SegmentedControl, Skeleton, StatusBadge, cx, useIsPhone, useIsTablet,
 } from '@/components/mk'
-import { Textarea } from '@/components/mk/forms'
+import { Switch, Textarea } from '@/components/mk/forms'
 import { formatDateTime, formatRelative } from '@/lib/format'
 import { EvidenceLightbox, EvidenceThumb, type LightboxState } from '../sh-overview/evidence'
 import {
-  COMMENT_KIND_LABEL, STATUS_META, STATUS_TABS, decisionGate, friendlyError, nextAfterDecision, resolveSelected, shouldReload,
+  COMMENT_KIND_LABEL, HIGHLIGHT_NOTE_MAX, HIGHLIGHT_NOTE_MIN_LETTERS, STATUS_META, STATUS_TABS, approveConsequence, approveLabel,
+  decisionBody, decisionGate, friendlyError, highlightNoteCheck, isHighlighted, nextAfterDecision, resolveSelected, shouldReload,
   totalWaiting, type DecisionAction, type ReviewData, type ShReport, type ShStatus,
 } from './logic'
 
 const ALL = 'ALL'
 
-async function post(url: string, body: unknown): Promise<{ ok: boolean; status: number; error?: string }> {
+async function post(url: string, body: unknown): Promise<{ ok: boolean; status: number; error?: string; field?: string }> {
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const json = (await res.json().catch(() => ({}))) as { error?: string }
-    return { ok: res.ok, status: res.status, error: json.error }
+    const json = (await res.json().catch(() => ({}))) as { error?: string; field?: string }
+    return { ok: res.ok, status: res.status, error: json.error, field: json.field }
   } catch {
     return { ok: false, status: 0 }
   }
@@ -199,11 +206,34 @@ function QueueRow({ r, active, onOpen }: { r: ShReport; active: boolean; onOpen:
           </StatusBadge>
         </span>
       </span>
-      <span className="t-body-strong text-ink">{r.kegiatan}</span>
+      <span className="flex w-full items-start gap-2">
+        <span className="min-w-0 flex-1 t-body-strong text-ink">{r.kegiatan}</span>
+        {isHighlighted(r) ? <HighlightBadge /> : null}
+      </span>
       <span className="t-footnote text-ink-2">
         {r.reporterName} · {r.reporterTitle} · {r.evidenceCount} bukti
       </span>
     </button>
+  )
+}
+
+
+/** Bintang sorotan (ikon set mk belum punya bintang). Dekoratif: selalu bersama kata. */
+function StarIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" className="flex-none">
+      <path d="M12 2.8l2.84 5.76 6.36.92-4.6 4.49 1.08 6.33L12 17.31l-5.68 2.99 1.08-6.33-4.6-4.49 6.36-.92L12 2.8z" />
+    </svg>
+  )
+}
+
+/** Lencana "Sorotan": warna waspada + bintang + kata. */
+function HighlightBadge() {
+  return (
+    <span className="inline-flex min-h-6 items-center gap-1 rounded-full bg-waspada-soft px-2 t-caption font-semibold text-waspada">
+      <StarIcon size={12} />
+      Sorotan
+    </span>
   )
 }
 
@@ -219,13 +249,37 @@ function ReportDetail({
   onStale: () => void
 }) {
   const [note, setNote] = useState('')
+  const [highlight, setHighlight] = useState(false)
+  const [highlightNote, setHighlightNote] = useState('')
   const [busy, setBusy] = useState<DecisionAction | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [hlErr, setHlErr] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<LightboxState>(null)
   const noteRef = useRef<HTMLTextAreaElement>(null)
+  const hlRef = useRef<HTMLTextAreaElement>(null)
+  const isPhone = useIsPhone()
+  const reduce = useReducedMotion()
   const meta = STATUS_META[r.status] ?? STATUS_META.MENUNGGU
   const evidenceCount = Math.max(r.evidenceCount ?? 0, r.evidence?.length ?? 0)
-  const gate = decisionGate({ status: r.status, note, evidenceCount, busy: busy !== null })
+  const gate = decisionGate({ status: r.status, note, evidenceCount, busy: busy !== null, highlight, highlightNote })
+  const hl = highlightNoteCheck(highlightNote)
+  const highlighted = isHighlighted(r)
+  const ids = {
+    note: `sh-note-${r.id}`,
+    noteErr: `sh-note-err-${r.id}`,
+    hlSwitch: `sh-hl-${r.id}`,
+    hlDesc: `sh-hl-desc-${r.id}`,
+    hlNote: `sh-hl-note-${r.id}`,
+    hlCount: `sh-hl-count-${r.id}`,
+    hlErr: `sh-hl-err-${r.id}`,
+    consequence: `sh-approve-hint-${r.id}`,
+  }
+
+  function toggleHighlight(on: boolean) {
+    setHighlight(on)
+    setHlErr(null)
+    if (on) requestAnimationFrame(() => hlRef.current?.focus({ preventScroll: true }))
+  }
 
   async function act(action: DecisionAction) {
     if (action === 'revise' && !gate.canRevise) {
@@ -234,7 +288,11 @@ function ReportDetail({
       return
     }
     if (action === 'approve' && !gate.canApprove) {
-      setErr(gate.approveHint)
+      if (gate.approveHint) setErr(gate.approveHint)
+      else if (gate.highlightHint) {
+        setHlErr(gate.highlightHint)
+        hlRef.current?.focus()
+      }
       return
     }
     if (action === 'comment' && !gate.canComment) {
@@ -244,18 +302,22 @@ function ReportDetail({
     }
     setBusy(action)
     setErr(null)
-    const text = note.trim()
+    setHlErr(null)
+    const sorot = action === 'approve' && highlight
     const res =
       action === 'comment'
-        ? await post(`/api/sh/reports/${encodeURIComponent(r.id)}/comments`, { body: text })
-        : await post(`/api/sh/reports/${encodeURIComponent(r.id)}/decision`, {
-            action,
-            ...(text ? { note: text } : {}),
-          })
+        ? await post(`/api/sh/reports/${encodeURIComponent(r.id)}/comments`, { body: note.trim() })
+        : await post(
+            `/api/sh/reports/${encodeURIComponent(r.id)}/decision`,
+            decisionBody(action, { note, highlight, highlightNote })
+          )
     setBusy(null)
     if (!res.ok) {
       const msg = friendlyError(res.status, res.error, action)
-      setErr(msg)
+      if (res.status === 422 && res.field === 'highlightNote') {
+        setHlErr(msg)
+        hlRef.current?.focus()
+      } else setErr(msg)
       if (shouldReload(res.status)) {
         toast.error(msg)
         onStale()
@@ -268,12 +330,41 @@ function ReportDetail({
       onCommented()
       return
     }
-    toast.success(action === 'approve' ? `Disetujui: ${r.kegiatan}` : `Perbaikan diminta: ${r.kegiatan}`, {
-      description: action === 'approve' ? 'Laporan tampil di dashboard Superuser & Manajemen.' : 'Admin subholding menerima komentar Anda.',
+    toast.success(action === 'approve' ? `${sorot ? 'Disetujui & disorot' : 'Disetujui'}: ${r.kegiatan}` : `Perbaikan diminta: ${r.kegiatan}`, {
+      description:
+        action === 'approve'
+          ? sorot
+            ? 'Laporan tampil di Sorotan dashboard Superuser & Manajemen.'
+            : 'Laporan tampil di dashboard Superuser & Manajemen.'
+          : 'Admin subholding menerima komentar Anda.',
     })
     refreshNavBadges()
     onDecided(r.id)
   }
+
+  const reviseBtn = (cls?: string) => (
+    <Button variant="destructive" icon={isPhone ? undefined : 'ubah'} size={isPhone ? 'lg' : 'md'} className={cls} onClick={() => void act('revise')} disabled={busy !== null}>
+      {busy === 'revise' ? 'Mengirim…' : 'Minta perbaikan'}
+    </Button>
+  )
+  const approveBtn = (cls?: string) => (
+    <Button
+      variant="primary"
+      icon={isPhone ? undefined : 'selesai'}
+      size={isPhone ? 'lg' : 'md'}
+      className={cls}
+      onClick={() => void act('approve')}
+      disabled={busy !== null || gate.approveHint !== null}
+      aria-describedby={ids.consequence}
+    >
+      {busy === 'approve' ? 'Menyetujui…' : approveLabel(highlight)}
+    </Button>
+  )
+  const consequence = (cls?: string) => (
+    <p id={ids.consequence} className={cx('t-caption text-ink-2', cls)}>
+      {approveConsequence(highlight)}
+    </p>
+  )
 
   return (
     <Card>
@@ -283,11 +374,22 @@ function ReportDetail({
           <StatusBadge status={meta.status} size="sm">
             {meta.label}
           </StatusBadge>
+          {highlighted ? <HighlightBadge /> : null}
           <span className="t-footnote text-ink-2">
             Dikirim {formatDateTime(r.submittedAt)} oleh akun admin {r.subholdingName}
           </span>
         </div>
         <h2 className="t-title-2 text-ink">{r.kegiatan}</h2>
+
+        {highlighted && r.highlightNote ? (
+          <div className="flex flex-col gap-1 rounded-[var(--radius-md)] bg-waspada-soft px-3.5 py-3">
+            <span className="inline-flex items-center gap-1.5 t-caption font-semibold text-waspada">
+              <StarIcon size={12} />
+              Catatan untuk manajemen
+            </span>
+            <p className="t-body text-ink whitespace-pre-line break-words">{r.highlightNote}</p>
+          </div>
+        ) : null}
 
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
@@ -344,14 +446,92 @@ function ReportDetail({
         </div>
 
         <div className="flex flex-col gap-2.5 border-t border-[var(--line)] pt-4">
-          <label htmlFor={`sh-note-${r.id}`} className="t-body-strong text-ink">
+          {gate.decidable ? (
+            <section
+              aria-label="Tandai untuk manajemen"
+              className="flex flex-col rounded-[var(--radius-lg)] bg-surface-2 px-3.5 py-3 ring-1 ring-[var(--line)]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-auto flex-col gap-0.5">
+                  <label htmlFor={ids.hlSwitch} className="t-body-strong text-ink cursor-pointer">
+                    Tandai untuk manajemen
+                  </label>
+                  <p id={ids.hlDesc} className="t-caption text-ink-2">
+                    Muncul di bagian Sorotan dashboard Manajemen &amp; Superuser
+                  </p>
+                </div>
+                <Switch
+                  id={ids.hlSwitch}
+                  checked={highlight}
+                  onCheckedChange={toggleHighlight}
+                  disabled={busy !== null}
+                  aria-describedby={ids.hlDesc}
+                />
+              </div>
+              <AnimatePresence initial={false}>
+                {highlight ? (
+                  <motion.div
+                    key="hl-note"
+                    initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                    animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+                    exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                    transition={reduce ? { duration: 0.15 } : { type: 'spring', bounce: 0, duration: 0.32 }}
+                    className="-mx-1 overflow-hidden px-1"
+                  >
+                    <div className="flex flex-col gap-1.5 pt-3 pb-1">
+                      <label htmlFor={ids.hlNote} className="t-footnote font-semibold text-ink">
+                        Catatan untuk manajemen <span className="font-normal text-ink-2">(wajib, maks {HIGHLIGHT_NOTE_MAX} karakter)</span>
+                      </label>
+                      <Textarea
+                        id={ids.hlNote}
+                        ref={hlRef}
+                        rows={3}
+                        value={highlightNote}
+                        maxLength={1000}
+                        required
+                        disabled={busy !== null}
+                        onChange={(e) => {
+                          setHighlightNote(e.target.value)
+                          if (hlErr) setHlErr(null)
+                        }}
+                        placeholder="Mis. Perlu keputusan perbaikan struktur sebelum pengecoran lantai 4."
+                        aria-invalid={Boolean(hlErr) || hl.tone === 'over' || undefined}
+                        aria-describedby={cx(ids.hlCount, hlErr && ids.hlErr)}
+                      />
+                      <div className="flex items-start justify-between gap-3">
+                        {hlErr ? (
+                          <p id={ids.hlErr} role="alert" className="t-footnote font-semibold text-bahaya">
+                            {hlErr}
+                          </p>
+                        ) : (
+                          <span className="t-caption text-ink-2">Minimal {HIGHLIGHT_NOTE_MIN_LETTERS} huruf.</span>
+                        )}
+                        <span
+                          id={ids.hlCount}
+                          aria-label={`${hl.length} dari ${HIGHLIGHT_NOTE_MAX} karakter`}
+                          className={cx(
+                            'ml-auto flex-none t-caption tabular-nums',
+                            hl.tone === 'over' ? 'font-semibold text-bahaya' : hl.tone === 'near' ? 'text-waspada' : 'text-ink-2'
+                          )}
+                        >
+                          {hl.counter}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </section>
+          ) : null}
+
+          <label htmlFor={ids.note} className="t-body-strong text-ink">
             Komentar untuk admin{' '}
             <span className="t-footnote font-normal text-ink-2">{gate.decidable ? '(wajib bila meminta perbaikan)' : '(opsional)'}</span>
           </label>
           <Textarea
-            id={`sh-note-${r.id}`}
+            id={ids.note}
             ref={noteRef}
-            rows={3}
+            rows={isPhone ? 2 : 3}
             value={note}
             maxLength={2000}
             onChange={(e) => {
@@ -360,10 +540,10 @@ function ReportDetail({
             }}
             placeholder={gate.decidable ? 'Mis. Tambahkan foto titik rembesan dan nomor segmennya.' : 'Tulis komentar untuk admin subholding'}
             aria-invalid={Boolean(err) || undefined}
-            aria-describedby={err ? `sh-note-err-${r.id}` : undefined}
+            aria-describedby={err ? ids.noteErr : undefined}
           />
           {err ? (
-            <p id={`sh-note-err-${r.id}`} role="alert" className="t-footnote font-semibold text-bahaya">
+            <p id={ids.noteErr} role="alert" className="t-footnote font-semibold text-bahaya">
               {err}
             </p>
           ) : gate.decidable && gate.approveHint ? (
@@ -373,29 +553,47 @@ function ReportDetail({
             <Button onClick={() => void act('comment')} disabled={busy !== null || !note.trim()}>
               {busy === 'comment' ? 'Mengirim…' : 'Kirim komentar saja'}
             </Button>
-            {gate.decidable ? (
+            {gate.decidable && !isPhone ? (
               <>
-                <Button variant="destructive" icon="ubah" onClick={() => void act('revise')} disabled={busy !== null}>
-                  {busy === 'revise' ? 'Mengirim…' : 'Minta perbaikan'}
-                </Button>
-                <Button variant="primary" icon="selesai" onClick={() => void act('approve')} disabled={busy !== null || !gate.canApprove}>
-                  {busy === 'approve' ? 'Menyetujui…' : 'Setujui'}
-                </Button>
+                {reviseBtn()}
+                {approveBtn()}
               </>
             ) : null}
           </div>
+          {gate.decidable && !isPhone ? consequence('text-right') : null}
         </div>
 
         {r.status !== 'MENUNGGU' ? (
           <p className={cx('mk-note-box', r.status === 'DISETUJUI' ? 'mk-soft--done' : 'mk-soft--risk')}>
             {r.status === 'DISETUJUI'
-              ? `Disetujui${r.decidedByName ? ` oleh ${r.decidedByName}` : ''}${r.decidedAt ? ` · ${formatDateTime(r.decidedAt)}` : ''}. Laporan ini tampil di dashboard Superuser & Manajemen.`
+              ? `Disetujui${r.decidedByName ? ` oleh ${r.decidedByName}` : ''}${r.decidedAt ? ` · ${formatDateTime(r.decidedAt)}` : ''}. ${
+                  highlighted ? 'Laporan ini tampil di Sorotan dashboard Superuser & Manajemen.' : 'Laporan ini tampil di dashboard Superuser & Manajemen.'
+                }`
               : 'Menunggu admin subholding memperbaiki dan mengirim ulang.'}
           </p>
+        ) : null}
+
+        {gate.decidable && isPhone ? (
+          /* Ponsel: tombol keputusan menempel di bawah layar, tepat di atas tab bar & area aman. */
+          <div
+            role="group"
+            aria-label="Keputusan"
+            className={cx(
+              'sticky z-[1] bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom,0px))]',
+              '-mx-[var(--space-6)] -mb-[var(--space-6)] flex flex-col gap-2 rounded-b-[var(--radius-lg)]',
+              // Material tebal: teks di belakang bilah tidak boleh terbaca menembus teks bantu.
+              'border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_94%,transparent)] px-4 pt-3 pb-4 backdrop-blur-[24px] backdrop-saturate-[1.8]'
+            )}
+          >
+            <div className="flex gap-2">
+              {reviseBtn('min-w-0 flex-1 px-3')}
+              {approveBtn('min-w-0 flex-1 px-3')}
+            </div>
+            {consequence('text-center')}
+          </div>
         ) : null}
       </div>
       <EvidenceLightbox state={lightbox} onChange={setLightbox} />
     </Card>
   )
 }
-
