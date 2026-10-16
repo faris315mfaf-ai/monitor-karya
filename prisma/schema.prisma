@@ -489,6 +489,9 @@ model Evidence {
   targetType  String   // DAILY_REPORT | TASK | WEEKLY_ITEM | OUTPUT | PROGRESS_REPORT | PROJECT_CLOSING (tanpa CHECK di DB; sumber kebenaran: EVIDENCE_TARGETS di src/lib/evidence-access.ts)
   targetId    String
   storageKey  String
+  /// Fase 1 PWA (16 Okt 2026): thumbnail WebP 320px `${storageKey}.thumb.webp` untuk gambar;
+  /// NULL = belum/tidak ada (dokumen, tautan, bukti lama, atau pembuatan thumbnail gagal).
+  thumbKey    String?
   fileName    String
   mime        String
   size        Int
