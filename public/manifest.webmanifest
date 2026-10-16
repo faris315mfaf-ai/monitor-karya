@@ -1,7 +1,7 @@
 {
   "name": "Monitor Karya — Pemantauan kerja berbasis output",
   "short_name": "Monitor Karya",
-  "description": "Laporan harian proyek, capaian mingguan divisi, persetujuan, dan eskalasi holding.",
+  "description": "Laporan subholding PT BIKE Tbk: lapor, setujui, pantau.",
   "id": "/",
   "start_url": "/login",
   "scope": "/",
@@ -19,13 +19,15 @@
   ],
   "shortcuts": [
     {
-      "name": "Laporan harian",
-      "url": "/?tab=daily-input",
+      "name": "Tambah laporan",
+      "short_name": "Tambah laporan",
+      "url": "/?tab=sh-dashboard",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Log aktivitas",
-      "url": "/?tab=audit",
+      "name": "Persetujuan",
+      "short_name": "Persetujuan",
+      "url": "/?tab=sh-review",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]

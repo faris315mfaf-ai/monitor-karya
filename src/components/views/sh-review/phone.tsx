@@ -22,6 +22,7 @@ import {
   AnimatePresence, MotionConfig, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform, type PanInfo,
 } from 'framer-motion'
 import { ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
+import { PullToRefresh } from '@/components/mk/pull-refresh'
 import { EvidenceLightbox, type LightboxState } from '../sh-overview/evidence'
 import { subholdingLabel, toneOf } from '../sh-overview/logic'
 import { EDGE_WIDTH, FADE, NAV_SPRING, dayHeading, monoOf, shouldDismiss, type PickSection } from '../sh-overview/mobile/mobile-logic'
@@ -82,122 +83,124 @@ export function ReviewPhone() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="-mx-1 flex flex-col gap-4 pb-4">
-        <header className="flex flex-col gap-3 px-1">
-          <div className="flex flex-col gap-0.5">
-            <span className="t-footnote font-semibold text-ink-2">
-              {s.data ? `${waitingHeadline(s.totalWaiting)} · ${dayHeading(wibDateKey(now))}` : dayHeading(wibDateKey(now))}
-            </span>
-            <h1 className="m-0 t-title-1 text-ink">Persetujuan</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              aria-haspopup="dialog"
-              aria-label={sub ? `Subholding ${subholdingLabel(sub.name)}. Ganti subholding` : 'Semua subholding. Pilih subholding'}
-              onClick={() => {
-                setQuery('')
-                setSheet(true)
-              }}
-              className={cx(
-                't-callout inline-flex min-h-11 max-w-full items-center gap-2 rounded-full pr-3 pl-2.5 font-semibold',
-                sub ? 'bg-grafit-fill text-on-grafit' : 'bg-surface text-ink shadow-[var(--shadow-card)]',
-                'motion-safe:transition-transform motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.97]',
-                FOCUS
-              )}
-            >
-              {sub ? (
-                <SubMono id={sub.id} name={sub.name} size={24} />
-              ) : (
-                <span aria-hidden className="t-caption flex h-6 w-6 flex-none items-center justify-center rounded-full bg-fill-1 font-bold text-ink">
-                  ∑
-                </span>
-              )}
-              <span className="min-w-0 truncate">{sub ? subholdingLabel(sub.name) : 'Semua subholding'}</span>
-              <Icon name="bawah" size={12} strokeWidth={2.6} className="flex-none" />
-            </button>
-            {sub ? (
-              <button type="button" onClick={() => s.pickSub(null)} className={cx('t-callout min-h-11 rounded-full px-1.5 font-semibold text-accent', FOCUS)}>
-                Reset
-              </button>
-            ) : null}
-          </div>
-          <StatusTabs value={s.tab} counts={s.counts} onChange={s.pickTab} />
-        </header>
-
-        {!s.data ? (
-          s.error ? (
-            <ErrorNote message={s.error} onRetry={s.reload} />
-          ) : (
-            <div className="flex flex-col gap-2" aria-busy="true" aria-label="Memuat antrean">
-              <Skeleton h={14} w={140} />
-              <Skeleton h={232} r={16} />
+      <PullToRefresh onRefresh={s.reload} loading={s.loading}>
+        <div className="-mx-1 flex flex-col gap-4 pb-4">
+          <header className="flex flex-col gap-3 px-1">
+            <div className="flex flex-col gap-0.5">
+              <span className="t-footnote font-semibold text-ink-2">
+                {s.data ? `${waitingHeadline(s.totalWaiting)} · ${dayHeading(wibDateKey(now))}` : dayHeading(wibDateKey(now))}
+              </span>
+              <h1 className="m-0 t-title-1 text-ink">Persetujuan</h1>
             </div>
-          )
-        ) : done ? (
-          <Done s={s} />
-        ) : (
-          <>
-            {longLine ? (
-              <p className="m-0 flex items-start gap-2 rounded-[var(--radius-md)] bg-waspada-soft px-3.5 py-3 t-footnote font-semibold text-waspada">
-                <Icon name="peringatan" size={16} strokeWidth={2.2} className="mt-px shrink-0" />
-                {longLine}
-              </p>
-            ) : null}
-            {groups.length === 0 ? (
-              <p className="m-0 rounded-[var(--radius-md)] bg-surface p-4 t-callout font-normal text-ink-2">Belum ada laporan dengan status ini.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={sub ? `Subholding ${subholdingLabel(sub.name)}. Ganti subholding` : 'Semua subholding. Pilih subholding'}
+                onClick={() => {
+                  setQuery('')
+                  setSheet(true)
+                }}
+                className={cx(
+                  't-callout inline-flex min-h-11 max-w-full items-center gap-2 rounded-full pr-3 pl-2.5 font-semibold',
+                  sub ? 'bg-grafit-fill text-on-grafit' : 'bg-surface text-ink shadow-[var(--shadow-card)]',
+                  'motion-safe:transition-transform motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.97]',
+                  FOCUS
+                )}
+              >
+                {sub ? (
+                  <SubMono id={sub.id} name={sub.name} size={24} />
+                ) : (
+                  <span aria-hidden className="t-caption flex h-6 w-6 flex-none items-center justify-center rounded-full bg-fill-1 font-bold text-ink">
+                    ∑
+                  </span>
+                )}
+                <span className="min-w-0 truncate">{sub ? subholdingLabel(sub.name) : 'Semua subholding'}</span>
+                <Icon name="bawah" size={12} strokeWidth={2.6} className="flex-none" />
+              </button>
+              {sub ? (
+                <button type="button" onClick={() => s.pickSub(null)} className={cx('t-callout min-h-11 rounded-full px-1.5 font-semibold text-accent', FOCUS)}>
+                  Reset
+                </button>
+              ) : null}
+            </div>
+            <StatusTabs value={s.tab} counts={s.counts} onChange={s.pickTab} />
+          </header>
+
+          {!s.data ? (
+            s.error ? (
+              <ErrorNote message={s.error} onRetry={s.reload} />
             ) : (
-              groups.map((g) => (
-                <section key={g.key} aria-label={g.title} className="flex flex-col gap-1.5">
-                  <h2 className={cx('m-0 px-1 t-footnote font-semibold', g.warn ? 'text-waspada' : 'text-ink-2')}>{g.title}</h2>
-                  <ul className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-surface p-0">
-                    <AnimatePresence initial={false}>
-                      {g.items.map((r, i) => {
-                        const days = waitDays(r.submittedAt, now)
-                        return (
-                          <motion.li
-                            key={r.id}
-                            layout="position"
-                            exit={{ opacity: 0, transition: { duration: 0.18 } }}
-                            className={cx(i > 0 && 'shadow-[inset_72px_1px_0_-72px_var(--line)]')}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setOpen(r.id)}
-                              className={cx(
-                                'flex w-full items-start gap-3 py-3 pr-3 pl-3.5 text-left active:bg-fill-1',
-                                'motion-safe:transition-colors motion-safe:duration-[var(--dur-fast)]',
-                                FOCUS_IN
-                              )}
+              <div className="flex flex-col gap-2" aria-busy="true" aria-label="Memuat antrean">
+                <Skeleton h={14} w={140} />
+                <Skeleton h={232} r={16} />
+              </div>
+            )
+          ) : done ? (
+            <Done s={s} />
+          ) : (
+            <>
+              {longLine ? (
+                <p className="m-0 flex items-start gap-2 rounded-[var(--radius-md)] bg-waspada-soft px-3.5 py-3 t-footnote font-semibold text-waspada">
+                  <Icon name="peringatan" size={16} strokeWidth={2.2} className="mt-px shrink-0" />
+                  {longLine}
+                </p>
+              ) : null}
+              {groups.length === 0 ? (
+                <p className="m-0 rounded-[var(--radius-md)] bg-surface p-4 t-callout font-normal text-ink-2">Belum ada laporan dengan status ini.</p>
+              ) : (
+                groups.map((g) => (
+                  <section key={g.key} aria-label={g.title} className="flex flex-col gap-1.5">
+                    <h2 className={cx('m-0 px-1 t-footnote font-semibold', g.warn ? 'text-waspada' : 'text-ink-2')}>{g.title}</h2>
+                    <ul className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-surface p-0">
+                      <AnimatePresence initial={false}>
+                        {g.items.map((r, i) => {
+                          const days = waitDays(r.submittedAt, now)
+                          return (
+                            <motion.li
+                              key={r.id}
+                              layout="position"
+                              exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                              className={cx(i > 0 && 'shadow-[inset_72px_1px_0_-72px_var(--line)]')}
                             >
-                              <QueueRowContent
-                                r={r}
-                                subLabel={!s.sub ? s.shortOf(r.subholdingId) : null}
-                                thumb={46}
-                                now={now}
-                                trailing={
-                                  <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                                    {r.status === 'MENUNGGU' ? (
-                                      <span className={cx('t-caption tabular-nums', days >= LONG_WAIT_DAYS ? 'font-bold text-waspada' : 'text-ink-2')}>
-                                        {ageLabel(days)}
-                                      </span>
-                                    ) : null}
-                                    <Icon name="kanan" size={14} strokeWidth={2.4} className="text-ink-3" />
-                                  </span>
-                                }
-                              />
-                            </button>
-                          </motion.li>
-                        )
-                      })}
-                    </AnimatePresence>
-                  </ul>
-                </section>
-              ))
-            )}
-          </>
-        )}
-      </div>
+                              <button
+                                type="button"
+                                onClick={() => setOpen(r.id)}
+                                className={cx(
+                                  'flex w-full items-start gap-3 py-3 pr-3 pl-3.5 text-left active:bg-fill-1',
+                                  'motion-safe:transition-colors motion-safe:duration-[var(--dur-fast)]',
+                                  FOCUS_IN
+                                )}
+                              >
+                                <QueueRowContent
+                                  r={r}
+                                  subLabel={!s.sub ? s.shortOf(r.subholdingId) : null}
+                                  thumb={46}
+                                  now={now}
+                                  trailing={
+                                    <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                                      {r.status === 'MENUNGGU' ? (
+                                        <span className={cx('t-caption tabular-nums', days >= LONG_WAIT_DAYS ? 'font-bold text-waspada' : 'text-ink-2')}>
+                                          {ageLabel(days)}
+                                        </span>
+                                      ) : null}
+                                      <Icon name="kanan" size={14} strokeWidth={2.4} className="text-ink-3" />
+                                    </span>
+                                  }
+                                />
+                              </button>
+                            </motion.li>
+                          )
+                        })}
+                      </AnimatePresence>
+                    </ul>
+                  </section>
+                ))
+              )}
+            </>
+          )}
+        </div>
+      </PullToRefresh>
 
       {sheet ? (
         <PickerSheet

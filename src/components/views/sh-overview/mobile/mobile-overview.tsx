@@ -13,6 +13,7 @@
 import { useId, useMemo, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { EmptyNote, ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
+import { PullToRefresh } from '@/components/mk/pull-refresh'
 import { EvidenceLightbox, type LightboxState } from '../evidence'
 import { displayName, photosOf, toneOf, toneVars } from '../logic'
 import { NO_FILTER, ptBuckets, statusSummary, type Filter, type FlatV2 } from '../model'
@@ -75,203 +76,205 @@ export function MobileOverview(props: OverviewScreenProps) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="-mx-1 flex flex-col gap-[22px] pb-4" aria-label={`Ringkasan ${roleName}`} role="region">
-        {/* Kepala: tanggal kecil, judul besar, segmen rentang, penyaring */}
-        <header className="flex flex-col gap-3.5 px-1">
-          <div className="flex flex-col gap-0.5">
-            <span className="t-footnote font-semibold text-ink-2">{dateLine}</span>
-            <h1 className="t-title-1 m-0 break-words text-ink">{heading}</h1>
-          </div>
-          <RangeControl value={range} onChange={onRange} />
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterButton
-              active={Boolean(sub)}
-              onClick={() => openSheet('sub')}
-              lead={
-                sub ? (
-                  <Mono letter={monoOf(sub.name)} tone={toneOf(sub.id)} size="sm" />
-                ) : (
-                  <span aria-hidden className="t-caption flex h-6 w-6 flex-none items-center justify-center rounded-full bg-fill-1 font-bold text-ink">
-                    ∑
-                  </span>
-                )
-              }
-              label={sub ? displayName(sub.name) : 'Semua subholding'}
-              a11y={sub ? `Subholding ${displayName(sub.name)}. Ganti subholding` : 'Semua subholding. Pilih subholding'}
-            />
-            {sub ? (
+      <PullToRefresh onRefresh={reload} loading={loading}>
+        <div className="-mx-1 flex flex-col gap-[22px] pb-4" aria-label={`Ringkasan ${roleName}`} role="region">
+          {/* Kepala: tanggal kecil, judul besar, segmen rentang, penyaring */}
+          <header className="flex flex-col gap-3.5 px-1">
+            <div className="flex flex-col gap-0.5">
+              <span className="t-footnote font-semibold text-ink-2">{dateLine}</span>
+              <h1 className="t-title-1 m-0 break-words text-ink">{heading}</h1>
+            </div>
+            <RangeControl value={range} onChange={onRange} />
+            <div className="flex flex-wrap items-center gap-2">
               <FilterButton
-                active={Boolean(ptName)}
-                onClick={() => openSheet('pt')}
-                label={ptName ? ptShort(ptName) : `Semua PT (${ptTotal(sub)})`}
-                a11y={ptName ? `${ptName}. Ganti PT` : `Semua PT (${ptTotal(sub)}). Pilih PT`}
+                active={Boolean(sub)}
+                onClick={() => openSheet('sub')}
+                lead={
+                  sub ? (
+                    <Mono letter={monoOf(sub.name)} tone={toneOf(sub.id)} size="sm" />
+                  ) : (
+                    <span aria-hidden className="t-caption flex h-6 w-6 flex-none items-center justify-center rounded-full bg-fill-1 font-bold text-ink">
+                      ∑
+                    </span>
+                  )
+                }
+                label={sub ? displayName(sub.name) : 'Semua subholding'}
+                a11y={sub ? `Subholding ${displayName(sub.name)}. Ganti subholding` : 'Semua subholding. Pilih subholding'}
               />
-            ) : null}
-            {sub ? (
-              <button
-                type="button"
-                onClick={() => pick(NO_FILTER)}
-                className={cx('t-callout min-h-11 rounded-full px-1.5 font-semibold text-accent', FOCUS)}
-              >
-                Reset
-              </button>
-            ) : null}
-          </div>
-        </header>
-
-        {isWeek ? (
-          week ? (
-            <WeekPattern week={week} filter={filter} ptName={ptName} />
-          ) : error ? (
-            <ErrorNote message={error} onRetry={reload} />
-          ) : (
-            <LoadingBlocks />
-          )
-        ) : error && !data ? (
-          <ErrorNote message={error} onRetry={reload} />
-        ) : !data && loading ? (
-          <LoadingBlocks />
-        ) : !data || data.subholdings.length === 0 ? (
-          <EmptyNote icon="gedung">Belum ada subholding dalam cakupan Anda.</EmptyNote>
-        ) : (
-          <>
-            {/* Kartu status melapor */}
-            <section aria-labelledby={ids.status} className="flex flex-col gap-3.5 rounded-[var(--radius-lg)] bg-surface p-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                <h2 id={ids.status} className="t-headline m-0 min-w-0 font-bold text-ink">
-                  {summary.level === 'sub'
-                    ? `${summary.done} dari ${summary.total} melapor`
-                    : summary.level === 'pt'
-                      ? `${summary.done} dari ${summary.total} PT melapor`
-                      : ptName ?? heading}
-                </h2>
-                <span className="t-footnote flex-none text-ink-2">
-                  {summary.level === 'sub'
-                    ? `${summary.reports} laporan disetujui`
-                    : summary.level === 'pt'
-                      ? `${summary.reports} laporan`
-                      : `${summary.reports} laporan ${range === 'yesterday' ? 'kemarin' : 'hari ini'}`}
-                </span>
-              </div>
-              {summary.level === 'sub' ? (
-                <StatusCircles data={data.subholdings} onPick={(id) => pick({ sub: id, pt: null })} />
-              ) : (
-                <div
-                  role="progressbar"
-                  aria-label="PT yang sudah melapor"
-                  aria-valuemin={0}
-                  aria-valuemax={summary.total}
-                  aria-valuenow={summary.done}
-                  className="h-2 overflow-hidden rounded-full bg-fill-2"
-                >
-                  <motion.div
-                    className="h-full origin-left rounded-full bg-sukses"
-                    initial={false}
-                    animate={{ scaleX: progressPct(summary.done, summary.total) / 100 }}
-                    transition={{ type: 'spring', bounce: 0, duration: 0.6 }}
-                  />
-                </div>
-              )}
-              {summary.level === 'sub' && summary.missing.length ? (
-                <div className="t-footnote flex items-center gap-2 rounded-[var(--radius-md)] bg-waspada-soft px-3 py-2.5 text-ink">
-                  <Icon name="peringatan" size={16} strokeWidth={2.2} className="flex-none text-waspada" />
-                  <span>{missingSentence(summary.missing, range)}</span>
-                </div>
+              {sub ? (
+                <FilterButton
+                  active={Boolean(ptName)}
+                  onClick={() => openSheet('pt')}
+                  label={ptName ? ptShort(ptName) : `Semua PT (${ptTotal(sub)})`}
+                  a11y={ptName ? `${ptName}. Ganti PT` : `Semua PT (${ptTotal(sub)}). Pilih PT`}
+                />
               ) : null}
-              {summary.level === 'one' && summary.reports === 0 ? (
-                <span className="t-footnote text-waspada">Belum melapor {range === 'yesterday' ? 'kemarin' : 'hari ini'}</span>
-              ) : null}
-            </section>
-
-            {/* Chip PT (subholding dipilih, tanpa PT) */}
-            {sub && !filter.pt && reportingPts.length > 0 ? (
-              <div role="group" aria-label="PT yang melapor" className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none]">
-                <Chip pressed label="Semua PT" count={summary.reports} onClick={() => pick({ sub: sub.id, pt: null })} />
-                {reportingPts.map((p) => (
-                  <Chip key={p.id} pressed={false} label={ptShort(p.name)} count={p.count} onClick={() => pick({ sub: sub.id, pt: p.id })} />
-                ))}
-              </div>
-            ) : null}
-
-            {/* Sorotan supervisor */}
-            <section aria-labelledby={ids.sorotan} className="flex flex-col gap-2.5">
-              <div className="flex items-baseline justify-between px-1">
-                <h2 id={ids.sorotan} className="t-title-3 m-0 font-bold text-ink">
-                  Sorotan
-                </h2>
-                {sorotan.length ? <span className="t-footnote text-ink-2">{sorotan.length} perlu perhatian</span> : null}
-              </div>
-              {sorotan.length ? (
-                <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1.5 pt-0.5 [scrollbar-width:none]">
-                  {sorotan.map((r) => (
-                    <SorotanCard key={r.id} report={r} where={r.where} single={sorotan.length === 1} onOpen={() => setDetail(r)} />
-                  ))}
-                </div>
-              ) : (
-                <p className="t-callout m-0 rounded-[var(--radius-md)] bg-surface px-4 py-3.5 font-normal text-ink-2">
-                  Tidak ada sorotan untuk tanggal ini.
-                </p>
-              )}
-            </section>
-
-            {/* Semua laporan */}
-            <section aria-labelledby={ids.list} className="flex flex-col gap-2.5">
-              <h2 id={ids.list} className="t-title-3 m-0 px-1 font-bold text-ink">
-                {list.title}
-              </h2>
-              {list.groups.length === 0 ? (
-                <EmptyNote>Belum ada laporan disetujui.</EmptyNote>
-              ) : (
-                list.groups.map((g) => (
-                  <ReportGroup key={g.key} group={g} level={list.level} onDrill={pick} onOpen={setDetail} />
-                ))
-              )}
-            </section>
-
-            {/* Belum melapor (tingkat PT), dapat dilipat */}
-            {silent.length ? (
-              <section aria-labelledby={ids.silent} className="flex flex-col gap-1.5">
+              {sub ? (
                 <button
                   type="button"
-                  aria-expanded={silentOpen}
-                  aria-controls={ids.silentList}
-                  onClick={() => setSilentOpen((v) => !v)}
-                  className={cx('t-footnote flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] px-1 text-left font-semibold text-waspada', FOCUS)}
+                  onClick={() => pick(NO_FILTER)}
+                  className={cx('t-callout min-h-11 rounded-full px-1.5 font-semibold text-accent', FOCUS)}
                 >
-                  <span id={ids.silent} className="flex-1">
-                    Belum melapor · {silent.length} PT
-                  </span>
-                  <Icon
-                    name="bawah"
-                    size={14}
-                    strokeWidth={2.6}
-                    className={cx('transition-transform duration-[var(--dur-base)] ease-[var(--ease-standard)]', silentOpen && 'rotate-180')}
-                  />
+                  Reset
                 </button>
-                <AnimatePresence initial={false}>
-                  {silentOpen ? (
-                    <motion.ul
-                      id={ids.silentList}
-                      key="diam"
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-                      className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-surface p-0"
-                    >
-                      {silent.map((p, i) => (
-                        <li key={p.id} className={cx('t-callout px-4 py-3 font-normal text-ink-2', i > 0 && 'shadow-[inset_0_1px_0_var(--line)]')}>
-                          {p.name}
-                        </li>
-                      ))}
-                    </motion.ul>
-                  ) : null}
-                </AnimatePresence>
+              ) : null}
+            </div>
+          </header>
+
+          {isWeek ? (
+            week ? (
+              <WeekPattern week={week} filter={filter} ptName={ptName} />
+            ) : error ? (
+              <ErrorNote message={error} onRetry={reload} />
+            ) : (
+              <LoadingBlocks />
+            )
+          ) : error && !data ? (
+            <ErrorNote message={error} onRetry={reload} />
+          ) : !data && loading ? (
+            <LoadingBlocks />
+          ) : !data || data.subholdings.length === 0 ? (
+            <EmptyNote icon="gedung">Belum ada subholding dalam cakupan Anda.</EmptyNote>
+          ) : (
+            <>
+              {/* Kartu status melapor */}
+              <section aria-labelledby={ids.status} className="flex flex-col gap-3.5 rounded-[var(--radius-lg)] bg-surface p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                  <h2 id={ids.status} className="t-headline m-0 min-w-0 font-bold text-ink">
+                    {summary.level === 'sub'
+                      ? `${summary.done} dari ${summary.total} melapor`
+                      : summary.level === 'pt'
+                        ? `${summary.done} dari ${summary.total} PT melapor`
+                        : ptName ?? heading}
+                  </h2>
+                  <span className="t-footnote flex-none text-ink-2">
+                    {summary.level === 'sub'
+                      ? `${summary.reports} laporan disetujui`
+                      : summary.level === 'pt'
+                        ? `${summary.reports} laporan`
+                        : `${summary.reports} laporan ${range === 'yesterday' ? 'kemarin' : 'hari ini'}`}
+                  </span>
+                </div>
+                {summary.level === 'sub' ? (
+                  <StatusCircles data={data.subholdings} onPick={(id) => pick({ sub: id, pt: null })} />
+                ) : (
+                  <div
+                    role="progressbar"
+                    aria-label="PT yang sudah melapor"
+                    aria-valuemin={0}
+                    aria-valuemax={summary.total}
+                    aria-valuenow={summary.done}
+                    className="h-2 overflow-hidden rounded-full bg-fill-2"
+                  >
+                    <motion.div
+                      className="h-full origin-left rounded-full bg-sukses"
+                      initial={false}
+                      animate={{ scaleX: progressPct(summary.done, summary.total) / 100 }}
+                      transition={{ type: 'spring', bounce: 0, duration: 0.6 }}
+                    />
+                  </div>
+                )}
+                {summary.level === 'sub' && summary.missing.length ? (
+                  <div className="t-footnote flex items-center gap-2 rounded-[var(--radius-md)] bg-waspada-soft px-3 py-2.5 text-ink">
+                    <Icon name="peringatan" size={16} strokeWidth={2.2} className="flex-none text-waspada" />
+                    <span>{missingSentence(summary.missing, range)}</span>
+                  </div>
+                ) : null}
+                {summary.level === 'one' && summary.reports === 0 ? (
+                  <span className="t-footnote text-waspada">Belum melapor {range === 'yesterday' ? 'kemarin' : 'hari ini'}</span>
+                ) : null}
               </section>
-            ) : null}
-          </>
-        )}
-      </div>
+
+              {/* Chip PT (subholding dipilih, tanpa PT) */}
+              {sub && !filter.pt && reportingPts.length > 0 ? (
+                <div role="group" aria-label="PT yang melapor" className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none]">
+                  <Chip pressed label="Semua PT" count={summary.reports} onClick={() => pick({ sub: sub.id, pt: null })} />
+                  {reportingPts.map((p) => (
+                    <Chip key={p.id} pressed={false} label={ptShort(p.name)} count={p.count} onClick={() => pick({ sub: sub.id, pt: p.id })} />
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Sorotan supervisor */}
+              <section aria-labelledby={ids.sorotan} className="flex flex-col gap-2.5">
+                <div className="flex items-baseline justify-between px-1">
+                  <h2 id={ids.sorotan} className="t-title-3 m-0 font-bold text-ink">
+                    Sorotan
+                  </h2>
+                  {sorotan.length ? <span className="t-footnote text-ink-2">{sorotan.length} perlu perhatian</span> : null}
+                </div>
+                {sorotan.length ? (
+                  <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1.5 pt-0.5 [scrollbar-width:none]">
+                    {sorotan.map((r) => (
+                      <SorotanCard key={r.id} report={r} where={r.where} single={sorotan.length === 1} onOpen={() => setDetail(r)} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="t-callout m-0 rounded-[var(--radius-md)] bg-surface px-4 py-3.5 font-normal text-ink-2">
+                    Tidak ada sorotan untuk tanggal ini.
+                  </p>
+                )}
+              </section>
+
+              {/* Semua laporan */}
+              <section aria-labelledby={ids.list} className="flex flex-col gap-2.5">
+                <h2 id={ids.list} className="t-title-3 m-0 px-1 font-bold text-ink">
+                  {list.title}
+                </h2>
+                {list.groups.length === 0 ? (
+                  <EmptyNote>Belum ada laporan disetujui.</EmptyNote>
+                ) : (
+                  list.groups.map((g) => (
+                    <ReportGroup key={g.key} group={g} level={list.level} onDrill={pick} onOpen={setDetail} />
+                  ))
+                )}
+              </section>
+
+              {/* Belum melapor (tingkat PT), dapat dilipat */}
+              {silent.length ? (
+                <section aria-labelledby={ids.silent} className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    aria-expanded={silentOpen}
+                    aria-controls={ids.silentList}
+                    onClick={() => setSilentOpen((v) => !v)}
+                    className={cx('t-footnote flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] px-1 text-left font-semibold text-waspada', FOCUS)}
+                  >
+                    <span id={ids.silent} className="flex-1">
+                      Belum melapor · {silent.length} PT
+                    </span>
+                    <Icon
+                      name="bawah"
+                      size={14}
+                      strokeWidth={2.6}
+                      className={cx('transition-transform duration-[var(--dur-base)] ease-[var(--ease-standard)]', silentOpen && 'rotate-180')}
+                    />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {silentOpen ? (
+                      <motion.ul
+                        id={ids.silentList}
+                        key="diam"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+                        className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-surface p-0"
+                      >
+                        {silent.map((p, i) => (
+                          <li key={p.id} className={cx('t-callout px-4 py-3 font-normal text-ink-2', i > 0 && 'shadow-[inset_0_1px_0_var(--line)]')}>
+                            {p.name}
+                          </li>
+                        ))}
+                      </motion.ul>
+                    ) : null}
+                  </AnimatePresence>
+                </section>
+              ) : null}
+            </>
+          )}
+        </div>
+      </PullToRefresh>
 
       {sheet ? (
         <PickerSheet

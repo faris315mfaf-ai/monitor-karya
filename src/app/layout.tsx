@@ -44,6 +44,9 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#050506" },
   ],
   viewportFit: "cover",
+  // Keyboard virtual memperkecil tata letak (bukan menutupinya), sehingga
+  // lembar dan bilah menempel di bawah tetap terlihat saat mengetik.
+  interactiveWidget: "resizes-content",
 };
 
 
