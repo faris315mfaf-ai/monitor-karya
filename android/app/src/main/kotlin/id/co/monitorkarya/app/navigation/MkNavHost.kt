@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -39,6 +40,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import id.co.monitorkarya.app.R
+import id.co.monitorkarya.app.ui.bukaweb.PeranTakDidukungScreen
+import id.co.monitorkarya.app.ui.bukaweb.bukaVersiWeb
 import id.co.monitorkarya.app.ui.login.GantiSandiScreen
 import id.co.monitorkarya.app.ui.login.LoginScreen
 import id.co.monitorkarya.app.vm.SesiUiState
@@ -47,6 +50,7 @@ import id.co.monitorkarya.app.vm.SesiViewModel
 internal const val RUTE_LOGIN = "login"
 internal const val RUTE_GANTI_SANDI = "ganti_sandi"
 internal const val RUTE_BERANDA = "beranda"
+internal const val RUTE_PERAN_TAK_DIDUKUNG = "peran_tak_didukung"
 
 @Composable
 fun MkNavHost(vm: SesiViewModel = hiltViewModel()) {
@@ -58,6 +62,7 @@ fun MkNavHost(vm: SesiViewModel = hiltViewModel()) {
         SesiUiState.TanpaSesi -> RUTE_LOGIN
         is SesiUiState.WajibGantiSandi -> RUTE_GANTI_SANDI
         is SesiUiState.Siap -> RUTE_BERANDA
+        is SesiUiState.PeranTakDidukung -> RUTE_PERAN_TAK_DIDUKUNG
     }
 
     // Pemilik entri rute saat ini (uid akun). Saveable supaya pemulihan proses
@@ -107,6 +112,21 @@ fun MkNavHost(vm: SesiViewModel = hiltViewModel()) {
                     // C3-T2: jalan keluar akun (padanan "Keluar dari akun" web).
                     onKeluar = vm::keluar,
                 )
+            }
+            composable(RUTE_PERAN_TAK_DIDUKUNG) {
+                val s = status
+                val konteks = LocalContext.current
+                if (s is SesiUiState.PeranTakDidukung) {
+                    PeranTakDidukungScreen(
+                        modifier = Modifier.safeDrawingPadding(),
+                        nama = s.nama,
+                        peranMentah = s.peranMentah,
+                        onBukaWeb = { bukaVersiWeb(konteks) },
+                        onKeluar = vm::keluar,
+                    )
+                } else {
+                    LayarMemuat()
+                }
             }
             composable(RUTE_BERANDA) {
                 val s = status

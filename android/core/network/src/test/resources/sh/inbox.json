@@ -1,0 +1,480 @@
+{
+  "items": [
+    {
+      "id": "cmvakuvwn001vd04i6cjg5q6s",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-16T06:19:17.640Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvakutvm000ed04ief6ai853",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T06:19:17.561Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmvakuvo5000wd04ib7duqqbs",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-16T06:19:17.334Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvakutvm000ed04ief6ai853",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T06:19:17.561Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmvakuvaa000rd04is5lrdips",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-16T06:19:16.835Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvakutvm000ed04ief6ai853",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T06:19:17.561Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmvajnxov003vd0l35u2s900e",
+      "kind": "PERBAIKAN",
+      "body": "Mohon lampirkan notula rapat.",
+      "createdAt": "2026-10-16T05:45:53.743Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946cl041hd0bbdkv7kafa",
+        "kegiatan": "Rapat koordinasi kontraktor",
+        "ptName": "PT Kilang Utara Mandiri",
+        "status": "PERLU_PERBAIKAN",
+        "reporterName": "Rina Kartika",
+        "reporterTitle": "Kepala Keuangan",
+        "submittedAt": "2026-10-15T03:00:00.000Z",
+        "evidenceCount": 0
+      }
+    },
+    {
+      "id": "cmvahu4lk002xd0l3b46wlr1w",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-16T04:54:43.400Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvahu39s001kd0l3p3kb6295",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T04:54:43.339Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmvahu4f20021d0l3uguj3miu",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-16T04:54:43.167Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvahu39s001kd0l3p3kb6295",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T04:54:43.339Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmvahu43i001wd0l38hm7iza0",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-16T04:54:42.751Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmvahu39s001kd0l3p3kb6295",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-16T04:54:43.339Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9dg79x002jd0qe3je8v2k0",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-15T10:04:09.045Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9dg5ny001ad0qepsyqb6wn",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T10:04:08.961Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9dg70l001qd0qe2thhqhk5",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-15T10:04:08.710Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9dg5ny001ad0qepsyqb6wn",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T10:04:08.961Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9dg6mo001ld0qe6bo95nds",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-15T10:04:08.208Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9dg5ny001ad0qepsyqb6wn",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T10:04:08.961Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9acaoh005xd0f5ox558ytw",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-15T08:37:07.985Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9acac2004sd0f5omdqsa8p",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:07.914Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9acaia0057d0f5hx6kywj4",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-15T08:37:07.763Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9acac2004sd0f5omdqsa8p",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:07.914Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9acah90052d0f5fdfivczg",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-15T08:37:07.726Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9acac2004sd0f5omdqsa8p",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:07.914Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9ac5b4003ud0f52zo9xeyo",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-15T08:37:01.025Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9ac4sq002td0f5zbjerrzg",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:00.935Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9ac53b0037d0f53y54sb65",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-15T08:37:00.743Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9ac4sq002td0f5zbjerrzg",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:00.935Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9ac51t0032d0f58p1vq4x5",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-15T08:37:00.690Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9ac4sq002td0f5zbjerrzg",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:37:00.935Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv996s5c001bd0f5u77uhx7i",
+      "kind": "SETUJU",
+      "body": "Sudah lengkap.",
+      "createdAt": "2026-10-15T08:04:51.072Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv996prg000ed0f5pcf6nq4f",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:04:50.986Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv996rta000rd0f5sytnm42q",
+      "kind": "KOMENTAR",
+      "body": "Mohon sertakan jam pengerjaan.",
+      "createdAt": "2026-10-15T08:04:50.638Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv996prg000ed0f5pcf6nq4f",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:04:50.986Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv996rdx000md0f5wverpsi6",
+      "kind": "PERBAIKAN",
+      "body": "Tambahkan foto sisi timur panel.",
+      "createdAt": "2026-10-15T08:04:50.086Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv996prg000ed0f5pcf6nq4f",
+        "kegiatan": "Uji E2E pemasangan panel",
+        "ptName": "PT Baterai Hijau Surabaya",
+        "status": "DISETUJUI",
+        "reporterName": "Budi Uji",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T08:04:50.986Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946d3041vd0bbo01l4qnw",
+      "kind": "SETUJU",
+      "body": "Laporan lengkap, terima kasih.",
+      "createdAt": "2026-10-15T07:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946cy041sd0bbhds74s0f",
+        "kegiatan": "Panen dan penimbangan TBS",
+        "ptName": "PT Petro Kaltim Energi",
+        "status": "DISETUJUI",
+        "reporterName": "Sari Lestari",
+        "reporterTitle": "Kepala Produksi",
+        "submittedAt": "2026-10-15T05:00:00.000Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946cw041qd0bbfwmwdwt1",
+      "kind": "PERBAIKAN",
+      "body": "Lengkapi foto hasil pekerjaan dan sebutkan volume yang tercapai.",
+      "createdAt": "2026-10-15T06:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946cs041nd0bb9gl4ufnl",
+        "kegiatan": "Pemasangan panel surya blok B",
+        "ptName": "PT Gas Kaltim Pratama",
+        "status": "PERLU_PERBAIKAN",
+        "reporterName": "Hendra Wijaya",
+        "reporterTitle": "Manajer Operasional",
+        "submittedAt": "2026-10-15T04:00:00.000Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946cn041jd0bbm12bwnak",
+      "kind": "KOMENTAR",
+      "body": "Mohon tambahkan rencana tindak lanjut untuk besok.",
+      "createdAt": "2026-10-15T04:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946cl041hd0bbdkv7kafa",
+        "kegiatan": "Rapat koordinasi kontraktor",
+        "ptName": "PT Kilang Utara Mandiri",
+        "status": "PERLU_PERBAIKAN",
+        "reporterName": "Rina Kartika",
+        "reporterTitle": "Kepala Keuangan",
+        "submittedAt": "2026-10-15T03:00:00.000Z",
+        "evidenceCount": 0
+      }
+    },
+    {
+      "id": "cmv9946cj041fd0bba8ozmjnr",
+      "kind": "SETUJU",
+      "body": "Laporan lengkap, terima kasih.",
+      "createdAt": "2026-10-15T04:00:00.000Z",
+      "unread": false,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946ce041cd0bbtdhb3br8",
+        "kegiatan": "Inspeksi jalur pipa distribusi",
+        "ptName": "PT Energi Migas Sumut",
+        "status": "DISETUJUI",
+        "reporterName": "Agus Salim",
+        "reporterTitle": "Manajer Proyek",
+        "submittedAt": "2026-10-15T02:00:00.000Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946dm042dd0bbrgbz90w7",
+      "kind": "SETUJU",
+      "body": "Laporan lengkap, terima kasih.",
+      "createdAt": "2026-10-14T07:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946dj042ad0bbc6ht77gm",
+        "kegiatan": "Pelatihan K3 operator",
+        "ptName": "PT Petro Kaltim Energi",
+        "status": "DISETUJUI",
+        "reporterName": "Rina Kartika",
+        "reporterTitle": "Kepala Keuangan",
+        "submittedAt": "2026-10-14T05:00:00.000Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946de0425d0bbgit44eh0",
+      "kind": "SETUJU",
+      "body": "Laporan lengkap, terima kasih.",
+      "createdAt": "2026-10-14T05:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946db0422d0bbkrqfkjmx",
+        "kegiatan": "Panen dan penimbangan TBS",
+        "ptName": "PT Kilang Utara Mandiri",
+        "status": "DISETUJUI",
+        "reporterName": "Sari Lestari",
+        "reporterTitle": "Kepala Produksi",
+        "submittedAt": "2026-10-14T03:00:00.000Z",
+        "evidenceCount": 1
+      }
+    },
+    {
+      "id": "cmv9946d90420d0bbzjb8h65q",
+      "kind": "PERBAIKAN",
+      "body": "Lengkapi foto hasil pekerjaan dan sebutkan volume yang tercapai.",
+      "createdAt": "2026-10-14T04:00:00.000Z",
+      "unread": true,
+      "authorName": "Bpk. Surya Atmaja",
+      "report": {
+        "id": "cmv9946d5041xd0bbvocj3msr",
+        "kegiatan": "Pemasangan panel surya blok B",
+        "ptName": "PT Energi Migas Sumut",
+        "status": "PERLU_PERBAIKAN",
+        "reporterName": "Hendra Wijaya",
+        "reporterTitle": "Manajer Operasional",
+        "submittedAt": "2026-10-14T02:00:00.000Z",
+        "evidenceCount": 1
+      }
+    }
+  ],
+  "reminders": [
+    {
+      "id": "pengingat-cmv99414l002ed0bbes1unuiy-2026-10-15",
+      "text": "PT Turbin Angin Sulsel belum memiliki laporan pada Kamis, 15 Oktober 2026.",
+      "createdAt": "2026-10-15T17:00:00.000Z"
+    }
+  ],
+  "unreadCount": 12
+}

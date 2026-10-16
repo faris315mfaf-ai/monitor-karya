@@ -1,0 +1,238 @@
+{
+  "items": [
+    {
+      "id": "cmvakvdts002od04i8hl4s709",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji thumbnail foto lapangan",
+      "deskripsi": "Foto besar 2400 px untuk menguji thumbnail server.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "MENUNGGU",
+      "submittedAt": "2026-10-16T06:19:40.864Z",
+      "decidedAt": null,
+      "decidedByName": null,
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvakvdvp002yd04ia9uf3u66",
+          "fileName": "lapangan.jpg",
+          "mime": "image/jpeg",
+          "size": 40529,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": true,
+      "canWithdraw": true
+    },
+    {
+      "id": "cmvakutvm000ed04ief6ai853",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T06:19:17.561Z",
+      "decidedAt": "2026-10-16T06:19:17.638Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvakuu0l000nd04i9kgrkamf",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmvakuvaa000rd04is5lrdips",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:16.835Z",
+          "mine": false
+        },
+        {
+          "id": "cmvakuvo5000wd04ib7duqqbs",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:17.334Z",
+          "mine": false
+        },
+        {
+          "id": "cmvakuvtd0011d04i71f1pv1f",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-16T06:19:17.521Z",
+          "mine": true
+        },
+        {
+          "id": "cmvakuvwn001vd04i6cjg5q6s",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:17.640Z",
+          "mine": false
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false
+    },
+    {
+      "id": "cmvahu39s001kd0l3p3kb6295",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T04:54:43.339Z",
+      "decidedAt": "2026-10-16T04:54:43.399Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvahu3br001sd0l3a59ey7hb",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmvahu43i001wd0l38hm7iza0",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:42.751Z",
+          "mine": false
+        },
+        {
+          "id": "cmvahu4f20021d0l3uguj3miu",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:43.167Z",
+          "mine": false
+        },
+        {
+          "id": "cmvahu4j10026d0l3ps7s2gx2",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-16T04:54:43.309Z",
+          "mine": true
+        },
+        {
+          "id": "cmvahu4lk002xd0l3b46wlr1w",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:43.400Z",
+          "mine": false
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false
+    },
+    {
+      "id": "cmvahk2y6000cd0l393farxmi",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Retak rambut pada kolom lantai 2 gedung B",
+      "deskripsi": "Panen 42 ton TBS dari afdeling 3.\n\nSeluruh hasil sudah ditimbang dan dikirim ke pabrik sebelum pukul 14.00.",
+      "reporterName": "Sari Uji",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Produksi",
+      "reporterTitle": "Kepala Produksi",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T04:46:54.702Z",
+      "decidedAt": "2026-10-16T04:46:54.836Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 5,
+      "evidence": [
+        {
+          "id": "cmvahk301000kd0l3han9ojbv",
+          "fileName": "foto-1.png",
+          "mime": "image/png",
+          "size": 154,
+          "url": null
+        },
+        {
+          "id": "cmvahk30h000nd0l33cg0rlds",
+          "fileName": "foto-2.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk30u000qd0l3qb43utrr",
+          "fileName": "foto-3.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk317000td0l39wusnldt",
+          "fileName": "foto-4.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk31k000wd0l3lquonq8c",
+          "fileName": "foto-5.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false
+    }
+  ],
+  "total": 4,
+  "page": 1,
+  "pageSize": 5,
+  "counts": {
+    "MENUNGGU": 1,
+    "PERLU_PERBAIKAN": 0,
+    "DISETUJUI": 3
+  }
+}

@@ -27,6 +27,7 @@ import id.co.monitorkarya.core.network.api.AttendanceApi
 import id.co.monitorkarya.core.network.api.DailyInputApi
 import id.co.monitorkarya.core.network.api.DailyReportsApi
 import id.co.monitorkarya.core.network.api.EvidenceApi
+import id.co.monitorkarya.core.network.api.ShApi
 import id.co.monitorkarya.core.network.api.InboxApi
 import id.co.monitorkarya.core.network.api.KadivApi
 import id.co.monitorkarya.core.network.api.LaporanDibacaApi
@@ -97,6 +98,11 @@ object AppModule {
     @Provides
     @Singleton
     fun evidenceApi(retrofit: Retrofit): EvidenceApi = retrofit.create(EvidenceApi::class.java)
+
+    /** Rute model subholding (sh, signed, nav-badges) — dipakai modul fitur Fase 2–4. */
+    @Provides
+    @Singleton
+    fun shApi(retrofit: Retrofit): ShApi = retrofit.create(ShApi::class.java)
     @Provides
     @Singleton
     fun workDeskApi(retrofit: Retrofit): WorkDeskApi = retrofit.create(WorkDeskApi::class.java)

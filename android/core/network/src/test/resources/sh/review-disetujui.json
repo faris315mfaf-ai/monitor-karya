@@ -1,0 +1,980 @@
+{
+  "items": [
+    {
+      "id": "cmvakutvm000ed04ief6ai853",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T06:19:17.561Z",
+      "decidedAt": "2026-10-16T06:19:17.638Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvakuu0l000nd04i9kgrkamf",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmvakuvaa000rd04is5lrdips",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:16.835Z",
+          "mine": true
+        },
+        {
+          "id": "cmvakuvo5000wd04ib7duqqbs",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:17.334Z",
+          "mine": true
+        },
+        {
+          "id": "cmvakuvtd0011d04i71f1pv1f",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-16T06:19:17.521Z",
+          "mine": false
+        },
+        {
+          "id": "cmvakuvwn001vd04i6cjg5q6s",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T06:19:17.640Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946dn042fd0bbhud3gn83",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002dd0bbl08mus1i",
+      "ptName": "PT Sawit Riau Lestari",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Audit stok gudang",
+      "deskripsi": "Pencocokan stok fisik dan catatan sistem; selisih 2 item sudah ditelusuri.",
+      "reporterName": "Agus Salim",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T02:00:00.000Z",
+      "decidedAt": "2026-10-16T05:45:20.190Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dp042gd0bb4ioiqwbz",
+          "fileName": "Dokumentasi audit stok gudang",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946dg0427d0bbedq2r90m",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l0029d0bbhqtivtgd",
+      "ptName": "PT Gas Kaltim Pratama",
+      "reportDate": "2026-10-14",
+      "kegiatan": "Audit stok gudang",
+      "deskripsi": "Pencocokan stok fisik dan catatan sistem; selisih 2 item sudah ditelusuri.",
+      "reporterName": "Agus Salim",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-14T04:00:00.000Z",
+      "decidedAt": "2026-10-16T05:44:51.404Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dh0428d0bbtaa2x5ex",
+          "fileName": "Dokumentasi audit stok gudang",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": true,
+      "highlightNote": "Selisih stok perlu keputusan direksi minggu ini.",
+      "highlightedAt": "2026-10-16T05:44:51.404Z"
+    },
+    {
+      "id": "cmvahu39s001kd0l3p3kb6295",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T04:54:43.339Z",
+      "decidedAt": "2026-10-16T04:54:43.399Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvahu3br001sd0l3a59ey7hb",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmvahu43i001wd0l38hm7iza0",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:42.751Z",
+          "mine": true
+        },
+        {
+          "id": "cmvahu4f20021d0l3uguj3miu",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:43.167Z",
+          "mine": true
+        },
+        {
+          "id": "cmvahu4j10026d0l3ps7s2gx2",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-16T04:54:43.309Z",
+          "mine": false
+        },
+        {
+          "id": "cmvahu4lk002xd0l3b46wlr1w",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-16T04:54:43.400Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmvahk2y6000cd0l393farxmi",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Retak rambut pada kolom lantai 2 gedung B",
+      "deskripsi": "Panen 42 ton TBS dari afdeling 3.\n\nSeluruh hasil sudah ditimbang dan dikirim ke pabrik sebelum pukul 14.00.",
+      "reporterName": "Sari Uji",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Produksi",
+      "reporterTitle": "Kepala Produksi",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-16T04:46:54.702Z",
+      "decidedAt": "2026-10-16T04:46:54.836Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 5,
+      "evidence": [
+        {
+          "id": "cmvahk301000kd0l3han9ojbv",
+          "fileName": "foto-1.png",
+          "mime": "image/png",
+          "size": 154,
+          "url": null
+        },
+        {
+          "id": "cmvahk30h000nd0l33cg0rlds",
+          "fileName": "foto-2.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk30u000qd0l3qb43utrr",
+          "fileName": "foto-3.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk317000td0l39wusnldt",
+          "fileName": "foto-4.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmvahk31k000wd0l3lquonq8c",
+          "fileName": "foto-5.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": true,
+      "highlightNote": "Perlu keputusan perbaikan struktur sebelum pengecoran lantai 4 minggu depan.",
+      "highlightedAt": "2026-10-16T04:46:54.836Z"
+    },
+    {
+      "id": "cmv9946e0042qd0bbgryu1iag",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002dd0bbl08mus1i",
+      "ptName": "PT Sawit Riau Lestari",
+      "reportDate": "2026-10-14",
+      "kegiatan": "Inspeksi jalur pipa distribusi",
+      "deskripsi": "Pemeriksaan visual dan uji tekanan pada 3 km jalur pipa; tidak ditemukan kebocoran.",
+      "reporterName": "Hendra Wijaya",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Operasional",
+      "reporterTitle": "Manajer Operasional",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-14T02:00:00.000Z",
+      "decidedAt": "2026-10-16T04:46:46.458Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946e2042rd0bbx8ykdq6s",
+          "fileName": "Dokumentasi inspeksi jalur pipa distribusi",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": true,
+      "highlightNote": "Perlu keputusan direksi sebelum pekerjaan lanjutan minggu depan.",
+      "highlightedAt": "2026-10-16T04:46:46.458Z"
+    },
+    {
+      "id": "cmv9dg5ny001ad0qepsyqb6wn",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T10:04:08.961Z",
+      "decidedAt": "2026-10-15T10:04:09.043Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9dg5pw001hd0qeeqetulqt",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9dg6mo001ld0qe6bo95nds",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T10:04:08.208Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9dg70l001qd0qe2thhqhk5",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T10:04:08.710Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9dg767001vd0qee8atk38l",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-15T10:04:08.911Z",
+          "mine": false
+        },
+        {
+          "id": "cmv9dg79x002jd0qe3je8v2k0",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T10:04:09.045Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9depyg0007d0qevlznetwh",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002fd0bbmz3fdw46",
+      "ptName": "PT Karet Jambi Makmur",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Panen dan penimbangan TBS afdeling 3",
+      "deskripsi": "Panen 42 ton TBS dari afdeling 3.\n\nSeluruh hasil sudah ditimbang dan dikirim ke pabrik sebelum pukul 14.00.",
+      "reporterName": "Sari Uji",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Produksi",
+      "reporterTitle": "Kepala Produksi",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T10:02:59.944Z",
+      "decidedAt": "2026-10-15T10:03:00.641Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 5,
+      "evidence": [
+        {
+          "id": "cmv9deq0l000ed0qe4qen9px2",
+          "fileName": "foto-1.png",
+          "mime": "image/png",
+          "size": 154,
+          "url": null
+        },
+        {
+          "id": "cmv9deq15000hd0qeorq2h8xd",
+          "fileName": "foto-2.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmv9deq1p000kd0qemmrwiy24",
+          "fileName": "foto-3.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmv9deq25000nd0qe80tw7gkq",
+          "fileName": "foto-4.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        },
+        {
+          "id": "cmv9deq2n000qd0qeqdeaqg7p",
+          "fileName": "foto-5.png",
+          "mime": "image/png",
+          "size": 155,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9acac2004sd0f5omdqsa8p",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T08:37:07.914Z",
+      "decidedAt": "2026-10-15T08:37:07.983Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9acadl004yd0f552howo8q",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9acah90052d0f5fdfivczg",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:07.726Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9acaia0057d0f5hx6kywj4",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:07.763Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9acalh005cd0f534tj0z2o",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-15T08:37:07.877Z",
+          "mine": false
+        },
+        {
+          "id": "cmv9acaoh005xd0f5ox558ytw",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:07.985Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9ac4sq002td0f5zbjerrzg",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T08:37:00.935Z",
+      "decidedAt": "2026-10-15T08:37:01.023Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9ac4wh002yd0f5dgqlkc1n",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9ac51t0032d0f58p1vq4x5",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:00.690Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9ac53b0037d0f53y54sb65",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:00.743Z",
+          "mine": true
+        },
+        {
+          "id": "cmv9ac57i003cd0f5rooyp971",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-15T08:37:00.895Z",
+          "mine": false
+        },
+        {
+          "id": "cmv9ac5b4003ud0f52zo9xeyo",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:37:01.025Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv996prg000ed0f5pcf6nq4f",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Uji E2E pemasangan panel",
+      "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T08:04:50.986Z",
+      "decidedAt": "2026-10-15T08:04:51.070Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv996pv9000id0f5bxumhhyf",
+          "fileName": "bukti-uji.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv996rdx000md0f5wverpsi6",
+          "kind": "PERBAIKAN",
+          "body": "Tambahkan foto sisi timur panel.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:04:50.086Z",
+          "mine": true
+        },
+        {
+          "id": "cmv996rta000rd0f5sytnm42q",
+          "kind": "KOMENTAR",
+          "body": "Mohon sertakan jam pengerjaan.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:04:50.638Z",
+          "mine": true
+        },
+        {
+          "id": "cmv996s1w000wd0f5k78nd2o2",
+          "kind": "BALASAN",
+          "body": "Foto sisi timur sudah ditambahkan.",
+          "authorName": "Admin Karya Energi Nusantara",
+          "authorRole": "ADMIN_SUBHOLDING",
+          "createdAt": "2026-10-15T08:04:50.949Z",
+          "mine": false
+        },
+        {
+          "id": "cmv996s5c001bd0f5u77uhx7i",
+          "kind": "SETUJU",
+          "body": "Sudah lengkap.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T08:04:51.072Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946cy041sd0bbhds74s0f",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l0026d0bbx1x46g0q",
+      "ptName": "PT Petro Kaltim Energi",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Panen dan penimbangan TBS",
+      "deskripsi": "Panen 42 ton TBS dari afdeling 3; seluruh hasil sudah ditimbang dan dikirim ke pabrik.",
+      "reporterName": "Sari Lestari",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Produksi",
+      "reporterTitle": "Kepala Produksi",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T05:00:00.000Z",
+      "decidedAt": "2026-10-15T07:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946d1041td0bbg6y6ec9p",
+          "fileName": "Dokumentasi panen dan penimbangan tbs",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946d3041vd0bbo01l4qnw",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T07:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946dr042id0bbpwrehvsd",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002fd0bbmz3fdw46",
+      "ptName": "PT Karet Jambi Makmur",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Pelatihan K3 operator",
+      "deskripsi": "Pelatihan keselamatan kerja untuk 18 operator baru, termasuk simulasi evakuasi.",
+      "reporterName": "Rina Kartika",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Keuangan",
+      "reporterTitle": "Kepala Keuangan",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T03:00:00.000Z",
+      "decidedAt": "2026-10-15T05:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dt042jd0bbmvsjzm30",
+          "fileName": "Dokumentasi pelatihan k3 operator",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946dv042ld0bbv1wd8qjo",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T05:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946ce041cd0bbtdhb3br8",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l0023d0bbj919t7mh",
+      "ptName": "PT Energi Migas Sumut",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Inspeksi jalur pipa distribusi",
+      "deskripsi": "Pemeriksaan visual dan uji tekanan pada 3 km jalur pipa; tidak ditemukan kebocoran.",
+      "reporterName": "Agus Salim",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-15T02:00:00.000Z",
+      "decidedAt": "2026-10-15T04:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946ch041dd0bb61l3im6g",
+          "fileName": "Dokumentasi inspeksi jalur pipa distribusi",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946cj041fd0bba8ozmjnr",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-15T04:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946dj042ad0bbc6ht77gm",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l0026d0bbx1x46g0q",
+      "ptName": "PT Petro Kaltim Energi",
+      "reportDate": "2026-10-14",
+      "kegiatan": "Pelatihan K3 operator",
+      "deskripsi": "Pelatihan keselamatan kerja untuk 18 operator baru, termasuk simulasi evakuasi.",
+      "reporterName": "Rina Kartika",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Keuangan",
+      "reporterTitle": "Kepala Keuangan",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-14T05:00:00.000Z",
+      "decidedAt": "2026-10-14T07:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dk042bd0bbmnynqspk",
+          "fileName": "Dokumentasi pelatihan k3 operator",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946dm042dd0bbrgbz90w7",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-14T07:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946e9042yd0bbjunukbql",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002gd0bbhdpcj0xe",
+      "ptName": "PT Teh Gunung Wangi",
+      "reportDate": "2026-10-14",
+      "kegiatan": "Pemasangan panel surya blok B",
+      "deskripsi": "Pemasangan 120 panel selesai; pengujian inverter dijadwalkan besok pagi.",
+      "reporterName": "Agus Salim",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-14T04:00:00.000Z",
+      "decidedAt": "2026-10-14T06:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946ea042zd0bb5iv3vklz",
+          "fileName": "Dokumentasi pemasangan panel surya blok b",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946ec0431d0bbhtasoba7",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-14T06:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv9946db0422d0bbkrqfkjmx",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l0024d0bbmz4dqn4i",
+      "ptName": "PT Kilang Utara Mandiri",
+      "reportDate": "2026-10-14",
+      "kegiatan": "Panen dan penimbangan TBS",
+      "deskripsi": "Panen 42 ton TBS dari afdeling 3; seluruh hasil sudah ditimbang dan dikirim ke pabrik.",
+      "reporterName": "Sari Lestari",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Produksi",
+      "reporterTitle": "Kepala Produksi",
+      "status": "DISETUJUI",
+      "submittedAt": "2026-10-14T03:00:00.000Z",
+      "decidedAt": "2026-10-14T05:00:00.000Z",
+      "decidedByName": "Bpk. Surya Atmaja",
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dc0423d0bbwjfojr31",
+          "fileName": "Dokumentasi panen dan penimbangan tbs",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [
+        {
+          "id": "cmv9946de0425d0bbgit44eh0",
+          "kind": "SETUJU",
+          "body": "Laporan lengkap, terima kasih.",
+          "authorName": "Bpk. Surya Atmaja",
+          "authorRole": "SUPERVISOR",
+          "createdAt": "2026-10-14T05:00:00.000Z",
+          "mine": true
+        }
+      ],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    }
+  ],
+  "counts": {
+    "MENUNGGU": 3,
+    "PERLU_PERBAIKAN": 4,
+    "DISETUJUI": 17
+  },
+  "subholdings": [
+    {
+      "id": "cmv99414a0019d0bbczma0twa",
+      "name": "Karya Agro Lestari",
+      "waiting": 1,
+      "oldestAt": "2026-10-15T04:00:00.000Z"
+    },
+    {
+      "id": "cmv99414a001ad0bb8la8hzz4",
+      "name": "Karya Energi Nusantara",
+      "waiting": 2,
+      "oldestAt": "2026-10-15T08:07:24.084Z"
+    },
+    {
+      "id": "cmv9ac5mt003zd0f5ngtbroa6",
+      "name": "Subholding Uji 21436",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv9acazq0062d0f5x4c7zezd",
+      "name": "Subholding Uji 28381",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv9dg7np002od0qesqnjys4n",
+      "name": "Subholding Uji 49533",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmvakuwa80020d04iyt3tst0p",
+      "name": "Subholding Uji 58119",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmvahu4wi0032d0l3gxdce7wh",
+      "name": "Subholding Uji 83787",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv996sp6001gd0f5fmd1ziyf",
+      "name": "Subholding Uji 91776",
+      "waiting": 0,
+      "oldestAt": null
+    }
+  ],
+  "today": {
+    "approved": 6,
+    "highlighted": 3,
+    "revised": 1
+  }
+}

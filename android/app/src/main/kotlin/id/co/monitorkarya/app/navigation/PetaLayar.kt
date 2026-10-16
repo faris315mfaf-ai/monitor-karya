@@ -60,6 +60,15 @@ enum class LayarTab {
     PERUSAHAAN,
     LOG_AUDIT,
     SISTEM_AKSES,
+
+    // Model subholding — penampung "buka versi web" sampai layar aslinya
+    // dibangun: Fase 2 (SH_DASHBOARD/SH_INBOX/SH_HISTORY), Fase 3 (SH_REVIEW),
+    // Fase 4 (SH_OVERVIEW).
+    SH_DASHBOARD,
+    SH_INBOX,
+    SH_HISTORY,
+    SH_REVIEW,
+    SH_OVERVIEW,
 }
 
 /** Peran pemantau grup yang memakai layar Manajemen di Ringkasan. */
@@ -101,6 +110,11 @@ fun layarUntuk(peran: Peran, tab: TabId, adaPt: Boolean): LayarTab = when (tab) 
     TabId.PERUSAHAAN -> LayarTab.PERUSAHAAN
     TabId.LOG_AUDIT -> LayarTab.LOG_AUDIT
     TabId.SISTEM_AKSES -> LayarTab.SISTEM_AKSES
+    TabId.SH_DASHBOARD -> LayarTab.SH_DASHBOARD
+    TabId.SH_INBOX -> LayarTab.SH_INBOX
+    TabId.SH_HISTORY -> LayarTab.SH_HISTORY
+    TabId.SH_REVIEW -> LayarTab.SH_REVIEW
+    TabId.SH_OVERVIEW -> LayarTab.SH_OVERVIEW
 }
 
 /**
@@ -115,8 +129,9 @@ fun bolehPengaturan(peran: Peran): Boolean = peran == Peran.ADMIN_PT
  * spesifikasi — empat tab utama berurutan, sisanya ke "Lainnya".
  */
 private val TAB_RINGKAS: Map<Peran, List<TabId>> = mapOf(
+    // Manajemen tidak lagi di sini: sejak model subholding (16 Okt 2026) tabnya
+    // hanya sh-overview, jadi set ringkas lamanya akan menghasilkan bilah kosong.
     Peran.DIREKTUR_ENTITAS to listOf(TabId.RINGKASAN, TabId.PROYEK, TabId.ESKALASI, TabId.PEMBAGIAN_DIVISI),
-    Peran.MANAJEMEN to listOf(TabId.RINGKASAN, TabId.PROYEK, TabId.PERSETUJUAN, TabId.PEMBAGIAN_DIVISI),
 )
 
 /**
@@ -156,6 +171,12 @@ fun labelPendek(peran: Peran, tab: TabId): String = when (tab) {
     TabId.PERUSAHAAN -> "Perusahaan"
     TabId.LOG_AUDIT -> "Log"
     TabId.SISTEM_AKSES -> "Sistem"
+    // NAV_TABS[].short web untuk tab sh-*.
+    TabId.SH_DASHBOARD -> "Dashboard"
+    TabId.SH_INBOX -> "Pesan"
+    TabId.SH_HISTORY -> "Riwayat"
+    TabId.SH_REVIEW -> "Persetujuan"
+    TabId.SH_OVERVIEW -> "Dashboard"
 }
 
 /**

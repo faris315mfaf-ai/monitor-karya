@@ -53,6 +53,11 @@ internal val PETA_TAB: Map<String, TabId> = mapOf(
     "companies" to TabId.PERUSAHAAN,
     "audit" to TabId.LOG_AUDIT,
     "system" to TabId.SISTEM_AKSES,
+    "sh-dashboard" to TabId.SH_DASHBOARD,
+    "sh-inbox" to TabId.SH_INBOX,
+    "sh-history" to TabId.SH_HISTORY,
+    "sh-review" to TabId.SH_REVIEW,
+    "sh-overview" to TabId.SH_OVERVIEW,
 )
 
 /** Nama [TabId] tujuan dari tab web; null bila tak ada info atau tak dikenal. */

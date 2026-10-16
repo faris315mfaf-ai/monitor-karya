@@ -1,0 +1,80 @@
+{
+  "start": "2026-10-10",
+  "end": "2026-10-16",
+  "days": [
+    "2026-10-10",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16"
+  ],
+  "subholdings": [
+    {
+      "id": "cmv99414a0019d0bbczma0twa",
+      "name": "Karya Agro Lestari",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        2,
+        3,
+        0
+      ],
+      "pts": [
+        {
+          "id": "cmv99414l002fd0bbmz3fdw46",
+          "name": "PT Karet Jambi Makmur",
+          "counts": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ]
+        },
+        {
+          "id": "cmv99414l002dd0bbl08mus1i",
+          "name": "PT Sawit Riau Lestari",
+          "counts": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0
+          ]
+        },
+        {
+          "id": "cmv99414l002gd0bbhdpcj0xe",
+          "name": "PT Teh Gunung Wangi",
+          "counts": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "highlights": [
+    {
+      "id": "cmv9946e0042qd0bbgryu1iag",
+      "date": "2026-10-14",
+      "kegiatan": "Inspeksi jalur pipa distribusi",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptName": "PT Sawit Riau Lestari",
+      "highlightNote": "Perlu keputusan direksi sebelum pekerjaan lanjutan minggu depan."
+    }
+  ]
+}

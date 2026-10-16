@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * D1: paritas ROLE_TABS Android dengan src/lib/rbac.ts. [WEB_ROLE_TABS] adalah
- * salinan LITERAL web (13 Okt 2026) — bila web berubah, perbarui salinan ini
+ * salinan LITERAL web (16 Okt 2026, model subholding) — bila web berubah, perbarui salinan ini
  * dan RoleTabs.kt bersamaan. Pengecualian tunggal: 'pesan' (ikon top bar).
  */
 class RoleTabsTest {
@@ -31,10 +31,11 @@ class RoleTabsTest {
             "dashboard", "pesan", "companies", "projects", "divisions", "escalations", "entities", "work-desk",
             "inbox", "daily-input", "weekly-input", "audit", "system",
         ),
-        "MANAJEMEN" to listOf(
-            "dashboard", "pesan", "escalations", "projects", "divisions", "approvals", "entities", "audit",
-        ),
+        "MANAJEMEN" to listOf("sh-overview"),
         "AUDITOR" to listOf("dashboard", "pesan", "projects", "divisions", "entities", "audit"),
+        "ADMIN_SUBHOLDING" to listOf("sh-dashboard", "sh-inbox", "sh-history"),
+        "SUPERVISOR" to listOf("sh-review"),
+        "SUPERUSER" to listOf("sh-overview"),
     )
 
     /** NAV_TABS id (constants.ts) → TabId; 'pesan' sengaja tidak ada. */
@@ -53,6 +54,11 @@ class RoleTabsTest {
         "entities" to TabId.ENTITAS,
         "audit" to TabId.LOG_AUDIT,
         "system" to TabId.SISTEM_AKSES,
+        "sh-dashboard" to TabId.SH_DASHBOARD,
+        "sh-inbox" to TabId.SH_INBOX,
+        "sh-history" to TabId.SH_HISTORY,
+        "sh-review" to TabId.SH_REVIEW,
+        "sh-overview" to TabId.SH_OVERVIEW,
     )
 
     @Test

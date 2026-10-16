@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
@@ -76,6 +77,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -93,6 +95,8 @@ import id.co.monitorkarya.app.R
 import id.co.monitorkarya.app.ui.admin.DashboardAdminScreen
 import id.co.monitorkarya.app.ui.admin.MejaKerjaAdminScreen
 import id.co.monitorkarya.app.ui.admin.StatistikAdminScreen
+import id.co.monitorkarya.app.ui.bukaweb.ShPenampungScreen
+import id.co.monitorkarya.app.ui.bukaweb.bukaVersiWeb
 import id.co.monitorkarya.app.ui.divisi.DivisiScreen
 import id.co.monitorkarya.app.ui.laporan.LaporanHarianScreen
 import id.co.monitorkarya.app.ui.luring.BannerLuring
@@ -446,6 +450,11 @@ private fun IsiLayar(pengguna: PeranPengguna, layar: LayarTab, bukaTab: (TabId) 
         LayarTab.PERUSAHAAN -> PerusahaanTab(peran)
         LayarTab.LOG_AUDIT -> LogAuditTab(peran)
         LayarTab.SISTEM_AKSES -> SistemAksesTab(peran)
+        LayarTab.SH_DASHBOARD -> ShPenampung(TabId.SH_DASHBOARD)
+        LayarTab.SH_INBOX -> ShPenampung(TabId.SH_INBOX)
+        LayarTab.SH_HISTORY -> ShPenampung(TabId.SH_HISTORY)
+        LayarTab.SH_REVIEW -> ShPenampung(TabId.SH_REVIEW)
+        LayarTab.SH_OVERVIEW -> ShPenampung(TabId.SH_OVERVIEW)
     }
 }
 
@@ -468,6 +477,18 @@ private fun ikonTab(tab: TabId): ImageVector = when (tab) {
     TabId.PERUSAHAAN -> Icons.Outlined.Business
     TabId.LOG_AUDIT -> Icons.Outlined.ReceiptLong
     TabId.SISTEM_AKSES -> Icons.Outlined.Lock
+    TabId.SH_DASHBOARD -> Icons.Outlined.Dashboard
+    TabId.SH_INBOX -> Icons.Outlined.Inbox
+    TabId.SH_HISTORY -> Icons.Outlined.History
+    TabId.SH_REVIEW -> Icons.Outlined.TaskAlt
+    TabId.SH_OVERVIEW -> Icons.Outlined.Dashboard
+}
+
+/** Tab subholding yang layarnya belum dibangun di Android (Fase 2–4). */
+@Composable
+private fun ShPenampung(tab: TabId) {
+    val konteks = LocalContext.current
+    ShPenampungScreen(judul = tab.label, onBukaWeb = { bukaVersiWeb(konteks) })
 }
 
 /**

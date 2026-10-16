@@ -68,6 +68,11 @@ fun tabDariWeb(id: String?): TabId? = when (id) {
     "entities" -> TabId.ENTITAS
     "audit" -> TabId.LOG_AUDIT
     "system" -> TabId.SISTEM_AKSES
+    "sh-dashboard" -> TabId.SH_DASHBOARD
+    "sh-inbox" -> TabId.SH_INBOX
+    "sh-history" -> TabId.SH_HISTORY
+    "sh-review" -> TabId.SH_REVIEW
+    "sh-overview" -> TabId.SH_OVERVIEW
     else -> null
 }
 

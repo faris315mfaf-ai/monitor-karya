@@ -1,0 +1,226 @@
+{
+  "date": "2026-10-16",
+  "subholdings": [
+    {
+      "id": "cmv99414a0019d0bbczma0twa",
+      "name": "Karya Agro Lestari",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmv99414l002fd0bbmz3fdw46",
+          "name": "PT Karet Jambi Makmur"
+        },
+        {
+          "id": "cmv99414l002dd0bbl08mus1i",
+          "name": "PT Sawit Riau Lestari"
+        },
+        {
+          "id": "cmv99414l002gd0bbhdpcj0xe",
+          "name": "PT Teh Gunung Wangi"
+        }
+      ]
+    },
+    {
+      "id": "cmv99414a001ad0bb8la8hzz4",
+      "name": "Karya Energi Nusantara",
+      "count": 3,
+      "ptCount": 1,
+      "pts": [
+        {
+          "id": "cmv99414l002ad0bb7iarm54k",
+          "name": "PT Baterai Hijau Surabaya",
+          "reports": [
+            {
+              "id": "cmvahk2y6000cd0l393farxmi",
+              "kegiatan": "Retak rambut pada kolom lantai 2 gedung B",
+              "deskripsi": "Panen 42 ton TBS dari afdeling 3.\n\nSeluruh hasil sudah ditimbang dan dikirim ke pabrik sebelum pukul 14.00.",
+              "reporterName": "Sari Uji",
+              "reporterTitle": "Kepala Produksi",
+              "decidedAt": "2026-10-16T04:46:54.836Z",
+              "highlight": true,
+              "highlightNote": "Perlu keputusan perbaikan struktur sebelum pengecoran lantai 4 minggu depan.",
+              "evidence": [
+                {
+                  "id": "cmvahk301000kd0l3han9ojbv",
+                  "fileName": "foto-1.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                },
+                {
+                  "id": "cmvahk30h000nd0l33cg0rlds",
+                  "fileName": "foto-2.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                },
+                {
+                  "id": "cmvahk30u000qd0l3qb43utrr",
+                  "fileName": "foto-3.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                },
+                {
+                  "id": "cmvahk317000td0l39wusnldt",
+                  "fileName": "foto-4.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                },
+                {
+                  "id": "cmvahk31k000wd0l3lquonq8c",
+                  "fileName": "foto-5.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                }
+              ]
+            },
+            {
+              "id": "cmvahu39s001kd0l3p3kb6295",
+              "kegiatan": "Uji E2E pemasangan panel",
+              "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+              "reporterName": "Budi Uji",
+              "reporterTitle": "Manajer Proyek",
+              "decidedAt": "2026-10-16T04:54:43.399Z",
+              "highlight": false,
+              "highlightNote": null,
+              "evidence": [
+                {
+                  "id": "cmvahu3br001sd0l3a59ey7hb",
+                  "fileName": "bukti-uji.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                }
+              ]
+            },
+            {
+              "id": "cmvakutvm000ed04ief6ai853",
+              "kegiatan": "Uji E2E pemasangan panel",
+              "deskripsi": "Deskripsi uji E2E: panel surya atap gudang dipasang 40 persen. Diperbarui.",
+              "reporterName": "Budi Uji",
+              "reporterTitle": "Manajer Proyek",
+              "decidedAt": "2026-10-16T06:19:17.638Z",
+              "highlight": false,
+              "highlightNote": null,
+              "evidence": [
+                {
+                  "id": "cmvakuu0l000nd04i9kgrkamf",
+                  "fileName": "bukti-uji.png",
+                  "mime": "image/png",
+                  "kind": "file"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "allPts": [
+        {
+          "id": "cmv99414l002ad0bb7iarm54k",
+          "name": "PT Baterai Hijau Surabaya"
+        },
+        {
+          "id": "cmv99414l0023d0bbj919t7mh",
+          "name": "PT Energi Migas Sumut"
+        },
+        {
+          "id": "cmv99414l0029d0bbhqtivtgd",
+          "name": "PT Gas Kaltim Pratama"
+        },
+        {
+          "id": "cmv99414l0024d0bbmz4dqn4i",
+          "name": "PT Kilang Utara Mandiri"
+        },
+        {
+          "id": "cmv99414l0026d0bbx1x46g0q",
+          "name": "PT Petro Kaltim Energi"
+        },
+        {
+          "id": "cmv99414l002bd0bb5612gdou",
+          "name": "PT Surya Panel Jatim"
+        },
+        {
+          "id": "cmv99414l002ed0bbes1unuiy",
+          "name": "PT Turbin Angin Sulsel"
+        }
+      ]
+    },
+    {
+      "id": "cmv9ac5mt003zd0f5ngtbroa6",
+      "name": "Subholding Uji 21436",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmv9ac5v50046d0f5keinutla",
+          "name": "PT Uji Pindah 21735"
+        }
+      ]
+    },
+    {
+      "id": "cmv9acazq0062d0f5x4c7zezd",
+      "name": "Subholding Uji 28381",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmv9acb7s0069d0f5cw4eye9m",
+          "name": "PT Uji Pindah 28672"
+        }
+      ]
+    },
+    {
+      "id": "cmv9dg7np002od0qesqnjys4n",
+      "name": "Subholding Uji 49533",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmv9dg7wf002vd0qejmylyfw0",
+          "name": "PT Uji Pindah 49847"
+        }
+      ]
+    },
+    {
+      "id": "cmvakuwa80020d04iyt3tst0p",
+      "name": "Subholding Uji 58119",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmvakuwjw0027d04ikneb6jea",
+          "name": "PT Uji Pindah 58468"
+        }
+      ]
+    },
+    {
+      "id": "cmvahu4wi0032d0l3gxdce7wh",
+      "name": "Subholding Uji 83787",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmvahu52v0039d0l3d44hx13y",
+          "name": "PT Uji Pindah 84016"
+        }
+      ]
+    },
+    {
+      "id": "cmv996sp6001gd0f5fmd1ziyf",
+      "name": "Subholding Uji 91776",
+      "count": 0,
+      "ptCount": 0,
+      "pts": [],
+      "allPts": [
+        {
+          "id": "cmv996sy7001nd0f5033ktqsf",
+          "name": "PT Uji Pindah 92100"
+        }
+      ]
+    }
+  ]
+}

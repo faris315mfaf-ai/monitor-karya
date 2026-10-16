@@ -75,6 +75,13 @@ sealed interface SesiUiState {
      * validasi ulang daring berhasil.
      */
     data class Siap(val pengguna: PeranPengguna, val luring: Boolean = false) : SesiUiState
+
+    /**
+     * Masuk sah tetapi peran akun belum dikenal aplikasi ini ([peranMentah] dari
+     * server). Shell tidak dibuka, antrean dijeda, profil tidak disimpan; layar
+     * menawarkan versi web dan Keluar.
+     */
+    data class PeranTakDidukung(val nama: String, val peranMentah: String) : SesiUiState
 }
 
 @HiltViewModel
@@ -170,7 +177,9 @@ class SesiViewModel @Inject constructor(
                     // Sesi dicabut/kedaluwarsa di tengah pemakaian (mis. kata sandi diganti di web):
                     // kembali ke layar masuk, bukan membiarkan tiap layar menampilkan galat buntu.
                     PeristiwaSesi.BERAKHIR -> {
-                        val sedangMasuk = _status.value is SesiUiState.Siap || _status.value is SesiUiState.WajibGantiSandi
+                        val sedangMasuk = _status.value is SesiUiState.Siap ||
+                            _status.value is SesiUiState.WajibGantiSandi ||
+                            _status.value is SesiUiState.PeranTakDidukung
                         if (sedangMasuk && !sedangKeluar) {
                             _pesanGalat.value = PESAN_SESI_BERAKHIR
                             sesiBerakhir()
@@ -365,6 +374,15 @@ class SesiViewModel @Inject constructor(
 
     private suspend fun terapkanStatus(baru: SesiUiState) {
         val siap = baru as? SesiUiState.Siap
+        val takDikenal = siap?.pengguna?.peranTakDikenal
+        if (siap != null && takDikenal != null) {
+            // Peran baru di server yang belum didukung aplikasi: jangan buka shell
+            // dengan peran pengganti (dulu Auditor) yang menampilkan layar keliru.
+            mesin.jeda()
+            prefs.setUidSesi(null)
+            _status.value = SesiUiState.PeranTakDidukung(nama = siap.pengguna.nama, peranMentah = takDikenal)
+            return
+        }
         if (siap == null) {
             // C5-T3: tanpa shell aktif tidak ada antrean yang boleh terkirim
             // (TanpaSesi dari mulai dingin 401, WajibGantiSandi akun mana pun).
@@ -424,18 +442,24 @@ class SesiViewModel @Inject constructor(
         id = id,
         nama = name,
         email = email,
-        // Peran tak dikenal (server lebih baru dari aplikasi) jatuh ke Auditor:
-        // baca-saja, tidak bisa menulis apa pun — degradasi paling aman.
-        peran = Peran.entries.firstOrNull { it.name == role } ?: Peran.AUDITOR,
+        // Peran tak dikenal (server lebih baru dari aplikasi): ditandai lewat
+        // peranTakDikenal → layar "Peran belum tersedia". AUDITOR hanya pengisi
+        // tipe dan tidak pernah dipakai untuk membuka layar.
+        peran = Peran.dariNama(role) ?: Peran.AUDITOR,
         scopeEntitasId = scopeEntityId,
+        peranTakDikenal = role.namaBilaAsing(),
     )
 
     private fun LoginUserDto.kePengguna(): PeranPengguna = PeranPengguna(
         id = id,
         nama = name,
         email = email,
-        peran = Peran.entries.firstOrNull { it.name == role } ?: Peran.AUDITOR,
+        peran = Peran.dariNama(role) ?: Peran.AUDITOR,
         // DTO login tidak memuat scope entitas; dilengkapi /api/auth/me setelahnya.
         scopeEntitasId = null,
+        peranTakDikenal = role.namaBilaAsing(),
     )
+
+    /** Nama peran bila belum dikenal aplikasi ini, selain itu null. */
+    private fun String.namaBilaAsing(): String? = if (Peran.dariNama(this) == null) this else null
 }

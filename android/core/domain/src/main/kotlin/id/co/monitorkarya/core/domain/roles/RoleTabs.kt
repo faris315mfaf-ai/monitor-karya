@@ -1,4 +1,4 @@
-// Port ROLE_TABS + ROLE_DUTIES dari src/lib/rbac.ts (PERSIS, urutan dipertahankan);
+// Port ROLE_TABS + ROLE_DUTIES dari src/lib/rbac.ts (PERSIS, urutan dipertahankan; salinan 16 Okt 2026);
 // label tab dari NAV_TABS di src/lib/constants.ts.
 //
 // Satu-satunya pengecualian: NavTabId 'pesan' (Kotak masuk) TIDAK menjadi
@@ -29,6 +29,13 @@ enum class TabId(val label: String) {
     PERUSAHAAN("Perusahaan & akun"),
     LOG_AUDIT("Log aktivitas"),
     SISTEM_AKSES("Sistem & akses"),
+
+    // Model subholding (NAV_TABS sh-* di constants.ts, 16 Okt 2026).
+    SH_DASHBOARD("Dashboard"),
+    SH_INBOX("Kotak masuk"),
+    SH_HISTORY("Riwayat"),
+    SH_REVIEW("Persetujuan"),
+    SH_OVERVIEW("Dashboard"),
 }
 
 /** Tab per peran, urut; entri pertama = tab pendarat peran itu (ROLE_TABS rbac.ts). */
@@ -63,13 +70,14 @@ val ROLE_TABS: Map<Peran, List<TabId>> = mapOf(
         TabId.ESKALASI, TabId.ENTITAS, TabId.MEJA_KERJA, TabId.PENERIMAAN,
         TabId.LAPORAN_HARIAN, TabId.CAPAIAN_MINGGUAN, TabId.LOG_AUDIT, TabId.SISTEM_AKSES,
     ),
-    Peran.MANAJEMEN to listOf(
-        TabId.RINGKASAN, TabId.ESKALASI, TabId.PROYEK, TabId.PEMBAGIAN_DIVISI,
-        TabId.PERSETUJUAN, TabId.ENTITAS, TabId.LOG_AUDIT,
-    ),
+    // Kontrak subholding 16 Okt 2026: Manajemen hanya dashboard laporan disetujui.
+    Peran.MANAJEMEN to listOf(TabId.SH_OVERVIEW),
     Peran.AUDITOR to listOf(
         TabId.RINGKASAN, TabId.PROYEK, TabId.PEMBAGIAN_DIVISI, TabId.ENTITAS, TabId.LOG_AUDIT,
     ),
+    Peran.ADMIN_SUBHOLDING to listOf(TabId.SH_DASHBOARD, TabId.SH_INBOX, TabId.SH_HISTORY),
+    Peran.SUPERVISOR to listOf(TabId.SH_REVIEW),
+    Peran.SUPERUSER to listOf(TabId.SH_OVERVIEW),
 )
 
 /** FALLBACK_TABS di rbac.ts. */
@@ -104,4 +112,10 @@ val ROLE_DUTIES: Map<Peran, String> = mapOf(
         "Terima laporan, putuskan isu yang dieskalasi, dan pantau indikator kepatuhan seluruh grup.",
     Peran.AUDITOR to
         "Telaah data dan jejak audit seluruh grup secara baca-saja.",
+    Peran.ADMIN_SUBHOLDING to
+        "Tambahkan laporan kegiatan harian PT di subholding Anda beserta buktinya, lalu tindak lanjuti permintaan perbaikan.",
+    Peran.SUPERVISOR to
+        "Tinjau laporan seluruh subholding: setujui, minta perbaikan, atau beri komentar.",
+    Peran.SUPERUSER to
+        "Pantau laporan yang sudah disetujui di seluruh subholding.",
 )

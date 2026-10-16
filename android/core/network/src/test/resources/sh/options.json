@@ -1,0 +1,80 @@
+{
+  "subholding": {
+    "id": "cmv99414a001ad0bb8la8hzz4",
+    "name": "Karya Energi Nusantara"
+  },
+  "pts": [
+    {
+      "id": "cmv99414l002ad0bb7iarm54k",
+      "code": "PT-006",
+      "name": "PT Baterai Hijau Surabaya"
+    },
+    {
+      "id": "cmv99414l0023d0bbj919t7mh",
+      "code": "PT-001",
+      "name": "PT Energi Migas Sumut"
+    },
+    {
+      "id": "cmv99414l0029d0bbhqtivtgd",
+      "code": "PT-003",
+      "name": "PT Gas Kaltim Pratama"
+    },
+    {
+      "id": "cmv99414l0024d0bbmz4dqn4i",
+      "code": "PT-002",
+      "name": "PT Kilang Utara Mandiri"
+    },
+    {
+      "id": "cmv99414l0026d0bbx1x46g0q",
+      "code": "PT-004",
+      "name": "PT Petro Kaltim Energi"
+    },
+    {
+      "id": "cmv99414l002bd0bb5612gdou",
+      "code": "PT-005",
+      "name": "PT Surya Panel Jatim"
+    },
+    {
+      "id": "cmv99414l002ed0bbes1unuiy",
+      "code": "PT-007",
+      "name": "PT Turbin Angin Sulsel"
+    }
+  ],
+  "reporters": [
+    {
+      "name": "Budi Uji",
+      "titleKind": "MANAJER",
+      "titleField": "Proyek"
+    },
+    {
+      "name": "Sari Uji",
+      "titleKind": "KEPALA",
+      "titleField": "Produksi"
+    },
+    {
+      "name": "Dewi Uji",
+      "titleKind": "KEPALA",
+      "titleField": "Teknik"
+    },
+    {
+      "name": "Rina Kartika",
+      "titleKind": "KEPALA",
+      "titleField": "Keuangan"
+    },
+    {
+      "name": "Agus Salim",
+      "titleKind": "MANAJER",
+      "titleField": "Proyek"
+    },
+    {
+      "name": "Sari Lestari",
+      "titleKind": "KEPALA",
+      "titleField": "Produksi"
+    },
+    {
+      "name": "Hendra Wijaya",
+      "titleKind": "MANAJER",
+      "titleField": "Operasional"
+    }
+  ]
+}

@@ -34,6 +34,11 @@ class PetaLayarTest {
         TabId.PERUSAHAAN to setOf(LayarTab.PERUSAHAAN),
         TabId.LOG_AUDIT to setOf(LayarTab.LOG_AUDIT),
         TabId.SISTEM_AKSES to setOf(LayarTab.SISTEM_AKSES),
+        TabId.SH_DASHBOARD to setOf(LayarTab.SH_DASHBOARD),
+        TabId.SH_INBOX to setOf(LayarTab.SH_INBOX),
+        TabId.SH_HISTORY to setOf(LayarTab.SH_HISTORY),
+        TabId.SH_REVIEW to setOf(LayarTab.SH_REVIEW),
+        TabId.SH_OVERVIEW to setOf(LayarTab.SH_OVERVIEW),
     )
 
     @Test
@@ -48,7 +53,7 @@ class PetaLayarTest {
                 }
             }
         }
-        // 9 peran × tab masing-masing × 2 keadaan PT.
+        // 12 peran × tab masing-masing × 2 keadaan PT.
         assertEquals(ROLE_TABS.values.sumOf { it.size } * 2, kombinasi)
     }
 

@@ -1,0 +1,148 @@
+{
+  "start": "2026-10-10",
+  "end": "2026-10-16",
+  "days": [
+    "2026-10-10",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16"
+  ],
+  "subholdings": [
+    {
+      "id": "cmv99414a0019d0bbczma0twa",
+      "name": "Karya Agro Lestari",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        2,
+        3,
+        0
+      ]
+    },
+    {
+      "id": "cmv99414a001ad0bb8la8hzz4",
+      "name": "Karya Energi Nusantara",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        3,
+        6,
+        3
+      ]
+    },
+    {
+      "id": "cmv9ac5mt003zd0f5ngtbroa6",
+      "name": "Subholding Uji 21436",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "cmv9acazq0062d0f5x4c7zezd",
+      "name": "Subholding Uji 28381",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "cmv9dg7np002od0qesqnjys4n",
+      "name": "Subholding Uji 49533",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "cmvakuwa80020d04iyt3tst0p",
+      "name": "Subholding Uji 58119",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "cmvahu4wi0032d0l3gxdce7wh",
+      "name": "Subholding Uji 83787",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "cmv996sp6001gd0f5fmd1ziyf",
+      "name": "Subholding Uji 91776",
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "highlights": [
+    {
+      "id": "cmvahk2y6000cd0l393farxmi",
+      "date": "2026-10-16",
+      "kegiatan": "Retak rambut pada kolom lantai 2 gedung B",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "highlightNote": "Perlu keputusan perbaikan struktur sebelum pengecoran lantai 4 minggu depan."
+    },
+    {
+      "id": "cmv9946dg0427d0bbedq2r90m",
+      "date": "2026-10-14",
+      "kegiatan": "Audit stok gudang",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptName": "PT Gas Kaltim Pratama",
+      "highlightNote": "Selisih stok perlu keputusan direksi minggu ini."
+    },
+    {
+      "id": "cmv9946e0042qd0bbgryu1iag",
+      "date": "2026-10-14",
+      "kegiatan": "Inspeksi jalur pipa distribusi",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptName": "PT Sawit Riau Lestari",
+      "highlightNote": "Perlu keputusan direksi sebelum pekerjaan lanjutan minggu depan."
+    }
+  ]
+}

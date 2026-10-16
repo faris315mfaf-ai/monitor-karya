@@ -47,10 +47,11 @@ class GerbangRuteTest {
     }
 
     @Test
-    fun r2_manajemen_persetujuanDiBilahBawah() {
+    fun manajemen_subholding_hanyaDashboard() {
+        // Model subholding 16 Okt 2026: set ringkas lama Manajemen dihapus.
         val (bawah, lain) = bagiTabBawah(Peran.MANAJEMEN, tabsUntuk(Peran.MANAJEMEN), 5)
-        assertEquals(listOf(TabId.RINGKASAN, TabId.PROYEK, TabId.PERSETUJUAN, TabId.PEMBAGIAN_DIVISI), bawah)
-        assertEquals(listOf(TabId.ESKALASI, TabId.ENTITAS, TabId.LOG_AUDIT), lain)
+        assertEquals(listOf(TabId.SH_OVERVIEW), bawah)
+        assertEquals(emptyList<TabId>(), lain)
     }
 
     @Test
@@ -62,7 +63,7 @@ class GerbangRuteTest {
 
     @Test
     fun r2_peranLain_tetapPotongEmpatPlusLainnya() {
-        Peran.entries.filter { it != Peran.MANAJEMEN && it != Peran.DIREKTUR_ENTITAS }.forEach { peran ->
+        Peran.entries.filter { it != Peran.DIREKTUR_ENTITAS }.forEach { peran ->
             val tabs = tabsUntuk(peran)
             val (bawah, lain) = bagiTabBawah(peran, tabs, 5)
             assertEquals(peran.name, tabs, bawah + lain)

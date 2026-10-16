@@ -16,6 +16,17 @@ enum class Peran(val labelIndonesia: String) {
     TI("Tim TI"),
     AUDITOR("Auditor"),
     SUPERADMIN("Super Admin"),
+
+    // Model subholding (web 15–16 Okt 2026).
+    ADMIN_SUBHOLDING("Admin subholding"),
+    SUPERVISOR("Supervisor"),
+    SUPERUSER("Superuser"),
+    ;
+
+    companion object {
+        /** Peran dari nama basis data web; null = peran yang belum dikenal aplikasi ini. */
+        fun dariNama(nama: String?): Peran? = entries.firstOrNull { it.name == nama }
+    }
 }
 
 /** Kosakata status proyek (project-status.ts): on/risk/late/done/neutral. */
@@ -34,6 +45,12 @@ data class PeranPengguna(
     val email: String,
     val peran: Peran,
     val scopeEntitasId: String?,
+    /**
+     * Nama peran dari server yang belum dikenal aplikasi ini (server lebih baru);
+     * null = [peran] sah. Bila terisi, gerbang sesi menampilkan layar "Peran
+     * belum tersedia" dan [peran] tidak dipakai untuk apa pun.
+     */
+    val peranTakDikenal: String? = null,
 )
 
 /** Baris proyek untuk daftar/ringkasan (padanan /api/ringkasan). */

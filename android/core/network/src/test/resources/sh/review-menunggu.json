@@ -1,0 +1,166 @@
+{
+  "items": [
+    {
+      "id": "cmv9946dx042nd0bbrqquc5nd",
+      "subholdingId": "cmv99414a0019d0bbczma0twa",
+      "subholdingName": "Karya Agro Lestari",
+      "ptId": "cmv99414l002gd0bbhdpcj0xe",
+      "ptName": "PT Teh Gunung Wangi",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Inspeksi jalur pipa distribusi",
+      "deskripsi": "Pemeriksaan visual dan uji tekanan pada 3 km jalur pipa; tidak ditemukan kebocoran.",
+      "reporterName": "Hendra Wijaya",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Operasional",
+      "reporterTitle": "Manajer Operasional",
+      "status": "MENUNGGU",
+      "submittedAt": "2026-10-15T04:00:00.000Z",
+      "decidedAt": null,
+      "decidedByName": null,
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv9946dz042od0bbi2jqxvaq",
+          "fileName": "Dokumentasi inspeksi jalur pipa distribusi",
+          "mime": "text/uri-list",
+          "size": 0,
+          "url": "https://example.com/bukti-kegiatan"
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmv99a27o0026d0f5mwu2c98j",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002bd0bb5612gdou",
+      "ptName": "PT Surya Panel Jatim",
+      "reportDate": "2026-10-15",
+      "kegiatan": "Uji UI pengecoran pondasi",
+      "deskripsi": "Pengecoran pondasi tiang 1 sampai 4 selesai, uji slump lolos.",
+      "reporterName": "Dewi Uji",
+      "reporterTitleKind": "KEPALA",
+      "reporterTitleField": "Teknik",
+      "reporterTitle": "Kepala Teknik",
+      "status": "MENUNGGU",
+      "submittedAt": "2026-10-15T08:07:24.084Z",
+      "decidedAt": null,
+      "decidedByName": null,
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmv99a2ay002bd0f5qwyo4kms",
+          "fileName": "foto-pondasi.png",
+          "mime": "image/png",
+          "size": 70,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    },
+    {
+      "id": "cmvakvdts002od04i8hl4s709",
+      "subholdingId": "cmv99414a001ad0bb8la8hzz4",
+      "subholdingName": "Karya Energi Nusantara",
+      "ptId": "cmv99414l002ad0bb7iarm54k",
+      "ptName": "PT Baterai Hijau Surabaya",
+      "reportDate": "2026-10-16",
+      "kegiatan": "Uji thumbnail foto lapangan",
+      "deskripsi": "Foto besar 2400 px untuk menguji thumbnail server.",
+      "reporterName": "Budi Uji",
+      "reporterTitleKind": "MANAJER",
+      "reporterTitleField": "Proyek",
+      "reporterTitle": "Manajer Proyek",
+      "status": "MENUNGGU",
+      "submittedAt": "2026-10-16T06:19:40.864Z",
+      "decidedAt": null,
+      "decidedByName": null,
+      "evidenceCount": 1,
+      "evidence": [
+        {
+          "id": "cmvakvdvp002yd04ia9uf3u66",
+          "fileName": "lapangan.jpg",
+          "mime": "image/jpeg",
+          "size": 40529,
+          "url": null
+        }
+      ],
+      "comments": [],
+      "canEdit": false,
+      "canWithdraw": false,
+      "highlight": false,
+      "highlightNote": null,
+      "highlightedAt": null
+    }
+  ],
+  "counts": {
+    "MENUNGGU": 3,
+    "PERLU_PERBAIKAN": 4,
+    "DISETUJUI": 17
+  },
+  "subholdings": [
+    {
+      "id": "cmv99414a0019d0bbczma0twa",
+      "name": "Karya Agro Lestari",
+      "waiting": 1,
+      "oldestAt": "2026-10-15T04:00:00.000Z"
+    },
+    {
+      "id": "cmv99414a001ad0bb8la8hzz4",
+      "name": "Karya Energi Nusantara",
+      "waiting": 2,
+      "oldestAt": "2026-10-15T08:07:24.084Z"
+    },
+    {
+      "id": "cmv9ac5mt003zd0f5ngtbroa6",
+      "name": "Subholding Uji 21436",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv9acazq0062d0f5x4c7zezd",
+      "name": "Subholding Uji 28381",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv9dg7np002od0qesqnjys4n",
+      "name": "Subholding Uji 49533",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmvakuwa80020d04iyt3tst0p",
+      "name": "Subholding Uji 58119",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmvahu4wi0032d0l3gxdce7wh",
+      "name": "Subholding Uji 83787",
+      "waiting": 0,
+      "oldestAt": null
+    },
+    {
+      "id": "cmv996sp6001gd0f5fmd1ziyf",
+      "name": "Subholding Uji 91776",
+      "waiting": 0,
+      "oldestAt": null
+    }
+  ],
+  "today": {
+    "approved": 6,
+    "highlighted": 3,
+    "revised": 1
+  }
+}

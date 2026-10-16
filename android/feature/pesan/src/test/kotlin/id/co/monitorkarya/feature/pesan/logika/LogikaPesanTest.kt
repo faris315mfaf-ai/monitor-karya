@@ -32,7 +32,12 @@ class LogikaPesanTest {
         assertEquals(TabId.LAPORAN_HARIAN, tabTerkait(p("X", tab = "daily-input"), Peran.PIC_PROYEK))
         // Manajemen tidak punya tab Laporan harian → tanpa tindak lanjut.
         assertNull(tabTerkait(p("X", tab = "daily-input"), Peran.MANAJEMEN))
-        assertEquals(TabId.PERSETUJUAN, tabTerkait(p("X", tab = "approvals"), Peran.MANAJEMEN))
+        // Model subholding 16 Okt 2026: Manajemen hanya sh-overview; Persetujuan lama milik Direktur entitas.
+        assertNull(tabTerkait(p("X", tab = "approvals"), Peran.MANAJEMEN))
+        assertEquals(TabId.PERSETUJUAN, tabTerkait(p("X", tab = "approvals"), Peran.DIREKTUR_ENTITAS))
+        assertEquals(TabId.SH_REVIEW, tabTerkait(p("X", tab = "sh-review"), Peran.SUPERVISOR))
+        assertEquals(TabId.SH_INBOX, tabTerkait(p("X", tab = "sh-inbox"), Peran.ADMIN_SUBHOLDING))
+        assertNull(tabTerkait(p("X", tab = "sh-review"), Peran.ADMIN_SUBHOLDING))
         // D1: Statistik kini TabId biasa untuk Admin PT; peran lain tidak punya.
         assertEquals(TabId.STATISTIK, tabTerkait(p("X", tab = "statistik"), Peran.ADMIN_PT))
         assertNull(tabTerkait(p("X", tab = "statistik"), Peran.TI))
