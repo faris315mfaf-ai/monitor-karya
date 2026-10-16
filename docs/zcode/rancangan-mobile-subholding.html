@@ -1,0 +1,331 @@
+<title>Rancangan Mobile Subholding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Tata letak: dokumen satu kolom (maks 760px teks), tabel & diagram melebar sampai 1040px dalam kotak gulir sendiri. */
+:root {
+  --bg: #F6F6F8;
+  --surface: #FFFFFF;
+  --ink: #17171B;
+  --ink-2: #5E5E68;
+  --line: #E4E4EA;
+  --accent: #C4262E;
+  --accent-soft: #FBE9EA;
+  --ok: #1B7034;
+  --ok-soft: #E3F3E8;
+  --warn: #9A5B00;
+  --warn-soft: #FDF1DC;
+  --code: #F0F0F4;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E0E11; --surface: #18181C; --ink: #F3F3F6; --ink-2: #A3A3AE; --line: #2A2A31;
+    --accent: #FF6B70; --accent-soft: #3A1A1C; --ok: #5DD07F; --ok-soft: #14301D;
+    --warn: #F2B54F; --warn-soft: #3A2A10; --code: #222228; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E0E11; --surface: #18181C; --ink: #F3F3F6; --ink-2: #A3A3AE; --line: #2A2A31;
+  --accent: #FF6B70; --accent-soft: #3A1A1C; --ok: #5DD07F; --ok-soft: #14301D;
+  --warn: #F2B54F; --warn-soft: #3A2A10; --code: #222228; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; padding-inline: 20px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 56px 96px; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 760px; }
+header.doc { display: flex; flex-direction: column; gap: 14px; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--font-display); font-size: clamp(32px, 5vw, 46px); line-height: 1.08; letter-spacing: -0.03em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-size: 26px; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 14px; text-wrap: balance; }
+h3 { font-size: 18px; line-height: 1.3; margin: 26px 0 8px; letter-spacing: -0.01em; }
+p { margin: 0 0 12px; }
+.lead { font-size: 18px; color: var(--ink-2); max-width: 680px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--ink-2); }
+section { display: flex; flex-direction: column; }
+ul, ol { margin: 0 0 12px; padding-left: 22px; }
+li { margin-bottom: 6px; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.decision { background: var(--surface); border-radius: 20px; padding: 26px 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.decision div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.decision strong { font-size: 15px; }
+.decision span { font-size: 14px; color: var(--ink-2); }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; letter-spacing: 0.02em; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.red { background: var(--accent-soft); color: var(--accent); }
+.tbl { overflow-x: auto; background: var(--surface); border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.screen { background: var(--surface); border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); min-width: 0; }
+.screen h4 { margin: 0; font-size: 15px; }
+.screen .role { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.phone { border: 1px solid var(--line); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; background: var(--bg); min-height: 210px; }
+.phone .bar { height: 8px; border-radius: 4px; background: var(--line); }
+.phone .row { display: flex; gap: 6px; align-items: center; }
+.phone .blk { border-radius: 8px; background: var(--surface); border: 1px solid var(--line); padding: 6px 8px; color: var(--ink-2); }
+.phone .thumb { width: 26px; height: 26px; border-radius: 6px; background: var(--line); flex: none; }
+.phone .cta { margin-top: auto; border-radius: 999px; background: var(--accent); color: #FFFFFF; text-align: center; padding: 6px; font-weight: 700; }
+.phone .dock { margin-top: auto; display: flex; justify-content: space-around; border-top: 1px solid var(--line); padding-top: 6px; color: var(--ink-2); }
+.screen ul { font-size: 13px; color: var(--ink-2); margin: 0; padding-left: 18px; }
+.callout { background: var(--warn-soft); color: var(--ink); border-radius: 16px; padding: 16px 20px; font-size: 15px; }
+.callout strong { color: var(--warn); }
+.diagram { background: var(--surface); border-radius: 16px; padding: 18px; overflow-x: auto; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+pre.mermaid { margin: 0; background: transparent; }
+.phases { display: flex; flex-direction: column; gap: 12px; }
+.phase { background: var(--surface); border-radius: 18px; padding: 18px 22px; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.phase .when { font-weight: 800; font-size: 15px; }
+.phase .when small { display: block; font-weight: 500; color: var(--ink-2); font-size: 13px; }
+.phase ul { margin: 0; }
+@media (max-width: 560px) { .phase { grid-template-columns: 1fr; } .wrap { padding-block: 32px 64px; gap: 44px; } }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header class="doc prose">
+  <span class="eyebrow">Rancangan teknis · Monitor Karya</span>
+  <h1>Monitor Karya di ponsel untuk model subholding</h1>
+  <p class="lead">Rancangan agar empat peran baru (Admin subholding, Supervisor, Superuser, Manajemen) bekerja nyaman dan andal di ponsel: cepat di jaringan seluler, bisa memotret bukti langsung, tetap bisa melapor saat sinyal hilang.</p>
+  <div class="meta"><span>15 Oktober 2026</span><span>Cabang <code>claude/subholding</code> · produksi <code>5073314</code></span><span>Status: usulan, menunggu keputusan pemilik</span></div>
+</header>
+
+<section>
+  <h2>Keputusan yang diusulkan</h2>
+  <div class="decision">
+    <div><span class="tag ok">Fase 1 · 2 hari</span><strong>Optimalkan web (PWA) untuk semua peran</strong><span>Jalan di Android dan iPhone tanpa pasang aplikasi. Kompresi foto, kamera langsung, pasang ke layar utama.</span></div>
+    <div><span class="tag warn">Fase 2 · 6–8 hari</span><strong>Perbarui aplikasi Android ke model subholding</strong><span>Untuk Admin subholding yang melapor dari lapangan: antrean luring, unggah foto di latar, notifikasi.</span></div>
+    <div><span class="tag red">Segera</span><strong>Kunci aplikasi Android lama</strong><span>Versi Android saat ini masih model lama dan tidak mengenal peran baru. Tampilkan pesan "Gunakan versi web" sampai Fase 2 rilis.</span></div>
+  </div>
+</section>
+
+<section class="prose">
+  <h2>Kondisi sekarang</h2>
+  <h3>Yang sudah berjalan</h3>
+  <ul>
+    <li><strong>Web responsif.</strong> Semua layar subholding punya tata letak ponsel: navigasi bawah di bawah 600px, pop-up menjadi lembar dari bawah, kartu satu kolom.</li>
+    <li><strong>PWA dasar.</strong> <code>public/manifest.webmanifest</code>, <code>public/sw.js</code> (daring-duluan, halaman <code>/luring.html</code> saat tidak ada sinyal), ikon maskable.</li>
+    <li><strong>Server siap untuk klien ponsel.</strong> Unggah bukti menerima header <code>Idempotency-Key</code> (aman diulang saat sinyal putus), URL foto bertanda tangan bisa diminta berkelompok lewat <code>POST /api/evidence/signed</code> (maks 60 per permintaan).</li>
+    <li><strong>Fondasi Android.</strong> 396 berkas Kotlin: Compose + Hilt + Retrofit + Room, cookie sesi terenkripsi, antrean luring (<code>AntreanOutbox</code>, <code>OutboxProsesor</code>, <code>KunciIdempotensi</code>), sistem desain mk-Compose, uji E2E di emulator.</li>
+  </ul>
+  <h3>Celah yang harus ditutup</h3>
+  <ul>
+    <li><strong>Android masih model lama.</strong> <code>RoleTabs.kt</code> hanya mengenal PIC, Kepala divisi, Admin PT, dan seterusnya. Akun Admin subholding, Supervisor, dan Superuser yang masuk lewat APK sekarang tidak punya tab yang benar.</li>
+    <li><strong>Foto dikirim utuh.</strong> Pemilih bukti di <code>src/components/views/sh-admin/</code> mengunggah berkas asli (foto ponsel 3–8 MB). Di 4G pinggiran satu laporan berfoto tiga bisa makan lebih dari satu menit dan sering gagal di tengah jalan.</li>
+    <li><strong>Manifest PWA usang.</strong> Deskripsi dan pintasan masih "Laporan harian" dan "Log aktivitas" milik model lama.</li>
+    <li><strong>Thumbnail berat.</strong> Dashboard Superuser memuat foto berukuran penuh untuk kotak 44px. Belum ada versi kecil di sisi server.</li>
+    <li><strong>Tidak ada notifikasi dorong.</strong> Admin subholding baru tahu laporannya diminta perbaikan saat membuka Kotak masuk.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Membandingkan jalur</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Kebutuhan</th><th>Web/PWA dioptimalkan</th><th>Android native diperbarui</th></tr></thead>
+    <tbody>
+      <tr><td>Android dan iPhone</td><td>Keduanya, satu kode</td><td>Android saja; iPhone tetap lewat web</td></tr>
+      <tr><td>Memotret bukti</td><td>Bisa (<code>capture="environment"</code>), kompresi di peramban</td><td>Kamera bawaan, kompresi dan pemangkasan EXIF lebih terkendali</td></tr>
+      <tr><td>Melapor tanpa sinyal</td><td>Terbatas: draf disimpan, kirim saat daring</td><td>Penuh: antrean luring, unggah ulang otomatis di latar</td></tr>
+      <tr><td>Notifikasi "diminta perbaikan"</td><td>Web Push (Android ya, iPhone hanya bila dipasang ke layar utama)</td><td>Notifikasi lokal dari sinkron berkala; FCM bila disetujui</td></tr>
+      <tr><td>Biaya pemeliharaan</td><td>Rendah, ikut web</td><td>Sedang, dua kode tampilan</td></tr>
+      <tr><td>Waktu sampai dipakai</td><td class="num">±2 hari</td><td class="num">±6–8 hari</td></tr>
+    </tbody>
+  </table></div>
+  <p class="prose" style="margin-top: 14px">Rekomendasinya bertahap: Fase 1 langsung menolong semua orang, Fase 2 dikhususkan untuk pelapor lapangan yang paling butuh luring. Supervisor dan Superuser cukup lewat web; Android hanya meniru layar mereka agar satu akun bisa memakai keduanya.</p>
+</section>
+
+<section>
+  <h2>Layar per peran di ponsel</h2>
+  <div class="screens">
+    <div class="screen">
+      <span class="role">Admin subholding · Dashboard</span>
+      <h4>Tambah laporan</h4>
+      <div class="phone" aria-hidden="true"><div class="bar"></div><div class="blk">Kegiatan / proyek</div><div class="blk">PT pelaksana ▾</div><div class="blk">Pelapor · Manajer / Kepala</div><div class="row"><span class="thumb"></span><span class="thumb"></span><span class="blk" style="flex:1">+ Foto</span></div><div class="cta">Kirim laporan</div></div>
+      <ul><li>Tombol kamera besar sebagai aksi utama bukti</li><li>Nama &amp; jabatan pelapor diingat per perangkat</li><li>Kirim tetap aktif luring: masuk antrean</li></ul>
+    </div>
+    <div class="screen">
+      <span class="role">Admin subholding · Dashboard</span>
+      <h4>Laporan hari ini</h4>
+      <div class="phone" aria-hidden="true"><div class="bar"></div><div class="row"><span class="blk">Semua 5</span><span class="blk">Perbaikan 1</span></div><div class="row"><span class="blk" style="flex:1">Pemasangan panel · Menunggu</span><span class="thumb"></span></div><div class="row"><span class="blk" style="flex:1">Inspeksi pipa · Disetujui</span><span class="thumb"></span></div><div class="row"><span class="blk" style="flex:1">Mengirim 2 foto…</span></div><div class="dock"><span>Dashboard</span><span>Kotak masuk</span><span>Riwayat</span></div></div>
+      <ul><li>Status unggah per laporan (antre, mengirim, gagal + coba lagi)</li><li>Gesek kiri: Perbaiki / Tarik</li></ul>
+    </div>
+    <div class="screen">
+      <span class="role">Supervisor · Persetujuan</span>
+      <h4>Antrean persetujuan</h4>
+      <div class="phone" aria-hidden="true"><div class="bar"></div><div class="row"><span class="blk">Menunggu 5</span><span class="blk">Perbaikan</span></div><div class="blk">Foto besar (geser antar foto)</div><div class="blk">Judul · PT · pelapor</div><div class="blk">Komentar…</div><div class="row"><span class="cta" style="flex:1;background:var(--ink-2)">Minta perbaikan</span><span class="cta" style="flex:1;background:var(--ok)">Setujui</span></div></div>
+      <ul><li>Satu laporan per layar, geser ke laporan berikutnya</li><li>Tombol keputusan menempel di bawah, di atas area aman</li></ul>
+    </div>
+    <div class="screen">
+      <span class="role">Superuser &amp; Manajemen · Dashboard</span>
+      <h4>Kartu subholding minimalis</h4>
+      <div class="phone" aria-hidden="true"><div class="bar"></div><div class="blk">Sigma Internasional · 3 laporan</div><div class="row"><span class="blk" style="flex:1">Pengiriman kontainer · 10.24</span><span class="thumb"></span></div><div class="blk">Sentra Multikarya · 3 laporan</div><div class="row"><span class="blk" style="flex:1">Pengecoran pelat · 15.45</span><span class="thumb"></span></div><div class="dock"><span>Dashboard</span></div></div>
+      <ul><li>Sama dengan web yang sudah live; thumbnail kecil dari server</li><li>Tarik ke bawah untuk memuat ulang</li></ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Alur lapor saat sinyal putus</h2>
+  <p class="prose">Alur ini inti Fase 2 (Android) dan versi ringannya di Fase 1 (draf web). Kuncinya: laporan dan setiap foto punya kunci idempotensi sejak dibuat di ponsel, jadi pengiriman ulang tidak pernah membuat laporan ganda.</p>
+  <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant A as Admin subholding (ponsel)
+  participant Q as Antrean luring (Room)
+  participant S as Server
+  A->>Q: Simpan laporan + 3 foto (dikompresi, kunci idempotensi)
+  Note over A,Q: Tampil "Antre" di daftar, bisa diubah sebelum terkirim
+  Q->>S: POST /api/sh/reports (Idempotency-Key)
+  S-->>Q: 201 report.id
+  loop setiap foto
+    Q->>S: POST /api/evidence/upload (targetType SUBHOLDING_REPORT, Idempotency-Key)
+    S-->>Q: 201 atau 200 (sudah ada)
+  end
+  Q-->>A: "Terkirim" dan hilang dari antrean
+  Note over Q,S: Gagal jaringan: coba lagi bertahap (30 dtk, 2 mnt, 10 mnt) via WorkManager
+</pre>
+  </div>
+</section>
+
+<section class="prose">
+  <h2>Fase 1 · Web dan PWA</h2>
+  <h3>Foto dan unggah</h3>
+  <ul>
+    <li><strong>Kompresi di peramban</strong> sebelum unggah: sisi terpanjang 1600px, JPEG kualitas 0,8, orientasi EXIF dibakar ke gambar lalu metadata dibuang (lokasi GPS ikut hilang). Target ≤ 600 KB per foto. Tempat: modul baru <code>src/lib/image-compress.ts</code>, dipakai <code>sh-admin/bukti-picker</code>.</li>
+    <li>Input kamera: <code>accept="image/*" capture="environment"</code> untuk tombol "Ambil foto"; tombol galeri tetap terpisah.</li>
+    <li>Unggah paralel maks 2, progres per foto, tombol "Coba lagi" per foto, header <code>Idempotency-Key</code> per foto (sudah didukung server).</li>
+    <li>Draf formulir disimpan di IndexedDB per perangkat (bukan di server) sehingga tab tertutup atau sinyal putus tidak menghapus isian.</li>
+  </ul>
+  <h3>Tampilan</h3>
+  <ul>
+    <li>Area aman iPhone: navigasi bawah dan tombol yang menempel memakai <code>env(safe-area-inset-bottom)</code>; tinggi lembar memakai <code>dvh</code> (sudah) dan tidak tertutup keyboard (<code>interactive-widget=resizes-content</code> di meta viewport).</li>
+    <li>Input 16px ke atas agar Safari tidak memperbesar halaman saat fokus; target sentuh ≥ 44px (sudah di layar baru, periksa layar lama yang masih dipakai Superadmin).</li>
+    <li>Tarik untuk memuat ulang di Dashboard dan Kotak masuk; daftar panjang Riwayat dimuat bertahap (20 per halaman, sudah didukung API).</li>
+    <li>Strip foto di pop-up: sembunyikan bilah gulir horizontal, tambahkan <code>scroll-snap</code>.</li>
+  </ul>
+  <h3>PWA</h3>
+  <ul>
+    <li>Perbarui <code>manifest.webmanifest</code>: deskripsi model subholding, pintasan "Tambah laporan" (Admin) dan "Persetujuan" (Supervisor), <code>theme_color</code> mengikuti tema.</li>
+    <li>Service worker: simpan aset statis versi build (JS, CSS, font) dengan strategi cache-duluan; data API tetap tidak disimpan (kebijakan SW v2: tidak menyimpan data pribadi).</li>
+    <li>Ajakan "Pasang ke layar utama" sekali, setelah laporan pertama berhasil dikirim.</li>
+  </ul>
+  <h3>Server pendukung</h3>
+  <ul>
+    <li><strong>Thumbnail:</strong> saat unggah, buat versi 320px (WebP) dan simpan berdampingan; <code>POST /api/evidence/signed</code> menerima <code>{ ids, size: 'thumb' | 'full' }</code>. Dashboard memakai <code>thumb</code>, lightbox memakai <code>full</code>.</li>
+    <li>Header cache untuk URL bertanda tangan (berlaku 5 menit) agar gambar yang sama tidak diunduh ulang selama sesi.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Fase 2 · Android native</h2>
+  <div class="prose">
+    <h3>Modul</h3>
+    <ul>
+      <li><code>:feature:subholding-admin</code> (baru): Dashboard (form + daftar hari ini), Kotak masuk, Riwayat.</li>
+      <li><code>:feature:persetujuan</code> (ditulis ulang): antrean Supervisor, keputusan, komentar.</li>
+      <li><code>:feature:ringkasan-subholding</code> (baru): dashboard Superuser &amp; Manajemen.</li>
+      <li>Modul lama (<code>proyek</code>, <code>eskalasi</code>, <code>entitas</code>, <code>ringkasangrup</code>, <code>audit</code>, layar <code>mejakadiv</code>, <code>mingguan</code>, <code>penerimaan</code>) dikeluarkan dari navigasi, kodenya diarsipkan di cabang agar APK lebih kecil.</li>
+      <li><code>RoleTabs.kt</code> mengikuti <code>ROLE_TABS</code> web baru; peran tak dikenal menampilkan layar "Peran ini belum tersedia di aplikasi, buka versi web" dengan tautan, bukan layar kosong.</li>
+    </ul>
+  </div>
+  <h3 class="prose">Pemetaan API</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Layar</th><th>Endpoint</th><th>Catatan ponsel</th></tr></thead>
+    <tbody>
+      <tr><td>Masuk, profil</td><td><code>POST /api/auth/login</code>, <code>GET /api/auth/me</code></td><td>Sudah ada; tambah penanganan wajib ganti sandi untuk akun admin baru</td></tr>
+      <tr><td>Form laporan</td><td><code>GET /api/sh/options</code></td><td>Disimpan di Room; PT dan daftar pelapor tersedia luring</td></tr>
+      <tr><td>Kirim / ubah / tarik</td><td><code>POST /api/sh/reports</code>, <code>PATCH</code> / <code>DELETE /api/sh/reports/:id</code></td><td>Lewat antrean luring dengan <code>Idempotency-Key</code></td></tr>
+      <tr><td>Bukti</td><td><code>POST /api/evidence/upload</code>, <code>POST /api/evidence</code> (tautan)</td><td>Multipart, foto dikompresi sebelum antre</td></tr>
+      <tr><td>Daftar &amp; riwayat</td><td><code>GET /api/sh/reports</code></td><td>Paging 20; cache layar terakhir</td></tr>
+      <tr><td>Kotak masuk</td><td><code>GET /api/sh/inbox</code>, <code>POST /api/sh/inbox/read</code></td><td>Sumber notifikasi lokal</td></tr>
+      <tr><td>Persetujuan</td><td><code>GET /api/sh/review</code>, <code>POST /api/sh/reports/:id/decision</code>, <code>/comments</code></td><td>Keputusan butuh daring; tombol nonaktif saat luring</td></tr>
+      <tr><td>Dashboard Superuser</td><td><code>GET /api/sh/overview</code></td><td>Tampilan terakhir disimpan untuk dibuka luring</td></tr>
+      <tr><td>Foto</td><td><code>POST /api/evidence/signed</code></td><td>Berkelompok, cache Coil dengan kunci id bukti</td></tr>
+      <tr><td>Lencana</td><td><code>GET /api/nav-badges</code></td><td>Diambil saat aplikasi aktif dan oleh sinkron berkala</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <h3>Data lokal (Room)</h3>
+    <ul>
+      <li><code>sh_options</code> (PT, pelapor terakhir), <code>sh_report_cache</code> (daftar hari ini + riwayat terakhir), <code>sh_outbox</code> (laporan antre + status), <code>sh_outbox_file</code> (berkas foto terkompresi di penyimpanan aplikasi, dihapus setelah terkirim).</li>
+      <li>Migrasi Room baru menambah tabel; tabel model lama dibuang saat versi naik (data lama hanya cache).</li>
+    </ul>
+    <h3>Foto</h3>
+    <ul>
+      <li>Kamera lewat <code>ActivityResultContracts.TakePicture</code>, pilihan galeri lewat Photo Picker (tanpa izin penyimpanan).</li>
+      <li>Kompresi 1600px JPEG 80, EXIF dibuang kecuali orientasi yang dibakar; hasil disimpan sebelum laporan masuk antrean.</li>
+    </ul>
+    <h3>Notifikasi</h3>
+    <ul>
+      <li>Tanpa layanan tambahan: <code>WorkManager</code> berkala tiap 30 menit memeriksa <code>/api/sh/inbox</code> dan memunculkan notifikasi "Laporan diminta perbaikan" atau "Laporan disetujui".</li>
+      <li>Opsional: notifikasi dorong instan lewat FCM. Butuh proyek Firebase dan endpoint pendaftaran token di server.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="prose">
+  <h2>Anggaran kinerja</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Ukuran</th><th>Target</th><th>Diukur di</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard tampil (web, 4G sedang)</td><td class="num">≤ 2,5 dtk</td><td>Lighthouse mobile, Moto G Power</td></tr>
+      <tr><td>Satu foto bukti terunggah</td><td class="num">≤ 600 KB</td><td>Unggahan nyata dari ponsel kelas menengah</td></tr>
+      <tr><td>Thumbnail dashboard</td><td class="num">≤ 30 KB</td><td>Respons URL <code>thumb</code></td></tr>
+      <tr><td>Aplikasi Android dibuka dingin</td><td class="num">≤ 1,5 dtk</td><td>Macrobenchmark, Android 9, RAM 3 GB</td></tr>
+      <tr><td>Ukuran APK rilis</td><td class="num">≤ 15 MB</td><td>R8 + pemangkasan sumber daya</td></tr>
+      <tr><td>Laporan antre terkirim setelah daring</td><td class="num">≤ 60 dtk</td><td>Uji mode pesawat di emulator</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="prose">
+  <h2>Keamanan</h2>
+  <ul>
+    <li>Sesi tetap cookie <code>mk_session</code>; di Android disimpan terenkripsi (sudah). Keluar menghapus antrean yang belum terkirim hanya setelah konfirmasi, karena berisi kerja pelapor.</li>
+    <li>Akun admin subholding dipakai bersama: aplikasi tidak menyimpan sandi; kunci layar perangkat disarankan, buka dengan sidik jari opsional.</li>
+    <li>Foto di penyimpanan aplikasi (bukan galeri publik), dihapus setelah terkirim. Metadata lokasi dibuang.</li>
+    <li>URL foto bertanda tangan berlaku 5 menit dan tidak disimpan di luar cache gambar.</li>
+  </ul>
+</section>
+
+<section class="prose">
+  <h2>Pengujian dan kriteria selesai</h2>
+  <ul>
+    <li>Vitest untuk kompresi gambar (ukuran, orientasi, metadata hilang) dan antrean draf web.</li>
+    <li>Uji unit Android: <code>RoleTabs</code> baru, pemetaan DTO <code>/api/sh/*</code>, prosesor antrean (idempotensi, urutan laporan sebelum foto, coba ulang).</li>
+    <li>E2E emulator (lingkungan yang sudah ada: DB 54329, MinIO 59000, server dev 3100): lapor dengan mode pesawat → aktifkan jaringan → laporan dan 3 foto terkirim sekali, tidak ganda.</li>
+    <li>Uji perangkat nyata: satu Android kelas bawah (Android 8/9), satu iPhone dengan Safari dan PWA terpasang.</li>
+    <li>Selesai bila keempat peran bisa menyelesaikan alurnya di ponsel tanpa perlu membuka desktop, dan anggaran kinerja di atas terpenuhi.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Urutan kerja</h2>
+  <div class="phases">
+    <div class="phase"><div class="when">Hari 0<small>segera</small></div><ul><li>Rilis APK kecil yang memeriksa peran saat masuk dan mengarahkan peran baru ke versi web.</li></ul></div>
+    <div class="phase"><div class="when">Fase 1<small>±2 hari</small></div><ul><li>Kompresi foto, kamera, unggah paralel dengan coba ulang, draf luring.</li><li>Area aman, keyboard, tarik untuk memuat ulang, manifest dan service worker.</li><li>Thumbnail server dan parameter <code>size</code>.</li></ul></div>
+    <div class="phase"><div class="when">Fase 2a<small>±2 hari</small></div><ul><li>Android: RoleTabs baru, modul Admin subholding, antrean luring laporan + foto.</li></ul></div>
+    <div class="phase"><div class="when">Fase 2b<small>±2 hari</small></div><ul><li>Android: Persetujuan Supervisor, dashboard Superuser &amp; Manajemen, notifikasi berkala.</li></ul></div>
+    <div class="phase"><div class="when">Fase 2c<small>±2 hari</small></div><ul><li>Bersihkan modul lama, R8, uji E2E emulator dan perangkat nyata, APK rilis bertanda tangan.</li></ul></div>
+  </div>
+</section>
+
+<section class="prose">
+  <h2>Yang perlu diputuskan pemilik</h2>
+  <ol>
+    <li><strong>Distribusi Android:</strong> Google Play (uji internal lalu publik) atau APK langsung dibagikan ke admin subholding.</li>
+    <li><strong>Notifikasi instan:</strong> cukup pemeriksaan berkala 30 menit, atau siapkan Firebase (FCM) untuk notifikasi saat itu juga.</li>
+    <li><strong>iPhone:</strong> cukup PWA, atau perlu aplikasi iOS di kemudian hari.</li>
+    <li><strong>Luring untuk Supervisor:</strong> diusulkan tidak (keputusan butuh data terbaru); konfirmasi.</li>
+  </ol>
+  <div class="callout"><strong>Catatan risiko.</strong> Selama Fase 2 belum rilis, siapa pun yang masih memakai APK lama dengan akun peran baru akan melihat aplikasi yang tidak sesuai. Langkah Hari 0 menutup risiko ini dan sebaiknya dikerjakan lebih dulu.</div>
+</section>
+
+</div>
