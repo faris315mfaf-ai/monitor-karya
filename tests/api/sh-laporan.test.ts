@@ -558,15 +558,33 @@ describe('GET /api/sh/review', () => {
     expect(all.items.map((r: Json) => r.kegiatan).sort()).toEqual(['A menunggu', 'B menunggu'])
     expect(all.counts).toEqual({ MENUNGGU: 2, PERLU_PERBAIKAN: 0, DISETUJUI: 1 })
     expect(all.subholdings).toEqual([
-      { id: 'sh-a', name: 'Subholding Alfa', waiting: 1 },
-      { id: 'sh-b', name: 'Subholding Beta', waiting: 1 },
+      { id: 'sh-a', name: 'Subholding Alfa', waiting: 1, oldestAt: expect.any(String) },
+      { id: 'sh-b', name: 'Subholding Beta', waiting: 1, oldestAt: expect.any(String) },
     ])
+    expect(all.today).toEqual({ approved: 0, highlighted: 0, revised: 0 })
     const onlyB = await json(await reviewGet(req('/api/sh/review?subholdingId=sh-b')))
     expect(onlyB.items.map((r: Json) => r.kegiatan)).toEqual(['B menunggu'])
     expect(onlyB.items[0]).toMatchObject({ canEdit: false, canWithdraw: false })
     const approved = await json(await reviewGet(req('/api/sh/review?status=DISETUJUI&date=2026-10-14')))
     expect(approved.items.map((r: Json) => r.kegiatan)).toEqual(['A disetujui'])
     expect((await reviewGet(req('/api/sh/review?status=X'))).status).toBe(422)
+  })
+
+  it('rekap keputusan peninjau hari ini & antrean terlama per subholding', async () => {
+    const now = new Date()
+    const old = new Date(now.getTime() - 3 * 86400_000)
+    seedReport({ kegiatan: 'Lama', submittedAt: old })
+    seedReport({ kegiatan: 'Baru', submittedAt: now })
+    seedReport({ kegiatan: 'S1', status: 'DISETUJUI', decidedById: 'u-sup', decidedAt: now })
+    seedReport({ kegiatan: 'S2', status: 'DISETUJUI', decidedById: 'u-sup', decidedAt: now, highlight: true, highlightNote: 'Penting sekali' })
+    seedReport({ kegiatan: 'P1', status: 'PERLU_PERBAIKAN', decidedById: 'u-sup', decidedAt: now })
+    seedReport({ kegiatan: 'Kemarin', status: 'DISETUJUI', decidedById: 'u-sup', decidedAt: old })
+    seedReport({ kegiatan: 'Orang lain', status: 'DISETUJUI', decidedById: 'u-sa', decidedAt: now })
+    signIn('u-sup')
+    const res = await json(await reviewGet(req('/api/sh/review')))
+    expect(res.today).toEqual({ approved: 2, highlighted: 1, revised: 1 })
+    expect(res.subholdings.find((s: Json) => s.id === 'sh-a')).toMatchObject({ waiting: 2, oldestAt: old.toISOString() })
+    expect(res.subholdings.find((s: Json) => s.id === 'sh-b')).toMatchObject({ waiting: 0, oldestAt: null })
   })
 
   it('admin, superuser, manajemen, TI → 403', async () => {

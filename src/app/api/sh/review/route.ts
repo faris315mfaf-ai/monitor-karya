@@ -6,6 +6,7 @@ import { dateParam, requireShUser, unprocessable } from '@/lib/subholding/http'
 import { hydrateShReports, SH_REPORT_SELECT, statusCounts } from '@/lib/subholding/report'
 import { isShStatus } from '@/lib/subholding/rules'
 import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
+import { startOfTodayWIB } from '@/lib/wib'
 
 const MAX_ITEMS = 200
 
@@ -15,9 +16,12 @@ const MAX_ITEMS = 200
  * `date` = semua tanggal. MENUNGGU diurut terlama dulu (antrean), status lain
  * diurut keputusan terbaru. Maksimal 200 butir.
  * → { items: ShReport[], counts: { MENUNGGU, PERLU_PERBAIKAN, DISETUJUI },
- *     subholdings: [{ id, name, waiting }] }
+ *     subholdings: [{ id, name, waiting, oldestAt }],
+ *     today: { approved, highlighted, revised } }
  * `counts` memakai saringan subholding + tanggal yang sama; `waiting` per
- * subholding memakai saringan tanggal yang sama. Tiap item membawa
+ * subholding memakai saringan tanggal yang sama, `oldestAt` = kiriman
+ * menunggu terlama (ISO) atau null. `today` = keputusan peninjau INI sejak
+ * 00.00 WIB (rekap saat antrean habis). Tiap item membawa
  * `highlight`, `highlightNote`, `highlightedAt` (sorotan untuk manajemen,
  * 0035) — kolom ini hanya untuk pemegang `shreport:review`, lihat
  * `seesHighlight` di src/lib/subholding/report.ts.
@@ -39,7 +43,7 @@ export async function GET(req: NextRequest) {
   const base: Prisma.SubholdingReportWhereInput = { ...dateWhere, ...(subholdingId ? { subholdingId } : {}) }
 
   try {
-    const [rows, counts, subs, waiting] = await Promise.all([
+    const [rows, counts, subs, waiting, decided] = await Promise.all([
       db.subholdingReport.findMany({
         where: { ...base, status: statusRaw },
         select: SH_REPORT_SELECT,
@@ -48,18 +52,39 @@ export async function GET(req: NextRequest) {
       }),
       statusCounts(base),
       activeSubholdings(),
-      db.subholdingReport.groupBy({
-        by: ['subholdingId'],
+      // Antrean menunggu hanya puluhan baris: cukup ambil kolom kecil lalu hitung di sini.
+      db.subholdingReport.findMany({
         where: { ...dateWhere, status: 'MENUNGGU' },
-        _count: { _all: true },
+        select: { subholdingId: true, submittedAt: true },
+        take: 5000,
+      }),
+      db.subholdingReport.findMany({
+        where: { decidedById: user.id, decidedAt: { gte: startOfTodayWIB() } },
+        select: { status: true, highlight: true },
+        take: 5000,
       }),
     ])
-    const waitingBy = new Map(waiting.map((w) => [w.subholdingId, w._count._all]))
+    const waitingBy = new Map<string, { n: number; oldest: Date | null }>()
+    for (const w of waiting) {
+      const cur = waitingBy.get(w.subholdingId) ?? { n: 0, oldest: null }
+      cur.n += 1
+      if (w.submittedAt && (!cur.oldest || w.submittedAt < cur.oldest)) cur.oldest = w.submittedAt
+      waitingBy.set(w.subholdingId, cur)
+    }
+    const today = {
+      approved: decided.filter((d) => d.status === 'DISETUJUI').length,
+      highlighted: decided.filter((d) => d.status === 'DISETUJUI' && d.highlight).length,
+      revised: decided.filter((d) => d.status === 'PERLU_PERBAIKAN').length,
+    }
     const items = await hydrateShReports(rows, user)
     return NextResponse.json({
       items,
       counts,
-      subholdings: subs.map((s) => ({ id: s.id, name: s.name, waiting: waitingBy.get(s.id) ?? 0 })),
+      subholdings: subs.map((s) => {
+        const w = waitingBy.get(s.id)
+        return { id: s.id, name: s.name, waiting: w?.n ?? 0, oldestAt: w?.oldest ? w.oldest.toISOString() : null }
+      }),
+      today,
     })
   } catch (err) {
     return serverError(err, 'Antrean persetujuan belum termuat. Coba lagi.', 'sh/review GET')
