@@ -27,10 +27,7 @@ class RoleTabsTest {
             "dashboard", "pesan", "work-desk", "inbox", "daily-input", "weekly-input", "projects", "divisions",
             "escalations", "entities", "audit", "system",
         ),
-        "SUPERADMIN" to listOf(
-            "dashboard", "pesan", "companies", "projects", "divisions", "escalations", "entities", "work-desk",
-            "inbox", "daily-input", "weekly-input", "audit", "system",
-        ),
+        "SUPERADMIN" to listOf("companies", "pesan", "escalations", "audit", "system"),
         "MANAJEMEN" to listOf("sh-overview"),
         "AUDITOR" to listOf("dashboard", "pesan", "projects", "divisions", "entities", "audit"),
         "ADMIN_SUBHOLDING" to listOf("sh-dashboard", "sh-inbox", "sh-history"),

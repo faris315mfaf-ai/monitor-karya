@@ -65,11 +65,8 @@ val ROLE_TABS: Map<Peran, List<TabId>> = mapOf(
         TabId.CAPAIAN_MINGGUAN, TabId.PROYEK, TabId.PEMBAGIAN_DIVISI, TabId.ESKALASI,
         TabId.ENTITAS, TabId.LOG_AUDIT, TabId.SISTEM_AKSES,
     ),
-    Peran.SUPERADMIN to listOf(
-        TabId.RINGKASAN, TabId.PERUSAHAAN, TabId.PROYEK, TabId.PEMBAGIAN_DIVISI,
-        TabId.ESKALASI, TabId.ENTITAS, TabId.MEJA_KERJA, TabId.PENERIMAAN,
-        TabId.LAPORAN_HARIAN, TabId.CAPAIAN_MINGGUAN, TabId.LOG_AUDIT, TabId.SISTEM_AKSES,
-    ),
+    // Keputusan pemilik 16 Okt 2026: struktur & akun, eskalasi, aktivitas, sistem.
+    Peran.SUPERADMIN to listOf(TabId.PERUSAHAAN, TabId.ESKALASI, TabId.LOG_AUDIT, TabId.SISTEM_AKSES),
     // Kontrak subholding 16 Okt 2026: Manajemen hanya dashboard laporan disetujui.
     Peran.MANAJEMEN to listOf(TabId.SH_OVERVIEW),
     Peran.AUDITOR to listOf(

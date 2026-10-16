@@ -28,7 +28,8 @@ describe('T8-W3 tab Admin PT: statistik masuk, penerimaan keluar', () => {
     }
     // Tab Penerimaan tetap milik peran induk yang menerima laporan lintas PT.
     expect(canSeeTab('TI', 'inbox')).toBe(true)
-    expect(canSeeTab('SUPERADMIN', 'inbox')).toBe(true)
+    // Superadmin tidak lagi punya tab Penerimaan (keputusan pemilik 16 Okt 2026).
+    expect(canSeeTab('SUPERADMIN', 'inbox')).toBe(false)
   })
 
   it('label nav Statistik terdaftar dan berlabel manusiawi', () => {
