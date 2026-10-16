@@ -1223,12 +1223,18 @@ model SubholdingReport {
   decidedById      String?
   decidedBy        User?    @relation("ShReportDecider", fields: [decidedById], references: [id])
   decidedAt        DateTime?
+  /// Sorotan supervisor untuk dashboard Manajemen & Superuser (0035, 16 Okt 2026).
+  /// Disetel bersama persetujuan; catatannya tidak dikirim ke Admin subholding.
+  highlight        Boolean  @default(false)
+  highlightNote    String?
+  highlightedAt    DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   comments         SubholdingReportComment[]
 
   @@index([subholdingId, reportDate])
   @@index([status, reportDate])
+  @@index([status, reportDate, highlight])
   @@index([ptId])
   @@index([createdById])
   @@index([decidedById])
