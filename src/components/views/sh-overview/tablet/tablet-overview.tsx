@@ -37,7 +37,7 @@ const PANE_VARS = {
 } as CSSProperties
 
 /** Ukur lebar kontainer + tinggi tersisa di bawahnya (dikurangi padding bawah konten shell). */
-function useBox() {
+export function useBox() {
   const ref = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
   useLayoutEffect(() => {

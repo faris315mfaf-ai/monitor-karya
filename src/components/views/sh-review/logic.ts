@@ -47,15 +47,27 @@ export type ShReport = {
   highlightNote?: string | null
 }
 
+export type ReviewSubholding = {
+  id: string
+  name: string
+  waiting: number
+  /** Kiriman menunggu terlama (ISO) — untuk "Terlama n hari". */
+  oldestAt?: string | null
+}
+
+/** Keputusan peninjau ini sejak 00.00 WIB (rekap saat antrean habis). */
+export type ReviewToday = { approved: number; highlighted: number; revised: number }
+
 export type ReviewData = {
   items: ShReport[]
   counts: Partial<Record<ShStatus, number>>
-  subholdings: { id: string; name: string; waiting: number }[]
+  subholdings: ReviewSubholding[]
+  today?: ReviewToday
 }
 
 export const STATUS_TABS: { value: ShStatus; label: string }[] = [
   { value: 'MENUNGGU', label: 'Menunggu' },
-  { value: 'PERLU_PERBAIKAN', label: 'Diminta perbaikan' },
+  { value: 'PERLU_PERBAIKAN', label: 'Perbaikan' },
   { value: 'DISETUJUI', label: 'Disetujui' },
 ]
 
@@ -254,4 +266,172 @@ export function shouldReload(status: number): boolean {
 /** Jumlah menunggu pada chip "Semua subholding". */
 export function totalWaiting(subholdings: ReviewData['subholdings']): number {
   return subholdings.reduce((n, s) => n + (s.waiting ?? 0), 0)
+}
+
+/* ---------- Antrean (papan S-Tablet-* & S-Ponsel-*, 16 Okt 2026) ---------- */
+
+const WIB_MS = 7 * 3600_000
+const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'] as const
+const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'] as const
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const
+
+/** Laporan menunggu sekian hari kalender atau lebih ditandai kuning. */
+export const LONG_WAIT_DAYS = 2
+
+function wibParts(iso: string | null | undefined) {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return null
+  const d = new Date(t + WIB_MS)
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate(), wd: d.getUTCDay(), h: d.getUTCHours(), min: d.getUTCMinutes() }
+}
+
+function dayNumber(p: { y: number; m: number; d: number }): number {
+  return Math.round(Date.UTC(p.y, p.m, p.d) / 86_400_000)
+}
+
+/** Selisih hari kalender WIB antara kiriman dan sekarang (0 = hari yang sama, tidak pernah negatif). */
+export function waitDays(iso: string | null | undefined, now: Date = new Date()): number {
+  const a = wibParts(iso)
+  const b = wibParts(now.toISOString())
+  if (!a || !b) return 0
+  return Math.max(0, dayNumber(b) - dayNumber(a))
+}
+
+/** "Hari ini" / "1 hari" / "3 hari". */
+export function ageLabel(days: number): string {
+  return days >= 1 ? `${days} hari` : 'Hari ini'
+}
+
+/** Laporan menunggu yang sudah dikirim ulang setelah diminta perbaikan. */
+export function isResent(r: Pick<ShReport, 'status' | 'comments'>): boolean {
+  return r.status === 'MENUNGGU' && (r.comments ?? []).some((c) => c.kind === 'PERBAIKAN')
+}
+
+export type QueueFlag = 'no-evidence' | 'resent' | 'highlight' | null
+
+/** Satu penanda per baris antrean, urut kepentingan. */
+export function queueFlag(r: Pick<ShReport, 'status' | 'comments' | 'evidenceCount' | 'evidence' | 'highlight'>): QueueFlag {
+  if (r.status === 'MENUNGGU') {
+    if (Math.max(r.evidenceCount ?? 0, r.evidence?.length ?? 0) < 1) return 'no-evidence'
+    if (isResent(r)) return 'resent'
+    return null
+  }
+  return isHighlighted(r) ? 'highlight' : null
+}
+
+export const FLAG_LABEL: Record<Exclude<QueueFlag, null>, string> = {
+  'no-evidence': 'Tanpa bukti',
+  resent: 'Dikirim ulang',
+  highlight: 'Sorotan',
+}
+
+export type QueueGroup<T> = { key: string; title: string; warn: boolean; items: T[] }
+
+/**
+ * Kelompok antrean ponsel: Menunggu dibagi "Lebih dari sehari" (kuning) dan
+ * "Masuk hari ini"; status lain satu kelompok. Kelompok kosong dibuang.
+ */
+export function queueGroups<T extends Pick<ShReport, 'submittedAt'>>(items: T[], status: ShStatus, now: Date = new Date()): QueueGroup<T>[] {
+  if (status !== 'MENUNGGU') return items.length ? [{ key: 'all', title: `${items.length} laporan`, warn: false, items }] : []
+  const old = items.filter((r) => waitDays(r.submittedAt, now) >= 1)
+  const fresh = items.filter((r) => waitDays(r.submittedAt, now) < 1)
+  return [
+    { key: 'old', title: `Lebih dari sehari · ${old.length}`, warn: true, items: old },
+    { key: 'today', title: `Masuk hari ini · ${fresh.length}`, warn: false, items: fresh },
+  ].filter((g) => g.items.length > 0)
+}
+
+/** Jumlah laporan menunggu ≥ LONG_WAIT_DAYS hari. */
+export function longWaitCount(items: Pick<ShReport, 'status' | 'submittedAt'>[], now: Date = new Date()): number {
+  return items.filter((r) => r.status === 'MENUNGGU' && waitDays(r.submittedAt, now) >= LONG_WAIT_DAYS).length
+}
+
+/** Kalimat peringatan antrean lama (null = tidak ada). */
+export function longWaitLine(n: number): string | null {
+  if (n < 1) return null
+  return `${n} laporan sudah menunggu ${LONG_WAIT_DAYS} hari atau lebih. Admin subholding belum bisa melanjutkan sebelum Anda memutuskan.`
+}
+
+/** Baris bawah tiap subholding di navigasi: "Terlama 2 hari" / "Semua masuk hari ini" / "Tidak ada antrean". */
+export function subLine(s: Pick<ReviewSubholding, 'waiting' | 'oldestAt'>, now: Date = new Date()): { text: string; warn: boolean } {
+  if (!s.waiting) return { text: 'Tidak ada antrean', warn: false }
+  const d = s.oldestAt ? waitDays(s.oldestAt, now) : 0
+  if (d < 1) return { text: 'Semua masuk hari ini', warn: false }
+  return { text: `Terlama ${d} hari`, warn: d >= LONG_WAIT_DAYS }
+}
+
+/** Umur terlama di antara subholding (untuk baris "Semua subholding"). */
+export function oldestOf(subs: Pick<ReviewSubholding, 'waiting' | 'oldestAt'>[]): string | null {
+  let best: string | null = null
+  for (const s of subs) {
+    if (!s.waiting || !s.oldestAt) continue
+    if (!best || new Date(s.oldestAt) < new Date(best)) best = s.oldestAt
+  }
+  return best
+}
+
+/** Kepala layar: "6 laporan menunggu" / "Antrean kosong". */
+export function waitingHeadline(total: number): string {
+  return total > 0 ? `${total} laporan menunggu` : 'Antrean kosong'
+}
+
+/** "Rabu 14 Okt, 16.20" (WIB). */
+export function stampLabel(iso: string | null | undefined): string {
+  const p = wibParts(iso)
+  if (!p) return ''
+  const hh = String(p.h).padStart(2, '0')
+  const mm = String(p.min).padStart(2, '0')
+  return `${HARI[p.wd]} ${p.d} ${BULAN_PENDEK[p.m]}, ${hh}.${mm}`
+}
+
+/** "Rabu, 14 Oktober 2026" dari kunci 'YYYY-MM-DD'. */
+export function reportDateLabel(key: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key ?? '')
+  if (!m) return key ?? ''
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return `${HARI[d.getUTCDay()]}, ${d.getUTCDate()} ${BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
+/** Baris waktu di kepala rincian: kapan dikirim/diputuskan + lama menunggu. */
+export function sentLine(
+  r: Pick<ShReport, 'status' | 'submittedAt' | 'decidedAt' | 'decidedByName' | 'comments'>,
+  now: Date = new Date()
+): { text: string; wait: string; warn: boolean } {
+  if (r.status === 'MENUNGGU') {
+    const d = waitDays(r.submittedAt, now)
+    return {
+      text: `${isResent(r) ? 'Dikirim ulang' : 'Dikirim'} ${stampLabel(r.submittedAt)}`,
+      wait: d >= 1 ? ` · menunggu ${d} hari` : '',
+      warn: d >= LONG_WAIT_DAYS,
+    }
+  }
+  const by = r.decidedByName ? ` oleh ${r.decidedByName}` : ''
+  const verb = r.status === 'DISETUJUI' ? 'Disetujui' : 'Diminta perbaikan'
+  return { text: `${verb} ${stampLabel(r.decidedAt ?? r.submittedAt)}${by}`, wait: '', warn: false }
+}
+
+/** "2 dari 6". */
+export function positionText(index: number, length: number): string {
+  return length > 0 && index >= 0 ? `${index + 1} dari ${length}` : ''
+}
+
+/** Laporan tetangga (tanpa memutar): null di ujung. */
+export function neighborId(items: Pick<ShReport, 'id'>[], currentId: string | null, delta: -1 | 1): string | null {
+  const i = items.findIndex((r) => r.id === currentId)
+  if (i < 0) return null
+  return items[i + delta]?.id ?? null
+}
+
+/** Rekap saat antrean habis; null bila belum ada keputusan hari ini. */
+export function todayRecap(t: ReviewToday | null | undefined): { total: number; line: string } | null {
+  if (!t) return null
+  const total = t.approved + t.revised
+  if (total < 1) return null
+  return { total, line: `Hari ini Anda memutuskan ${total} laporan. Laporan baru dari admin subholding muncul di sini otomatis.` }
+}
+
+/** Kelompok percakapan: milik sendiri di kanan. */
+export function commentWho(c: Pick<ShComment, 'mine' | 'authorName' | 'kind' | 'createdAt'>): string {
+  return [c.mine ? 'Anda' : c.authorName, COMMENT_KIND_LABEL[c.kind] ?? 'Komentar', stampLabel(c.createdAt)].filter(Boolean).join(' · ')
 }
