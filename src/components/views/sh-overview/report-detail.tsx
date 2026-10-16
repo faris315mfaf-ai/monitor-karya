@@ -7,7 +7,8 @@
  * kiri foto (besar 4:3 + lencana "Foto 1 dari 3" + deretan pilih foto bila
  * lebih dari satu), kanan info. Tanpa foto → hanya kolom info (maks 560).
  * <600px: lembar dari bawah setinggi layar dikurangi 48px, foto di atas.
- * Info: inisial + nama subholding & tombol Tutup, judul, daftar bergaris
+ * Info: inisial + nama subholding & tombol Tutup, judul, blok "Catatan
+ * supervisor" bila laporan disorot (16 Okt 2026), daftar bergaris
  * (PT pelaksana, Pelapor, Disetujui, Bukti — baris kosong disembunyikan),
  * deskripsi utuh, lalu dokumen yang dibuka di tab baru.
  *
@@ -37,6 +38,9 @@ export type DetailReport = {
   reporterTitle?: string
   /** Waktu disetujui (ISO); kosong → baris "Disetujui" disembunyikan. */
   decidedAt?: string | null
+  /** Ditandai supervisor untuk manajemen → blok "Catatan supervisor" di atas tabel. */
+  highlight?: boolean
+  highlightNote?: string | null
 }
 
 export function ReportDetail({
@@ -187,6 +191,8 @@ function DetailBody({
           {report.kegiatan}
         </DialogPrimitive.Title>
 
+        {report.highlight ? <SupervisorNote note={report.highlightNote} /> : null}
+
         {rows.length ? (
           <dl className="m-0 flex flex-col border-t border-line">
             {rows.map((r) => (
@@ -216,6 +222,27 @@ function DetailBody({
         ) : null}
       </div>
     </>
+  )
+}
+
+/** Blok sorotan: catatan supervisor untuk manajemen, berwarna waspada (bintang + kata, bukan warna saja). */
+function SupervisorNote({ note }: { note?: string | null }) {
+  const text = note?.trim() ?? ''
+  return (
+    <section
+      aria-label="Catatan supervisor"
+      className="flex flex-col gap-1 rounded-[var(--radius-md)] bg-waspada-soft px-3.5 py-3"
+    >
+      <span className="inline-flex items-center gap-1.5 t-caption font-bold text-waspada">
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden fill="currentColor" className="shrink-0">
+          <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.5 1.3 6.6L12 17.2 6.1 20.5l1.3-6.6L2.5 9.4l6.6-.8z" />
+        </svg>
+        Catatan supervisor
+      </span>
+      <p className="m-0 whitespace-pre-line break-words t-callout font-normal leading-[1.5] text-ink">
+        {text || 'Ditandai penting oleh supervisor untuk manajemen.'}
+      </p>
+    </section>
   )
 }
 
