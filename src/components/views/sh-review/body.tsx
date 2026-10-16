@@ -39,9 +39,9 @@ export function SubMono({ id, name, size, text }: { id: string | null; name: str
 /* ---------- Gambar bukti ---------- */
 
 /** Isi kotak bukti: foto asli (memudar masuk saat termuat) atau ikon dokumen + nama. */
-export function EvidenceFill({ item, showName, iconSize = 22 }: { item: OverviewEvidence; showName?: boolean; iconSize?: number }) {
+export function EvidenceFill({ item, showName, iconSize = 22, size = 'full' }: { item: OverviewEvidence; showName?: boolean; iconSize?: number; size?: 'thumb' | 'full' }) {
   const image = isImageMime(item.mime)
-  const { url, failed, loading } = useSignedUrl(item.id, image)
+  const { url, failed, loading } = useSignedUrl(item.id, image, size)
   const [broken, setBroken] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const show = image && Boolean(url) && !failed && !broken
@@ -84,7 +84,7 @@ export function QueueThumb({ r, size }: { r: ShReport; size: number }) {
       className="relative block shrink-0 overflow-hidden bg-fill-1 shadow-[inset_0_0_0_1px_var(--line)]"
       style={{ width: size, height: size, borderRadius: size >= 48 ? 10 : 9 }}
     >
-      {first ? <EvidenceFill item={first} iconSize={18} /> : (
+      {first ? <EvidenceFill item={first} iconSize={18} size="thumb" /> : (
         <span className="absolute inset-0 flex items-center justify-center text-ink-3">
           <Icon name="dokumen" size={18} />
         </span>

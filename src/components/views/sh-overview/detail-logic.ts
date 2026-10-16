@@ -11,6 +11,8 @@ export const SIGNED_BATCH_MAX = 60
 export const SIGNED_TTL_MS = 270_000
 
 export type SignedKind = 'file' | 'link'
+/** Ukuran URL bukti: `thumb` = WebP 320px (kotak kecil), `full` = berkas asli (lightbox/galeri besar). */
+export type SignedSize = 'thumb' | 'full'
 export type Signed = { url: string; kind: SignedKind; until: number }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -149,12 +151,32 @@ const defaultSchedule: Scheduler = (run) => {
   setTimeout(run, 0)
 }
 
+/** Kunci cache per (ukuran, id): thumbnail dan berkas asli punya URL berbeda. */
+function cacheKey(id: string, size: SignedSize): string {
+  return `${size}:${id}`
+}
+
+/** Ukuran tak dikenal → `full` (perilaku lama). */
+export function normalizeSize(size: unknown): SignedSize {
+  return size === 'thumb' ? 'thumb' : 'full'
+}
+
 /**
- * Pengambil URL bertanda tangan dengan cache TTL. Permintaan dalam satu tick
- * dikumpulkan lalu dikirim ke `POST /api/evidence/signed` (≤60 id per kiriman).
- * Endpoint 404/405 atau jaringan gagal → GET /api/evidence/:id per id; 404/405
- * diingat sehingga kiriman berikutnya langsung memakai GET. Galat lain (401,
- * 503, …) → semua id di kiriman itu gagal. Janji selalu selesai (tidak menolak).
+ * Badan `POST /api/evidence/signed`. `full` dikirim tanpa `size` supaya sama
+ * persis dengan klien lama (server lama tetap menerimanya).
+ */
+export function signedBody(ids: readonly string[], size: SignedSize): string {
+  return JSON.stringify(size === 'thumb' ? { ids, size } : { ids })
+}
+
+/**
+ * Pengambil URL bertanda tangan dengan cache TTL per (id, ukuran). Permintaan
+ * dalam satu tick dikumpulkan per ukuran lalu dikirim ke
+ * `POST /api/evidence/signed` (≤60 id per kiriman, satu kiriman per ukuran).
+ * Endpoint 404/405 atau jaringan gagal → GET /api/evidence/:id per id (selalu
+ * berkas asli); 404/405 diingat sehingga kiriman berikutnya langsung memakai
+ * GET. Galat lain (401, 503, …) → semua id di kiriman itu gagal. Janji selalu
+ * selesai (tidak menolak).
  */
 export function createSignedFetcher(opts: {
   fetch: FetchLike
@@ -171,77 +193,91 @@ export function createSignedFetcher(opts: {
 
   const cache = new Map<string, Signed>()
   const pending = new Map<string, Promise<Signed | null>>()
-  let waiting = new Map<string, (s: Signed | null) => void>()
+  type Waiting = Map<SignedSize, Map<string, (s: Signed | null) => void>>
+  let waiting: Waiting = new Map()
   let scheduled = false
   let batchOff = false
 
-  async function single(id: string): Promise<Signed | null> {
+  async function single(id: string, size: SignedSize): Promise<Signed | null> {
     try {
       const r = await fetchImpl(`/api/evidence/${encodeURIComponent(id)}`)
       const j = await r.json().catch(() => null)
       const s = signedFromSingle(r.ok, j, now(), ttl)
-      if (s) cache.set(id, s)
+      if (s) {
+        // GET tunggal selalu berkas asli: sah juga untuk permintaan `full` berikutnya.
+        cache.set(cacheKey(id, size), s)
+        cache.set(cacheKey(id, 'full'), s)
+      }
       return s
     } catch {
       return null
     }
   }
 
-  async function viaSingles(ids: string[]): Promise<Map<string, Signed | null>> {
-    const res = await Promise.all(ids.map(single))
+  async function viaSingles(ids: string[], size: SignedSize): Promise<Map<string, Signed | null>> {
+    const res = await Promise.all(ids.map((id) => single(id, size)))
     return new Map(ids.map((id, i) => [id, res[i] ?? null]))
   }
 
-  async function runChunk(ids: string[]): Promise<Map<string, Signed | null>> {
-    if (batchOff) return viaSingles(ids)
+  async function runChunk(ids: string[], size: SignedSize): Promise<Map<string, Signed | null>> {
+    if (batchOff) return viaSingles(ids, size)
     let res: Response
     try {
       res = await fetchImpl('/api/evidence/signed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: signedBody(ids, size),
       })
     } catch {
-      return viaSingles(ids)
+      return viaSingles(ids, size)
     }
     if (batchUnsupported(res.status)) {
       batchOff = true
-      return viaSingles(ids)
+      return viaSingles(ids, size)
     }
     if (!res.ok) return new Map(ids.map((id) => [id, null]))
     const body = await res.json().catch(() => null)
     const { found } = mergeSigned(ids, body, now(), ttl)
-    found.forEach((s, id) => cache.set(id, s))
+    found.forEach((s, id) => cache.set(cacheKey(id, size), s))
     return new Map(ids.map((id) => [id, found.get(id) ?? null]))
   }
 
   function flush() {
-    const batch = waiting
+    const batches = waiting
     waiting = new Map()
     scheduled = false
-    for (const ids of chunkIds([...batch.keys()], max)) {
-      runChunk(ids)
-        .catch(() => new Map<string, Signed | null>())
-        .then((out) => {
-          for (const id of ids) batch.get(id)?.(out.get(id) ?? null)
-        })
-    }
+    batches.forEach((batch, size) => {
+      for (const ids of chunkIds([...batch.keys()], max)) {
+        runChunk(ids, size)
+          .catch(() => new Map<string, Signed | null>())
+          .then((out) => {
+            for (const id of ids) batch.get(id)?.(out.get(id) ?? null)
+          })
+      }
+    })
   }
 
-  function peek(id: string): Signed | null {
-    const hit = cache.get(id)
+  function peek(id: string, size: SignedSize = 'full'): Signed | null {
+    const hit = cache.get(cacheKey(id, normalizeSize(size)))
     return hit && hit.until > now() ? hit : null
   }
 
-  function get(id: string): Promise<Signed | null> {
-    const hit = peek(id)
+  function get(id: string, size: SignedSize = 'full'): Promise<Signed | null> {
+    const sz = normalizeSize(size)
+    const hit = peek(id, sz)
     if (hit) return Promise.resolve(hit)
-    const inflight = pending.get(id)
+    const key = cacheKey(id, sz)
+    const inflight = pending.get(key)
     if (inflight) return inflight
     const p = new Promise<Signed | null>((resolve) => {
-      waiting.set(id, resolve)
-    }).finally(() => pending.delete(id))
-    pending.set(id, p)
+      let bucket = waiting.get(sz)
+      if (!bucket) {
+        bucket = new Map()
+        waiting.set(sz, bucket)
+      }
+      bucket.set(id, resolve)
+    }).finally(() => pending.delete(key))
+    pending.set(key, p)
     if (!scheduled) {
       scheduled = true
       schedule(flush)

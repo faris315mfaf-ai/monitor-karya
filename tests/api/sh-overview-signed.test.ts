@@ -244,6 +244,65 @@ describe('POST /api/evidence/signed — cakupan dan hasil', () => {
   })
 })
 
+describe('POST /api/evidence/signed — size thumb/full (Fase 1 PWA)', () => {
+  it('thumb → thumbKey bila ada, selain itu storageKey; full/tanpa size → selalu storageKey', async () => {
+    const r = seedReport({ status: 'DISETUJUI' })
+    const withThumb = seedEvidence(r, { fileName: 'a.jpg', thumbKey: `SUBHOLDING_REPORT/${r}/a.jpg.thumb.webp` })
+    const legacy = seedEvidence(r, { fileName: 'b.jpg' }) // bukti lama: thumbKey null
+    signIn('u-superuser')
+
+    const thumb = await post({ ids: [withThumb, legacy], size: 'thumb' })
+    expect(thumb.status).toBe(200)
+    expect((await json(thumb)).items).toEqual([
+      { id: withThumb, url: `https://signed.test/SUBHOLDING_REPORT/${r}/a.jpg.thumb.webp`, kind: 'file' },
+      { id: legacy, url: `https://signed.test/SUBHOLDING_REPORT/${r}/b.jpg`, kind: 'file' },
+    ])
+    for (const body of [{ ids: [withThumb] }, { ids: [withThumb], size: 'full' }, { ids: [withThumb], size: null }]) {
+      const res = await post(body)
+      expect(res.status, JSON.stringify(body)).toBe(200)
+      expect((await json(res)).items, JSON.stringify(body)).toEqual([
+        { id: withThumb, url: `https://signed.test/SUBHOLDING_REPORT/${r}/a.jpg`, kind: 'file' },
+      ])
+    }
+  })
+
+  it('thumbnail gagal ditandatangani → jatuh ke berkas asli; keduanya gagal → dilewati', async () => {
+    const r = seedReport({ status: 'DISETUJUI' })
+    const a = seedEvidence(r, { fileName: 'a.jpg', thumbKey: `SUBHOLDING_REPORT/${r}/a.jpg.thumb.webp` })
+    const b = seedEvidence(r, { fileName: 'b.jpg', thumbKey: `SUBHOLDING_REPORT/${r}/b.jpg.thumb.webp` })
+    storage.failKeys.add(`SUBHOLDING_REPORT/${r}/a.jpg.thumb.webp`)
+    storage.failKeys.add(`SUBHOLDING_REPORT/${r}/b.jpg.thumb.webp`)
+    storage.failKeys.add(`SUBHOLDING_REPORT/${r}/b.jpg`)
+    signIn('u-superuser')
+    const res = await post({ ids: [a, b], size: 'thumb' })
+    expect(res.status).toBe(200)
+    expect((await json(res)).items).toEqual([{ id: a, url: `https://signed.test/SUBHOLDING_REPORT/${r}/a.jpg`, kind: 'file' }])
+  })
+
+  it('tautan tidak terpengaruh size; size tak dikenal → 422', async () => {
+    const r = seedReport({ status: 'DISETUJUI' })
+    const link = seedEvidence(r, { fileName: 'Tautan', mime: 'text/uri-list', storageKey: '', url: 'https://contoh.test/dok' })
+    signIn('u-superuser')
+    const res = await post({ ids: [link], size: 'thumb' })
+    expect((await json(res)).items).toEqual([{ id: link, url: 'https://contoh.test/dok', kind: 'link' }])
+    for (const size of ['besar', 1, true, 'THUMB']) {
+      const bad = await post({ ids: [link], size })
+      expect(bad.status, String(size)).toBe(422)
+      expect(typeof (await json(bad)).error).toBe('string')
+    }
+    expect(storage.signed).toEqual([])
+  })
+
+  it('thumb tetap mengikuti cakupan baca: laporan MENUNGGU tidak ditandatangani untuk Superuser', async () => {
+    const pending = seedReport({})
+    const ev = seedEvidence(pending, { thumbKey: `SUBHOLDING_REPORT/${pending}/foto.jpg.thumb.webp` })
+    signIn('u-superuser')
+    const res = await post({ ids: [ev], size: 'thumb' })
+    expect((await json(res)).items).toEqual([])
+    expect(storage.signed).toEqual([])
+  })
+})
+
 // ------------------------------------------------------------------
 describe('GET /api/sh/overview — kind dan urutan', () => {
   it('bukti punya kind file/link; subholding & PT urut nama; laporan urut decidedAt lalu submittedAt', async () => {

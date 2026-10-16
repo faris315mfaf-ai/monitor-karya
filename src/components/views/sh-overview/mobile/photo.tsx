@@ -17,7 +17,7 @@ import { docsOf, photosOf, type OverviewEvidence } from '../logic'
 export function PhotoTile({ evidence, className }: { evidence: OverviewEvidence[] | undefined; className: string }) {
   const photo = photosOf(evidence)[0] ?? null
   const hasDoc = docsOf(evidence).length > 0
-  const { url, failed, loading } = useSignedUrl(photo?.id ?? null, Boolean(photo))
+  const { url, failed, loading } = useSignedUrl(photo?.id ?? null, Boolean(photo), 'thumb')
   const [broken, setBroken] = useState(false)
   if (!photo && !hasDoc) return null
   return (

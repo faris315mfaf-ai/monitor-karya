@@ -157,7 +157,7 @@ export function PhotoBox({
   radius?: number
   count?: number
 }) {
-  const { url, failed, loading } = useSignedUrl(photo.id)
+  const { url, failed, loading } = useSignedUrl(photo.id, true, 'thumb')
   const [broken, setBroken] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const show = Boolean(url) && !failed && !broken

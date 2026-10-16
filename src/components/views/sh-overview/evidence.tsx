@@ -8,14 +8,15 @@
  * Berkas disimpan privat; tautannya diminta berkelompok ke
  * POST /api/evidence/signed (cadangan GET /api/evidence/:id; URL bertanda
  * tangan berlaku 5 menit) dan disimpan sebentar di memori supaya thumbnail,
- * pop-up rincian, dan lightbox tidak meminta dua kali.
+ * pop-up rincian, dan lightbox tidak meminta dua kali. Kotak kecil meminta
+ * `size: 'thumb'` (WebP 320px, Fase 1 PWA); lightbox & galeri besar `full`.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Button, Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { isImageMime, keyDelta, positionLabel, stepIndex, type OverviewEvidence } from './logic'
-import { createSignedFetcher } from './detail-logic'
+import { createSignedFetcher, type SignedSize } from './detail-logic'
 
 /* ---------- URL bertanda tangan ---------- */
 
@@ -27,28 +28,35 @@ import { createSignedFetcher } from './detail-logic'
  */
 const signed = createSignedFetcher({ fetch: (input, init) => fetch(input, init) })
 
-type SignedState = { id: string; url: string | null; kind: 'file' | 'link' | null; failed: boolean }
+type SignedState = { id: string; size: SignedSize; url: string | null; kind: 'file' | 'link' | null; failed: boolean }
 
-/** URL bertanda tangan satu bukti; `enabled` false = jangan minta (mis. dokumen di thumbnail). */
-export function useSignedUrl(id: string | null, enabled = true) {
+/**
+ * URL bertanda tangan satu bukti; `enabled` false = jangan minta (mis. dokumen
+ * di thumbnail). `size` 'thumb' untuk kotak kecil (server jatuh ke berkas asli
+ * bila thumbnail belum ada), 'full' (bawaan) untuk lightbox/galeri besar/dokumen.
+ */
+export function useSignedUrl(id: string | null, enabled = true, size: SignedSize = 'full') {
   const [state, setState] = useState<SignedState | null>(null)
   useEffect(() => {
     if (!id || !enabled) return
     let alive = true
-    signed.get(id).then((s) => {
-      if (alive) setState({ id, url: s?.url ?? null, kind: s?.kind ?? null, failed: !s })
+    signed.get(id, size).then((s) => {
+      if (alive) setState({ id, size, url: s?.url ?? null, kind: s?.kind ?? null, failed: !s })
     })
     return () => {
       alive = false
     }
-  }, [id, enabled])
-  const cur = state && state.id === id ? state : null
+  }, [id, enabled, size])
+  const cur = state && state.id === id && state.size === size ? state : null
   return { url: cur?.url ?? null, kind: cur?.kind ?? null, failed: cur?.failed ?? false, loading: Boolean(id && enabled && !cur) }
 }
 
 /* ---------- Thumbnail ---------- */
 
 export type ThumbSize = 'sm' | 'md' | 'stack' | 'strip'
+
+/** Ukuran URL per kotak: md selebar wadah (bisa besar) → berkas asli; lainnya ≤76px → thumbnail. */
+const THUMB_SIGNED: Record<ThumbSize, SignedSize> = { sm: 'thumb', md: 'full', stack: 'thumb', strip: 'thumb' }
 
 const THUMB_BOX: Record<ThumbSize, string> = {
   sm: 'h-12 w-16 rounded-[var(--radius-sm)]',
@@ -78,7 +86,7 @@ export function EvidenceThumb({
   pressed?: boolean
 }) {
   const image = isImageMime(item.mime)
-  const { url, failed, loading } = useSignedUrl(item.id, image)
+  const { url, failed, loading } = useSignedUrl(item.id, image, THUMB_SIGNED[size])
   const [broken, setBroken] = useState(false)
   return (
     <button

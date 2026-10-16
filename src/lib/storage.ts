@@ -3,6 +3,7 @@ import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { s3Configured, uploadS3Evidence, signedS3EvidenceUrl, removeS3Evidence } from './storage-s3'
+import { possibleThumbKey } from './evidence-thumb'
 
 /**
  * Evidence file storage, on Supabase Storage by default or optional S3/MinIO.
@@ -17,6 +18,13 @@ import { s3Configured, uploadS3Evidence, signedS3EvidenceUrl, removeS3Evidence }
 export const EVIDENCE_BUCKET = 'evidence'
 export const MAX_EVIDENCE_BYTES = 20 * 1024 * 1024 // keep in step with the bucket limit
 export const SIGNED_URL_TTL_SECONDS = 300 // five minutes is enough to open or download
+/**
+ * Fase 1 PWA: respons berkas lewat URL bertanda tangan boleh disimpan peramban
+ * (privat, tidak di cache bersama) selama umur URL-nya, jadi thumbnail yang
+ * sama tidak diunduh ulang selama klien memakai URL yang sama. Driver S3
+ * menandatangani `response-cache-control`; Supabase memakai metadata objek.
+ */
+export const SIGNED_URL_CACHE_CONTROL = `private, max-age=${SIGNED_URL_TTL_SECONDS}`
 
 export const ALLOWED_EVIDENCE_MIME = new Set([
   'image/jpeg',
@@ -103,7 +111,9 @@ export async function uploadEvidence(
 
 /** A time-limited URL for reading one object. Never store or cache this. */
 export async function signedEvidenceUrl(key: string, download?: string): Promise<string> {
-  if (storageDriver() === 's3') return signedS3EvidenceUrl(key, SIGNED_URL_TTL_SECONDS, download)
+  if (storageDriver() === 's3') {
+    return signedS3EvidenceUrl(key, SIGNED_URL_TTL_SECONDS, download, SIGNED_URL_CACHE_CONTROL)
+  }
   const { data, error } = await storageClient()
     .storage.from(EVIDENCE_BUCKET)
     .createSignedUrl(key, SIGNED_URL_TTL_SECONDS, download ? { download } : undefined)
@@ -112,9 +122,31 @@ export async function signedEvidenceUrl(key: string, download?: string): Promise
   return data.signedUrl
 }
 
-export async function removeEvidence(key: string): Promise<void> {
-  if (storageDriver() === 's3') return removeS3Evidence(key)
-  const { error } = await storageClient().storage.from(EVIDENCE_BUCKET).remove([key])
+/**
+ * Hapus satu berkas bukti beserta thumbnail-nya.
+ *
+ * `thumbKey`: string = kunci thumbnail yang diketahui (kolom `Evidence.thumbKey`);
+ * null = pasti tanpa thumbnail; tidak diisi = kunci thumbnail diturunkan dari
+ * `key` bila berkasnya gambar (`${key}.thumb.webp`) — jadi pemanggil lama yang
+ * hanya mengirim `storageKey` tetap membersihkan thumbnail. Gagal menghapus
+ * berkas utama dilempar seperti sebelumnya; gagal menghapus thumbnail hanya
+ * dicatat (objek yatim kecil lebih baik daripada baris bukti yang tak terhapus).
+ */
+export async function removeEvidence(key: string, thumbKey?: string | null): Promise<void> {
+  const thumb = thumbKey === undefined ? possibleThumbKey(key) : thumbKey || null
+  if (storageDriver() === 's3') {
+    await removeS3Evidence(key)
+    if (thumb) {
+      try {
+        await removeS3Evidence(thumb)
+      } catch (err) {
+        console.warn('[storage] thumbnail tidak terhapus', thumb, err instanceof Error ? err.message : err)
+      }
+    }
+    return
+  }
+  // Supabase menghapus beberapa objek dalam satu permintaan; objek yang tidak ada dilewati.
+  const { error } = await storageClient().storage.from(EVIDENCE_BUCKET).remove(thumb ? [key, thumb] : [key])
   // A missing object should not block deleting the database row.
   if (error && !/not found/i.test(error.message)) {
     throw new Error(`Gagal menghapus berkas: ${error.message}`)

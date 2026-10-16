@@ -13,6 +13,7 @@ import {
   uploadEvidence,
 } from '@/lib/storage'
 import { serverError } from '@/lib/api-error'
+import { startThumbnail, storeEvidenceThumb } from '@/lib/evidence-thumb'
 import { ShEvidenceRefusal, lockShReportForEvidence } from '@/lib/subholding/evidence'
 import { SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
 import { findIdempotentReplay, isUniqueViolation, readIdempotencyKey, recordIdempotentResponse } from '@/lib/idempotency'
@@ -143,11 +144,16 @@ export async function POST(req: NextRequest) {
 
   const displayName = safeDisplayName(label || file.name)
   const key = buildStorageKey(targetType, targetId, file.name)
+  // Thumbnail gambar (Fase 1 PWA) dirender sejajar dengan unggahan asli dari
+  // byte yang sudah dibaca; gagal hanya berarti thumbKey NULL (dashboard jatuh
+  // ke berkas asli), tidak pernah menggagalkan unggahan.
+  const thumbRender = startThumbnail(bytes, mime)
   try {
     await uploadEvidence(key, bytes, mime)
   } catch (err) {
     return serverError(err, 'Gagal mengunggah berkas. Coba lagi.', 'evidence/upload', 502)
   }
+  const thumbKey = await storeEvidenceThumb(key, mime, uploadEvidence, thumbRender)
 
   // [T11-DB] Objek sudah di storage; bila transaksi DB gagal, objeknya dibuang supaya tidak
   // yatim di bucket. [T12] Baris + hitung ulang cache + audit satu transaksi.
@@ -163,6 +169,7 @@ export async function POST(req: NextRequest) {
           targetType,
           targetId,
           storageKey: key,
+          thumbKey,
           fileName: displayName,
           mime,
           size: file.size,
@@ -201,7 +208,7 @@ export async function POST(req: NextRequest) {
       return body
     }, { isolationLevel: 'ReadCommitted' })
   } catch (err) {
-    try { await removeEvidence(key) } catch { /* Sisa objek ditangani retensi bucket. */ }
+    try { await removeEvidence(key, thumbKey) } catch { /* Sisa objek ditangani retensi bucket. */ }
     if (idemKey && isUniqueViolation(err)) {
       const winner = await findIdempotentReplay(db, user.id, idemKey, IDEMPOTENT_ROUTE)
       if (winner) return winner

@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   SIGNED_BATCH_MAX, SIGNED_TTL_MS, approvedLabel, batchUnsupported, buktiLabel, chunkIds, clampIndex, createSignedFetcher,
-  docActionLabel, mergeSigned, photoAlt, signedFromSingle, timeLabel,
+  docActionLabel, mergeSigned, normalizeSize, photoAlt, signedBody, signedFromSingle, timeLabel,
 } from '@/components/views/sh-overview/detail-logic'
 
 describe('clampIndex', () => {
@@ -279,5 +279,97 @@ describe('createSignedFetcher', () => {
     const pa = h.f.get('a')
     await h.tick()
     expect(await pa).toBeNull()
+  })
+})
+
+/* ---------- Ukuran thumb/full (Fase 1 PWA) ---------- */
+
+const sizedReply = (init?: RequestInit) => {
+  const { ids, size } = JSON.parse(String(init?.body)) as { ids: string[]; size?: string }
+  const tag = size === 'thumb' ? 't' : 'f'
+  return json(200, { items: ids.map((id) => ({ id, url: `https://s/${tag}/${id}`, kind: 'file' })) })
+}
+const bodies = (calls: Array<[string, RequestInit?]>) =>
+  calls.filter(([u]) => u === '/api/evidence/signed').map(([, init]) => JSON.parse(String(init?.body)))
+
+describe('createSignedFetcher — size', () => {
+  it('signedBody: full tanpa size (sama dengan klien lama), thumb membawa size', () => {
+    expect(JSON.parse(signedBody(['a'], 'full'))).toEqual({ ids: ['a'] })
+    expect(JSON.parse(signedBody(['a', 'b'], 'thumb'))).toEqual({ ids: ['a', 'b'], size: 'thumb' })
+    expect(normalizeSize('thumb')).toBe('thumb')
+    for (const v of ['full', 'besar', undefined, null, 1]) expect(normalizeSize(v)).toBe('full')
+  })
+
+  it('satu tick dengan dua ukuran → satu POST per ukuran; janji id sama beda ukuran tidak digabung', async () => {
+    const h = harness((url, init) => sizedReply(init))
+    const ta = h.f.get('a', 'thumb')
+    const tb = h.f.get('b', 'thumb')
+    const fa = h.f.get('a')
+    const fa2 = h.f.get('a', 'full')
+    expect(fa2).toBe(fa)
+    expect(h.f.get('a', 'thumb')).toBe(ta)
+    expect(ta).not.toBe(fa)
+    await h.tick()
+    expect(h.fetch).toHaveBeenCalledTimes(2)
+    expect(bodies(h.fetch.mock.calls).sort((x, y) => x.ids.length - y.ids.length)).toEqual([
+      { ids: ['a'] },
+      { ids: ['a', 'b'], size: 'thumb' },
+    ])
+    expect((await ta)?.url).toBe('https://s/t/a')
+    expect((await tb)?.url).toBe('https://s/t/b')
+    expect((await fa)?.url).toBe('https://s/f/a')
+  })
+
+  it('cache terpisah per (id, ukuran): thumb tersimpan tidak menjawab permintaan full', async () => {
+    const h = harness((url, init) => sizedReply(init))
+    h.f.get('a', 'thumb')
+    await h.tick()
+    expect(h.f.peek('a', 'thumb')?.url).toBe('https://s/t/a')
+    expect(h.f.peek('a')).toBeNull()
+    expect((await h.f.get('a', 'thumb'))?.url).toBe('https://s/t/a')
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+    const fa = h.f.get('a')
+    await h.tick()
+    expect((await fa)?.url).toBe('https://s/f/a')
+    expect(h.fetch).toHaveBeenCalledTimes(2)
+    expect(bodies(h.fetch.mock.calls).at(-1)).toEqual({ ids: ['a'] })
+    h.advance(SIGNED_TTL_MS + 1)
+    expect(h.f.peek('a', 'thumb')).toBeNull()
+    expect(h.f.peek('a', 'full')).toBeNull()
+  })
+
+  it('lebih dari 60 thumbnail dipecah per 60 dan tetap membawa size', async () => {
+    const h = harness((url, init) => sizedReply(init))
+    const ps = Array.from({ length: 61 }, (_, i) => h.f.get(`e${i}`, 'thumb'))
+    await h.tick()
+    const sent = bodies(h.fetch.mock.calls)
+    expect(sent.map((b) => [b.ids.length, b.size])).toEqual([[60, 'thumb'], [1, 'thumb']])
+    expect((await Promise.all(ps)).every((x) => x?.url.startsWith('https://s/t/'))).toBe(true)
+  })
+
+  it('endpoint lama 404 → GET per id untuk thumb; hasilnya (berkas asli) juga mengisi cache full', async () => {
+    const h = harness((url) => {
+      if (url === '/api/evidence/signed') return json(404, { error: 'Tidak ditemukan' })
+      const id = decodeURIComponent(url.split('/').pop()!)
+      return json(200, { url: `https://g/${id}`, kind: 'file' })
+    })
+    const ta = h.f.get('a', 'thumb')
+    await h.tick()
+    expect((await ta)?.url).toBe('https://g/a')
+    expect(h.fetch.mock.calls.map(([u]) => u)).toEqual(['/api/evidence/signed', '/api/evidence/a'])
+    expect(h.f.peek('a', 'thumb')?.url).toBe('https://g/a')
+    expect(h.f.peek('a')?.url).toBe('https://g/a')
+  })
+
+  it('galat satu ukuran tidak menggagalkan ukuran lain', async () => {
+    const h = harness((url, init) => {
+      const { size } = JSON.parse(String(init?.body)) as { size?: string }
+      return size === 'thumb' ? json(503, { error: 'Penyimpanan belum aktif' }) : sizedReply(init)
+    })
+    const ta = h.f.get('a', 'thumb')
+    const fa = h.f.get('a')
+    await h.tick()
+    expect(await ta).toBeNull()
+    expect((await fa)?.url).toBe('https://s/f/a')
   })
 })

@@ -93,8 +93,12 @@ function queryString(params: Record<string, string>): string {
     .map(([key, value]) => `${key}=${value}`).join('&')
 }
 
-/** Pure local signing; no request is made and no public ACL is granted. */
-export function signedS3EvidenceUrl(key: string, ttl: number, download?: string): string {
+/**
+ * Pure local signing; no request is made and no public ACL is granted.
+ * `cacheControl` (opsional) ditandatangani sebagai `response-cache-control`,
+ * jadi S3/MinIO membalas dengan header Cache-Control itu.
+ */
+export function signedS3EvidenceUrl(key: string, ttl: number, download?: string, cacheControl?: string): string {
   if (!Number.isInteger(ttl) || ttl < 1 || ttl > 604800) throw new Error('Masa berlaku URL S3 tidak valid.')
   const config = configuration()
   const url = objectUrl(config, key)
@@ -111,6 +115,10 @@ export function signedS3EvidenceUrl(key: string, ttl: number, download?: string)
     const name = download.replace(/[\x00-\x1f\x7f]/g, '')
     const fallback = name.replace(/[^\x20-\x7e]|["\\]/g, '_')
     params['response-content-disposition'] = `attachment; filename="${fallback}"; filename*=UTF-8''${encode(name)}`
+  }
+  if (cacheControl) {
+    if (/[\x00-\x1f\x7f]/.test(cacheControl)) throw new Error('Cache-Control S3 tidak valid.')
+    params['response-cache-control'] = cacheControl
   }
   const query = queryString(params)
   const canonical = `GET\n${url.pathname}\n${query}\nhost:${url.host}\n\nhost\nUNSIGNED-PAYLOAD`

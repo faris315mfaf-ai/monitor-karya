@@ -91,6 +91,7 @@ const DEFAULTS: Record<string, Row> = {
   reminderRule: { enabled: true, time: null, weekday: null, params: null, lastRunAt: null, updatedById: null },
   subholdingReport: { status: 'MENUNGGU', decidedById: null, decidedAt: null, highlight: false, highlightNote: null, highlightedAt: null },
   subholdingReportComment: { kind: 'KOMENTAR', readAt: null },
+  evidence: { thumbKey: null },
 }
 
 let seq = 0
