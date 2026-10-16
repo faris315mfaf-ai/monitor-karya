@@ -19,11 +19,14 @@ import {
   SegmentedControl,
   Skeleton,
   StatusBadge,
+  cx,
 } from '@/components/mk'
 import { formatDateShort, formatTime } from '@/lib/format'
 import {
   SH_STATUSES,
   SH_STATUS_META,
+  TOUCH_TEXT,
+  TOUCH_TEXT_SEARCH,
   csvFileName,
   filterReports,
   historyCsv,
@@ -104,7 +107,7 @@ export function ShHistoryView() {
               <label htmlFor="sh-h-pt" className="mk-field__label">
                 PT pelaksana
               </label>
-              <select id="sh-h-pt" className="mk-select" value={ptId} onChange={(e) => setPtId(e.target.value)}>
+              <select id="sh-h-pt" className={cx('mk-select', TOUCH_TEXT)} value={ptId} onChange={(e) => setPtId(e.target.value)}>
                 <option value="">Semua PT</option>
                 {(opts.data?.pts ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
@@ -117,7 +120,7 @@ export function ShHistoryView() {
               <label htmlFor="sh-h-status" className="mk-field__label">
                 Status
               </label>
-              <select id="sh-h-status" className="mk-select" value={status} onChange={(e) => setStatus(e.target.value as ShStatus | '')}>
+              <select id="sh-h-status" className={cx('mk-select', TOUCH_TEXT)} value={status} onChange={(e) => setStatus(e.target.value as ShStatus | '')}>
                 <option value="">Semua status</option>
                 {SH_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -132,6 +135,7 @@ export function ShHistoryView() {
               </span>
               <SearchField
                 id="sh-h-cari"
+                className={TOUCH_TEXT_SEARCH}
                 label="Cari kegiatan, deskripsi, atau pelapor"
                 placeholder="Kegiatan, deskripsi, atau nama pelapor"
                 value={q}

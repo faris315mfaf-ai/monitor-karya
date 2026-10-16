@@ -11,6 +11,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
+import { PullToRefresh } from '@/components/mk/pull-refresh'
 import { useApp } from '@/components/app-provider'
 import { refreshNotes } from '@/components/shell'
 import { refreshNavBadges } from '@/components/pic/nav-badges'
@@ -33,6 +34,7 @@ import { formatDateTime, formatRelative } from '@/lib/format'
 import {
   INBOX_KIND_META,
   SH_STATUS_META,
+  TOUCH_TEXT,
   callJson,
   inboxEntries,
   loadReportDetail,
@@ -100,72 +102,76 @@ export function ShInboxView() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        context="Tanggapan supervisor dan pengingat untuk subholding Anda"
-        title="Kotak masuk"
-        tools={
-          unread > 0 ? (
-            <Button size="sm" icon="selesai" disabled={markingAll} onClick={() => void markAll()}>
-              {markingAll ? 'Menandai…' : 'Tandai semua dibaca'}
-            </Button>
-          ) : undefined
-        }
-      />
-      <p className="t-title-3 text-ink">{unread > 0 ? `${unread} pesan belum dibaca.` : 'Semua pesan sudah dibaca.'}</p>
+      <PullToRefresh onRefresh={reload} loading={loading}>
+        <div className="space-y-5">
+          <PageHeader
+            context="Tanggapan supervisor dan pengingat untuk subholding Anda"
+            title="Kotak masuk"
+            tools={
+              unread > 0 ? (
+                <Button size="sm" icon="selesai" disabled={markingAll} onClick={() => void markAll()}>
+                  {markingAll ? 'Menandai…' : 'Tandai semua dibaca'}
+                </Button>
+              ) : undefined
+            }
+          />
+          <p className="t-title-3 text-ink">{unread > 0 ? `${unread} pesan belum dibaca.` : 'Semua pesan sudah dibaca.'}</p>
 
-      <div className="mk-toolbar">
-        <SegmentedControl
-          size="sm"
-          label="Saring pesan"
-          value={filter}
-          onChange={(v) => setFilter(v as Filter)}
-          options={[
-            { value: 'semua', label: 'Semua' },
-            { value: 'belum', label: 'Belum dibaca' },
-          ]}
-        />
-      </div>
+          <div className="mk-toolbar">
+            <SegmentedControl
+              size="sm"
+              label="Saring pesan"
+              value={filter}
+              onChange={(v) => setFilter(v as Filter)}
+              options={[
+                { value: 'semua', label: 'Semua' },
+                { value: 'belum', label: 'Belum dibaca' },
+              ]}
+            />
+          </div>
 
-      <Card ariaLabel="Daftar pesan">
-        {shown.length === 0 ? (
-          <EmptyNote done={filter === 'belum'} icon="notifikasi">
-            {filter === 'belum' ? 'Semua pesan sudah dibaca.' : 'Belum ada pesan dari supervisor.'}
-          </EmptyNote>
-        ) : (
-          <ul className="mk-list">
-            {shown.map((e) => {
-              const meta = INBOX_KIND_META[e.kind] ?? INBOX_KIND_META.KOMENTAR
-              const title = e.type === 'pesan' ? e.item.report.kegiatan : 'Pengingat laporan'
-              const body = e.type === 'pesan' ? e.item.body : e.reminder.text
-              const sub = e.type === 'pesan' ? `${e.item.report.ptName} · ${e.item.authorName}` : null
-              return (
-                <li key={e.key}>
-                  <button
-                    type="button"
-                    className="mk-userrow"
-                    aria-label={`${meta.label}: ${title}, ${formatRelative(e.createdAt)}${e.unread ? ', belum dibaca' : ''}. Buka`}
-                    onClick={() => open(e)}
-                  >
-                    <span className="min-w-0 flex-1 flex flex-col gap-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <StatusBadge size="sm" status={meta.status}>
-                          {meta.label}
-                        </StatusBadge>
-                        <span className="t-caption text-ink-2">{formatRelative(e.createdAt)}</span>
-                        {e.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-accent-fill" aria-hidden /> : null}
-                      </span>
-                      <span className={cx('t-body text-ink truncate', e.unread && 'font-semibold')}>{title}</span>
-                      {body ? <span className="t-footnote text-ink-2 line-clamp-2">{body}</span> : null}
-                      {sub ? <span className="t-caption text-ink-2">{sub}</span> : null}
-                    </span>
-                    <Icon name="kanan" size={18} className="text-ink-3 shrink-0" />
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+          <Card ariaLabel="Daftar pesan">
+            {shown.length === 0 ? (
+              <EmptyNote done={filter === 'belum'} icon="notifikasi">
+                {filter === 'belum' ? 'Semua pesan sudah dibaca.' : 'Belum ada pesan dari supervisor.'}
+              </EmptyNote>
+            ) : (
+              <ul className="mk-list">
+                {shown.map((e) => {
+                  const meta = INBOX_KIND_META[e.kind] ?? INBOX_KIND_META.KOMENTAR
+                  const title = e.type === 'pesan' ? e.item.report.kegiatan : 'Pengingat laporan'
+                  const body = e.type === 'pesan' ? e.item.body : e.reminder.text
+                  const sub = e.type === 'pesan' ? `${e.item.report.ptName} · ${e.item.authorName}` : null
+                  return (
+                    <li key={e.key}>
+                      <button
+                        type="button"
+                        className="mk-userrow"
+                        aria-label={`${meta.label}: ${title}, ${formatRelative(e.createdAt)}${e.unread ? ', belum dibaca' : ''}. Buka`}
+                        onClick={() => open(e)}
+                      >
+                        <span className="min-w-0 flex-1 flex flex-col gap-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <StatusBadge size="sm" status={meta.status}>
+                              {meta.label}
+                            </StatusBadge>
+                            <span className="t-caption text-ink-2">{formatRelative(e.createdAt)}</span>
+                            {e.unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-accent-fill" aria-hidden /> : null}
+                          </span>
+                          <span className={cx('t-body text-ink truncate', e.unread && 'font-semibold')}>{title}</span>
+                          {body ? <span className="t-footnote text-ink-2 line-clamp-2">{body}</span> : null}
+                          {sub ? <span className="t-caption text-ink-2">{sub}</span> : null}
+                        </span>
+                        <Icon name="kanan" size={18} className="text-ink-3 shrink-0" />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </PullToRefresh>
 
       <MessageSheet
         entry={opened}
@@ -332,6 +338,7 @@ function MessageSheet({
             </label>
             <Textarea
               id="sh-balas"
+              className={TOUCH_TEXT}
               rows={3}
               maxLength={2000}
               value={reply}

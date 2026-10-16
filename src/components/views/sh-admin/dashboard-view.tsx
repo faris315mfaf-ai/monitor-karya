@@ -6,13 +6,19 @@
  * Akun dipakai bersama banyak pelapor — nama & jabatan diisi per laporan.
  *
  * Alur simpan: validasi → POST/PATCH /api/sh/reports → unggah bukti yang sudah
- * dipilih satu per satu. Bila sebagian bukti gagal, laporan tetap tersimpan dan
- * panel "Bukti belum terunggah" menawarkan unggah ulang ke laporan yang sama.
+ * dipilih (paling banyak 2 sekaligus, status per bukti). Bila sebagian bukti
+ * gagal, laporan tetap tersimpan dan panel "Bukti belum terunggah" menawarkan
+ * "Coba lagi" per bukti ke laporan yang sama (Idempotency-Key per bukti tetap).
+ *
+ * Draf form Tambah laporan disimpan di IndexedDB perangkat per akun
+ * (draft-store.ts) dan dipulihkan saat dashboard dibuka lagi.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useResource } from '@/hooks/use-resource'
+import { PullToRefresh } from '@/components/mk/pull-refresh'
+import { InstallPrompt } from '@/components/mk/install-prompt'
 import {
   Button,
   Card,
@@ -32,10 +38,15 @@ import {
   cx,
 } from '@/components/mk'
 import { useConfirm } from '@/components/companies/parts'
+import { useApp } from '@/components/app-provider'
 import { formatDateLong, formatDateShort, formatTime } from '@/lib/format'
 import { BuktiPicker } from './bukti-picker'
+import { isDraftEmpty, shDraftStore, type ShDraft } from './draft-store'
 import {
   EMPTY_FORM,
+  TOUCH_TEXT,
+  anyCompressing,
+  buktiStatusView,
   SH_STATUS_META,
   SH_STATUSES,
   callJson,
@@ -55,6 +66,7 @@ import {
   uploadAll,
   validateForm,
   wibDateKey,
+  type BuktiState,
   type FormErrors,
   type PendingBukti,
   type ShForm,
@@ -67,7 +79,10 @@ type Retry = { report: ShReport; failed: { item: PendingBukti; error: string }[]
 const FIELD_ORDER: (keyof FormErrors)[] = ['kegiatan', 'ptId', 'deskripsi', 'reporterName', 'titleField', 'bukti']
 
 export function ShDashboardView() {
+  const { user } = useApp()
+  const userId = user.id
   const today = wibDateKey(new Date())
+  const [sentOnce, setSentOnce] = useState(false)
   const opts = useResource<ShOptions>('/api/sh/options')
   const list = useResource<ShReportList>(`/api/sh/reports?from=${today}&to=${today}&pageSize=100`)
   // Laporan hari sebelumnya yang masih diminta perbaiki (daftar utama hanya hari ini).
@@ -77,6 +92,7 @@ export function ShDashboardView() {
 
   const [form, setForm] = useState<ShForm>(EMPTY_FORM)
   const [bukti, setBukti] = useState<PendingBukti[]>([])
+  const [buktiStatus, setBuktiStatus] = useState<Record<string, BuktiState>>({})
   const [errors, setErrors] = useState<FormErrors>({})
   const [tried, setTried] = useState(false)
   const [editing, setEditing] = useState<ShReport | null>(null)
@@ -85,6 +101,7 @@ export function ShDashboardView() {
   const [done, setDone] = useState<string | null>(null)
   const [retry, setRetry] = useState<Retry | null>(null)
   const [retryBusy, setRetryBusy] = useState(false)
+  const [retryStatus, setRetryStatus] = useState<Record<string, BuktiState>>({})
   const [idemKey, setIdemKey] = useState(() => newKey('shr'))
   const [filter, setFilter] = useState<Filter>('SEMUA')
   const [confirmEl, confirm] = useConfirm()
@@ -92,6 +109,13 @@ export function ShDashboardView() {
   const [initDone, setInitDone] = useState(false)
   const [pending] = useState(() => peekShEdit())
   const [pendingDone, setPendingDone] = useState(false)
+  const [pendingGone, setPendingGone] = useState(false)
+  // Draf IndexedDB: `draftLoad` = hasil baca terakhir (null = belum terbaca), `draftNonce` memicu baca ulang.
+  const [draftNonce, setDraftNonce] = useState(0)
+  const [draftLoad, setDraftLoad] = useState<{ nonce: number; draft: ShDraft | null } | null>(null)
+  const [draftApplied, setDraftApplied] = useState(-1)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [touched, setTouched] = useState(false)
   const formRef = useRef<HTMLElement>(null)
 
   // Nama & jabatan yang diingat peramban ini (setelah data pertama tiba = sudah di klien).
@@ -119,7 +143,10 @@ export function ShDashboardView() {
     pendingFetched.current = true
     void loadReportDetail(fetch, pending.id).then((r) => {
       if (r) setPendingDetail(r)
-      else toast.error('Laporan yang diminta perbaikan tidak ditemukan. Mungkin sudah ditarik atau disetujui.')
+      else {
+        setPendingGone(true)
+        toast.error('Laporan yang diminta perbaikan tidak ditemukan. Mungkin sudah ditarik atau disetujui.')
+      }
     })
   }, [list.loading, older.loading, pendingFound])
   if (pendingFound && !pendingDone) {
@@ -128,14 +155,64 @@ export function ShDashboardView() {
     setForm(formFromReport(pendingFound))
   }
 
+  // Baca draf perangkat untuk akun ini (ulang setelah selesai memperbaiki laporan).
+  useEffect(() => {
+    let alive = true
+    void shDraftStore.get(userId).then((draft) => {
+      if (alive) setDraftLoad({ nonce: draftNonce, draft })
+    })
+    return () => {
+      alive = false
+    }
+  }, [userId, draftNonce])
+  // Pulihkan draf sekali per baca: setelah nama pelapor yang diingat terpasang, bukan saat
+  // memperbaiki laporan, dan hanya bila form belum disentuh sejak dibuka.
+  const pendingOpen = !!pending && !pendingDone && !pendingGone
+  if (draftLoad && draftLoad.nonce !== draftApplied && initDone && !editing && !pendingOpen) {
+    setDraftApplied(draftLoad.nonce)
+    const d = draftLoad.draft
+    if (d && !touched && !isDraftEmpty(d.form, d.bukti)) {
+      // Draf tanpa nama pelapor tidak menghapus nama & jabatan yang diingat peramban.
+      setForm((f) => (d.form.reporterName.trim() ? d.form : { ...d.form, reporterName: f.reporterName, titleKind: f.titleKind, titleField: f.titleField }))
+      setBukti(d.bukti)
+      setBuktiStatus({})
+      if (d.idemKey) setIdemKey(d.idemKey)
+      setDraftRestored(true)
+    }
+  }
+  // Simpan baru boleh setelah draf lama dibaca (kalau tidak, form kosong menimpanya).
+  const draftReady = draftApplied >= 0
+
+  // Simpan draf (jeda 700 ms) dan segera saat halaman disembunyikan (pindah ke kamera/aplikasi lain).
+  useEffect(() => {
+    if (!draftReady || editing || busy) return
+    const save = () => {
+      if (isDraftEmpty(form, bukti)) void shDraftStore.clear(userId)
+      else void shDraftStore.put(userId, form, bukti, idemKey)
+    }
+    const t = setTimeout(save, 700)
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') save()
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', save)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', save)
+    }
+  }, [draftReady, editing, busy, form, bukti, idemKey, userId])
+
   const remembered = initDone ? loadRemembered() : null
   const suggestions = reporterSuggestions(opts.data?.reporters ?? [], remembered)
 
   const existingCount = editing?.evidenceCount ?? 0
   const liveErrors = tried ? validateForm(form, existingCount + bukti.length) : errors
+  const compressing = anyCompressing(bukti)
 
   function set<K extends keyof ShForm>(k: K, v: ShForm[K]) {
     setForm((f) => ({ ...f, [k]: v }))
+    setTouched(true)
     setDone(null)
   }
 
@@ -144,26 +221,58 @@ export function ShDashboardView() {
     older.reload()
   }
 
+  /** Form kosong dengan nama & jabatan yang diingat peramban (bila "Ingat" aktif). */
+  function rememberedForm(): ShForm {
+    const r = ingat ? loadRemembered() : null
+    return r ? { ...EMPTY_FORM, reporterName: r.name, titleKind: r.titleKind, titleField: r.titleField } : EMPTY_FORM
+  }
+
   function resetForm(keepReporter: boolean) {
     setForm(keepReporter ? { ...EMPTY_FORM, reporterName: form.reporterName, titleKind: form.titleKind, titleField: form.titleField } : EMPTY_FORM)
     setBukti([])
+    setBuktiStatus({})
     setErrors({})
     setTried(false)
-    setEditing(null)
+    setTouched(false)
+    if (editing) {
+      // Keluar dari mode perbaiki: pulihkan lagi draf laporan baru yang tersimpan (bila ada).
+      setEditing(null)
+      setDraftNonce((n) => n + 1)
+    } else {
+      setIdemKey(newKey('shr'))
+      setDraftRestored(false)
+    }
+  }
+
+  function discardDraft() {
+    void shDraftStore.clear(userId)
+    setDraftRestored(false)
+    setForm(rememberedForm())
+    setBukti([])
+    setBuktiStatus({})
+    setErrors({})
+    setTried(false)
+    setTouched(false)
     setIdemKey(newKey('shr'))
+    setDone(null)
   }
 
   function startEdit(r: ShReport) {
+    // Simpan draf laporan baru yang sedang diisi sebelum form dipakai untuk memperbaiki.
+    if (!editing && draftReady && !isDraftEmpty(form, bukti)) void shDraftStore.put(userId, form, bukti, idemKey)
     setEditing(r)
     setForm(formFromReport(r))
     setBukti([])
+    setBuktiStatus({})
     setErrors({})
     setTried(false)
+    setTouched(false)
     setDone(null)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function onSubmit() {
+    if (busy || compressing) return
     const errs = validateForm(form, existingCount + bukti.length)
     setTried(true)
     setErrors(errs)
@@ -174,14 +283,24 @@ export function ShDashboardView() {
     }
     setBusy('Menyimpan laporan…')
     setDone(null)
+    setBuktiStatus({})
     const wasEditing = editing
+    const total = bukti.length
+    let started = false
     const res = await submitReport({
       fetchImpl: fetch,
       form,
       bukti,
       editId: editing?.id ?? null,
       idempotencyKey: idemKey,
-      onProgress: (d, t) => setBusy(`Mengunggah bukti ${Math.min(d + 1, t)} dari ${t}…`),
+      onStatus: (key, st) => {
+        if (!started) {
+          started = true
+          setBusy(`Mengunggah ${total} bukti…`)
+        }
+        setBuktiStatus((m) => ({ ...m, [key]: st }))
+      },
+      onProgress: (d, t) => setBusy(`Mengunggah bukti · ${d} dari ${t} selesai`),
     })
     setBusy(null)
     if (!res.ok) {
@@ -190,17 +309,21 @@ export function ShDashboardView() {
       return
     }
     if (!wasEditing) {
+      setSentOnce(true)
+      // Laporan sudah tersimpan di server: draf tidak diperlukan lagi (bukti gagal pindah ke panel coba lagi).
+      void shDraftStore.clear(userId)
+      setDraftRestored(false)
       if (ingat) saveRemembered({ name: form.reporterName.trim(), titleKind: form.titleKind, titleField: form.titleField.trim() })
       else saveRemembered(null)
       resetForm(ingat)
     } else {
       // Selesai memperbaiki: kembali ke form kosong dengan pelapor yang diingat (bukan pelapor laporan lama).
       resetForm(false)
-      const r = ingat ? loadRemembered() : null
-      if (r) setForm({ ...EMPTY_FORM, reporterName: r.name, titleKind: r.titleKind, titleField: r.titleField })
+      setForm(rememberedForm())
     }
     reloadAll()
     if (res.failed.length) {
+      setRetryStatus({})
       setRetry({ report: res.report, failed: res.failed, total: res.failed.length + res.uploaded.length })
       toast.warning('Laporan tersimpan, tetapi sebagian bukti belum terunggah.')
     } else {
@@ -213,19 +336,32 @@ export function ShDashboardView() {
     }
   }
 
-  async function retryUpload() {
-    if (!retry) return
+  /** Unggah ulang bukti yang gagal ke laporan yang SAMA (semua, atau satu kunci). */
+  async function retryUpload(keys?: string[]) {
+    const snap = retry
+    if (!snap || retryBusy) return
+    const items = snap.failed.filter((f) => !keys || keys.includes(f.item.key)).map((f) => f.item)
+    if (!items.length) return
     setRetryBusy(true)
-    const out = await uploadAll(fetch, retry.report.id, retry.failed.map((f) => f.item))
+    const out = await uploadAll(fetch, snap.report.id, items, {
+      onStatus: (key, st) => setRetryStatus((m) => ({ ...m, [key]: st })),
+    })
     setRetryBusy(false)
     reloadAll()
-    if (out.failed.length) {
-      setRetry({ ...retry, failed: out.failed })
+    const ok = new Set(out.uploaded.map((i) => i.key))
+    const err = new Map(out.failed.map((f) => [f.item.key, f.error]))
+    const remaining = snap.failed
+      .filter((f) => !ok.has(f.item.key))
+      .map((f) => ({ ...f, error: err.get(f.item.key) ?? f.error }))
+    setRetry((prev) => (prev && prev.report.id === snap.report.id ? (remaining.length ? { ...prev, failed: remaining } : null) : prev))
+    if (!remaining.length) {
+      setRetryStatus({})
+      setDone(`Semua bukti untuk “${snap.report.kegiatan}” sudah terlampir.`)
+      toast.success('Bukti terunggah.')
+    } else if (out.failed.length) {
       toast.error(`${out.failed.length} bukti masih gagal terunggah.`)
     } else {
-      setRetry(null)
-      setDone(`Semua bukti untuk “${retry.report.kegiatan}” sudah terlampir.`)
-      toast.success('Bukti terunggah.')
+      toast.success(`${out.uploaded.length} bukti terunggah.`)
     }
   }
 
@@ -262,260 +398,288 @@ export function ShDashboardView() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        context={`${formatDateLong(new Date())} · ${o.subholding.name} · ${o.pts.length} PT`}
-        title="Laporan kegiatan & proyek hari ini"
-      />
-      <p className="t-footnote text-ink-2">
-        Akun ini dipakai bersama. Isi nama dan jabatan Anda di setiap laporan; Anda boleh melapor berkali-kali.
-      </p>
+      <PullToRefresh onRefresh={reloadAll} loading={list.loading}>
+        <div className="space-y-5">
+          <PageHeader
+            context={`${formatDateLong(new Date())} · ${o.subholding.name} · ${o.pts.length} PT`}
+            title="Laporan kegiatan & proyek hari ini"
+          />
+          {/* Ajakan pasang ke layar utama: sekali, setelah laporan pertama berhasil terkirim. */}
+          {sentOnce ? <InstallPrompt /> : null}
+          <p className="t-footnote text-ink-2">
+            Akun ini dipakai bersama. Isi nama dan jabatan Anda di setiap laporan; Anda boleh melapor berkali-kali.
+          </p>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Dikirim hari ini" value={total} delta={`${reportedPtCount(items, o.pts)} dari ${o.pts.length} PT melapor`} tone="neutral" />
-        <StatTile label="Menunggu tinjauan" value={counts.MENUNGGU} delta="di antrean supervisor" tone="info" onClick={() => setFilter('MENUNGGU')} />
-        <StatTile label="Perlu perbaikan" value={counts.PERLU_PERBAIKAN} delta="lihat komentar supervisor" tone="risk" onClick={() => setFilter('PERLU_PERBAIKAN')} />
-        <StatTile label="Disetujui" value={counts.DISETUJUI} delta="sudah tampil di manajemen" tone="done" onClick={() => setFilter('DISETUJUI')} />
-      </div>
-
-      {retry ? (
-        <RetryPanel
-          retry={retry}
-          busy={retryBusy}
-          onRetry={() => void retryUpload()}
-          onAttach={() => setAttach(retry.report)}
-          onClose={() => setRetry(null)}
-        />
-      ) : null}
-
-      <section ref={formRef} aria-labelledby="sh-form-title" className="mk-card space-y-4" style={{ scrollMarginTop: 'var(--space-6)' }}>
-        <div className="mk-sectitle">
-          <h2 id="sh-form-title" className="t-title-3 text-ink">
-            {editing ? 'Perbaiki laporan' : 'Tambah laporan'}
-          </h2>
-          <span className="t-caption text-ink-2">* wajib diisi</span>
-        </div>
-
-        {editing ? (
-          <div className="mk-note-box bg-waspada-soft text-ink flex flex-wrap items-start gap-3">
-            <Icon name="catatan" size={18} className="shrink-0 mt-0.5" />
-            <span className="min-w-0 flex-1">
-              <strong>Komentar supervisor:</strong> {supNote?.body ?? 'Tidak ada komentar tertulis.'}
-            </span>
-            <Button size="sm" variant="plain" onClick={() => resetForm(true)} disabled={!!busy}>
-              Batal memperbaiki
-            </Button>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile label="Dikirim hari ini" value={total} delta={`${reportedPtCount(items, o.pts)} dari ${o.pts.length} PT melapor`} tone="neutral" />
+            <StatTile label="Menunggu tinjauan" value={counts.MENUNGGU} delta="di antrean supervisor" tone="info" onClick={() => setFilter('MENUNGGU')} />
+            <StatTile label="Perlu perbaikan" value={counts.PERLU_PERBAIKAN} delta="lihat komentar supervisor" tone="risk" onClick={() => setFilter('PERLU_PERBAIKAN')} />
+            <StatTile label="Disetujui" value={counts.DISETUJUI} delta="sudah tampil di manajemen" tone="done" onClick={() => setFilter('DISETUJUI')} />
           </div>
-        ) : null}
 
-        <div className="mk-formgrid">
-          <Field id="sh-f-kegiatan" label="Kegiatan / proyek" error={liveErrors.kegiatan}>
-            <Input
-              id="sh-f-kegiatan"
-              value={form.kegiatan}
-              maxLength={200}
-              placeholder="Mis. Pemasangan panel surya atap gudang"
-              aria-invalid={!!liveErrors.kegiatan || undefined}
-              aria-describedby={liveErrors.kegiatan ? 'sh-f-kegiatan-err' : undefined}
-              onChange={(e) => set('kegiatan', e.target.value)}
+          {retry ? (
+            <RetryPanel
+              retry={retry}
+              busy={retryBusy}
+              status={retryStatus}
+              onRetry={(keys) => void retryUpload(keys)}
+              onAttach={() => setAttach(retry.report)}
+              onClose={() => setRetry(null)}
             />
-          </Field>
-          <Field id="sh-f-ptId" label="PT pelaksana" error={liveErrors.ptId}>
-            <select
-              id="sh-f-ptId"
-              className="mk-select"
-              value={form.ptId}
-              aria-invalid={!!liveErrors.ptId || undefined}
-              aria-describedby={liveErrors.ptId ? 'sh-f-ptId-err' : undefined}
-              onChange={(e) => set('ptId', e.target.value)}
-            >
-              <option value="">Pilih PT di {o.subholding.name}</option>
-              {o.pts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
+          ) : null}
+
+          <section ref={formRef} aria-labelledby="sh-form-title" className="mk-card space-y-4" style={{ scrollMarginTop: 'var(--space-6)' }}>
+            <div className="mk-sectitle">
+              <h2 id="sh-form-title" className="t-title-3 text-ink">
+                {editing ? 'Perbaiki laporan' : 'Tambah laporan'}
+              </h2>
+              <span className="t-caption text-ink-2">* wajib diisi</span>
+            </div>
+
+            {draftRestored && !editing ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 t-footnote text-ink-2" role="status">
+                <Icon name="catatan" size={16} className="shrink-0" />
+                <span>Draf dipulihkan</span>
+                <span aria-hidden>·</span>
+                <Button size="sm" variant="plain" disabled={!!busy} onClick={discardDraft}>
+                  Buang draf
+                </Button>
+              </div>
+            ) : null}
+
+            {editing ? (
+              <div className="mk-note-box bg-waspada-soft text-ink flex flex-wrap items-start gap-3">
+                <Icon name="catatan" size={18} className="shrink-0 mt-0.5" />
+                <span className="min-w-0 flex-1">
+                  <strong>Komentar supervisor:</strong> {supNote?.body ?? 'Tidak ada komentar tertulis.'}
+                </span>
+                <Button size="sm" variant="plain" onClick={() => resetForm(true)} disabled={!!busy}>
+                  Batal memperbaiki
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="mk-formgrid">
+              <Field id="sh-f-kegiatan" label="Kegiatan / proyek" error={liveErrors.kegiatan}>
+                <Input
+                  id="sh-f-kegiatan"
+                  className={TOUCH_TEXT}
+                  value={form.kegiatan}
+                  maxLength={200}
+                  placeholder="Mis. Pemasangan panel surya atap gudang"
+                  aria-invalid={!!liveErrors.kegiatan || undefined}
+                  aria-describedby={liveErrors.kegiatan ? 'sh-f-kegiatan-err' : undefined}
+                  onChange={(e) => set('kegiatan', e.target.value)}
+                />
+              </Field>
+              <Field id="sh-f-ptId" label="PT pelaksana" error={liveErrors.ptId}>
+                <select
+                  id="sh-f-ptId"
+                  className={cx('mk-select', TOUCH_TEXT)}
+                  value={form.ptId}
+                  aria-invalid={!!liveErrors.ptId || undefined}
+                  aria-describedby={liveErrors.ptId ? 'sh-f-ptId-err' : undefined}
+                  onChange={(e) => set('ptId', e.target.value)}
+                >
+                  <option value="">Pilih PT di {o.subholding.name}</option>
+                  {o.pts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="sh-f-deskripsi" label="Deskripsi" error={liveErrors.deskripsi} full>
+                <Textarea
+                  id="sh-f-deskripsi"
+                  className={TOUCH_TEXT}
+                  rows={4}
+                  maxLength={4000}
+                  value={form.deskripsi}
+                  placeholder="Apa yang dikerjakan hari ini, hasilnya, kendala bila ada"
+                  aria-invalid={!!liveErrors.deskripsi || undefined}
+                  aria-describedby={liveErrors.deskripsi ? 'sh-f-deskripsi-err' : undefined}
+                  onChange={(e) => set('deskripsi', e.target.value)}
+                />
+              </Field>
+              <Field id="sh-f-reporterName" label="Nama pelapor" error={liveErrors.reporterName}>
+                <Input
+                  id="sh-f-reporterName"
+                  className={TOUCH_TEXT}
+                  value={form.reporterName}
+                  maxLength={120}
+                  autoComplete="name"
+                  placeholder="Nama lengkap yang melapor"
+                  aria-invalid={!!liveErrors.reporterName || undefined}
+                  aria-describedby={liveErrors.reporterName ? 'sh-f-reporterName-err' : undefined}
+                  onChange={(e) => set('reporterName', e.target.value)}
+                />
+              </Field>
+              <div className="mk-field">
+                <span className="mk-field__label" id="sh-f-jabatan-label">
+                  Jabatan pelapor <span className="mk-field__req">*</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SegmentedControl
+                    label="Jenis jabatan"
+                    value={form.titleKind}
+                    onChange={(v) => set('titleKind', v as ShTitleKind)}
+                    options={[
+                      { value: 'MANAJER', label: 'Manajer' },
+                      { value: 'KEPALA', label: 'Kepala' },
+                    ]}
+                  />
+                  <Input
+                    id="sh-f-titleField"
+                    className={cx('min-w-0 flex-1', TOUCH_TEXT)}
+                    aria-label="Bidang jabatan"
+                    value={form.titleField}
+                    maxLength={80}
+                    placeholder="Bidang, mis. Proyek, Keuangan"
+                    aria-invalid={!!liveErrors.titleField || undefined}
+                    aria-describedby={liveErrors.titleField ? 'sh-f-titleField-err' : 'sh-f-jabatan-hint'}
+                    onChange={(e) => set('titleField', e.target.value)}
+                  />
+                </div>
+                <p className="mk-field__hint" id="sh-f-jabatan-hint">
+                  Tertulis: <strong className="text-ink">{titleLabel(form.titleKind, form.titleField || '…')}</strong>
+                </p>
+                {liveErrors.titleField ? (
+                  <p className="mk-field__error" id="sh-f-titleField-err">
+                    {liveErrors.titleField}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {suggestions.length ? (
+              <div className="flex flex-col gap-2">
+                <span className="t-footnote text-ink-2">Pelapor sebelumnya</span>
+                <div className="mk-chips" role="group" aria-label="Pelapor sebelumnya">
+                  {suggestions.map((s) => {
+                    const on =
+                      form.reporterName.trim() === s.name && form.titleKind === s.titleKind && form.titleField.trim() === s.titleField
+                    return (
+                      <Chip
+                        key={`${s.name}|${s.titleKind}|${s.titleField}`}
+                        selected={on}
+                        onClick={() => {
+                          setForm((f) => ({ ...f, reporterName: s.name, titleKind: s.titleKind, titleField: s.titleField }))
+                          setTouched(true)
+                          setDone(null)
+                        }}
+                      >
+                        {s.name} · {titleLabel(s.titleKind, s.titleField)}
+                      </Chip>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mk-field" id="sh-f-bukti" tabIndex={-1}>
+              <span className="mk-field__label">
+                Bukti laporan <span className="mk-field__req">* minimal 1 · foto, dokumen, atau tautan</span>
+              </span>
+              {editing && editing.evidence?.length ? (
+                <p className="mk-field__hint">
+                  Sudah terlampir {editing.evidenceCount} bukti: {editing.evidence.map((e) => e.fileName).join(', ')}. Tambahkan bila supervisor meminta bukti baru.
+                </p>
+              ) : null}
+              <BuktiPicker
+                items={bukti}
+                disabled={!!busy}
+                error={liveErrors.bukti}
+                status={buktiStatus}
+                onAdd={(add) => {
+                  setBukti((b) => [...b, ...add])
+                  setTouched(true)
+                  setDone(null)
+                }}
+                onUpdate={(k, next) => setBukti((b) => b.map((x) => (x.key === k ? next : x)))}
+                onRemove={(k) => {
+                  setBukti((b) => b.filter((x) => x.key !== k))
+                  setTouched(true)
+                }}
+              />
+            </div>
+
+            {tried && errList.length ? (
+              <div className="mk-note-box bg-bahaya-soft text-ink" role="alert">
+                Lengkapi dulu: {errList.map((k) => FIELD_LABEL[k]).join(', ')}.
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="flex items-center gap-3 t-footnote text-ink">
+                <Switch checked={ingat} onCheckedChange={setIngat} />
+                Ingat nama & jabatan untuk laporan berikutnya
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {!editing ? (
+                  <Button variant="plain" disabled={!!busy} onClick={() => resetForm(false)}>
+                    Kosongkan
+                  </Button>
+                ) : null}
+                <Button variant="primary" icon="kirim" disabled={!!busy || compressing} onClick={() => void onSubmit()}>
+                  {busy ?? (compressing ? 'Mengompres foto…' : editing ? 'Kirim ulang laporan' : 'Kirim laporan')}
+                </Button>
+              </div>
+            </div>
+
+            <div aria-live="polite">
+              {done ? (
+                <div className="mk-note-box bg-sukses-soft text-ink flex items-start gap-2" role="status">
+                  <Icon name="selesai" size={18} className="shrink-0 mt-0.5 text-sukses" />
+                  <span>{done}</span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          {olderFix.length ? (
+            <Card title="Perlu perbaikan dari hari sebelumnya" subtitle="Perbaiki lalu kirim ulang agar bisa ditinjau kembali.">
+              <ReportList
+                items={olderFix}
+                withDate
+                onFix={startEdit}
+                onAttach={setAttach}
+                onWithdraw={(r) => void doWithdraw(r)}
+                editingId={editing?.id}
+              />
+            </Card>
+          ) : null}
+
+          <Card
+            title="Laporan yang sudah masuk hari ini"
+            action={
+              <span className="t-footnote text-ink-2">
+                {shown.length} laporan
+              </span>
+            }
+          >
+            <div className="mk-chips mb-3" role="group" aria-label="Saring status">
+              <Chip selected={filter === 'SEMUA'} count={total} onClick={() => setFilter('SEMUA')}>
+                Semua
+              </Chip>
+              {SH_STATUSES.map((s) => (
+                <Chip key={s} selected={filter === s} status={SH_STATUS_META[s].status} count={counts[s] ?? 0} onClick={() => setFilter(s)}>
+                  {SH_STATUS_META[s].label}
+                </Chip>
               ))}
-            </select>
-          </Field>
-          <Field id="sh-f-deskripsi" label="Deskripsi" error={liveErrors.deskripsi} full>
-            <Textarea
-              id="sh-f-deskripsi"
-              rows={4}
-              maxLength={4000}
-              value={form.deskripsi}
-              placeholder="Apa yang dikerjakan hari ini, hasilnya, kendala bila ada"
-              aria-invalid={!!liveErrors.deskripsi || undefined}
-              aria-describedby={liveErrors.deskripsi ? 'sh-f-deskripsi-err' : undefined}
-              onChange={(e) => set('deskripsi', e.target.value)}
-            />
-          </Field>
-          <Field id="sh-f-reporterName" label="Nama pelapor" error={liveErrors.reporterName}>
-            <Input
-              id="sh-f-reporterName"
-              value={form.reporterName}
-              maxLength={120}
-              autoComplete="name"
-              placeholder="Nama lengkap yang melapor"
-              aria-invalid={!!liveErrors.reporterName || undefined}
-              aria-describedby={liveErrors.reporterName ? 'sh-f-reporterName-err' : undefined}
-              onChange={(e) => set('reporterName', e.target.value)}
-            />
-          </Field>
-          <div className="mk-field">
-            <span className="mk-field__label" id="sh-f-jabatan-label">
-              Jabatan pelapor <span className="mk-field__req">*</span>
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <SegmentedControl
-                label="Jenis jabatan"
-                value={form.titleKind}
-                onChange={(v) => set('titleKind', v as ShTitleKind)}
-                options={[
-                  { value: 'MANAJER', label: 'Manajer' },
-                  { value: 'KEPALA', label: 'Kepala' },
-                ]}
-              />
-              <Input
-                id="sh-f-titleField"
-                className="min-w-0 flex-1"
-                aria-label="Bidang jabatan"
-                value={form.titleField}
-                maxLength={80}
-                placeholder="Bidang, mis. Proyek, Keuangan"
-                aria-invalid={!!liveErrors.titleField || undefined}
-                aria-describedby={liveErrors.titleField ? 'sh-f-titleField-err' : 'sh-f-jabatan-hint'}
-                onChange={(e) => set('titleField', e.target.value)}
-              />
             </div>
-            <p className="mk-field__hint" id="sh-f-jabatan-hint">
-              Tertulis: <strong className="text-ink">{titleLabel(form.titleKind, form.titleField || '…')}</strong>
-            </p>
-            {liveErrors.titleField ? (
-              <p className="mk-field__error" id="sh-f-titleField-err">
-                {liveErrors.titleField}
-              </p>
-            ) : null}
-          </div>
+            {list.error ? (
+              <ErrorNote message={list.error} onRetry={list.reload} />
+            ) : shown.length === 0 ? (
+              <EmptyNote icon="laporan">
+                {filter === 'SEMUA' ? 'Belum ada laporan hari ini. Laporan pertama bisa ditambahkan dari form di atas.' : 'Belum ada laporan dengan status ini.'}
+              </EmptyNote>
+            ) : (
+              <ReportList items={shown} onFix={startEdit} onAttach={setAttach} onWithdraw={(r) => void doWithdraw(r)} editingId={editing?.id} />
+            )}
+          </Card>
         </div>
-
-        {suggestions.length ? (
-          <div className="flex flex-col gap-2">
-            <span className="t-footnote text-ink-2">Pelapor sebelumnya</span>
-            <div className="mk-chips" role="group" aria-label="Pelapor sebelumnya">
-              {suggestions.map((s) => {
-                const on =
-                  form.reporterName.trim() === s.name && form.titleKind === s.titleKind && form.titleField.trim() === s.titleField
-                return (
-                  <Chip
-                    key={`${s.name}|${s.titleKind}|${s.titleField}`}
-                    selected={on}
-                    onClick={() => {
-                      setForm((f) => ({ ...f, reporterName: s.name, titleKind: s.titleKind, titleField: s.titleField }))
-                      setDone(null)
-                    }}
-                  >
-                    {s.name} · {titleLabel(s.titleKind, s.titleField)}
-                  </Chip>
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mk-field" id="sh-f-bukti" tabIndex={-1}>
-          <span className="mk-field__label">
-            Bukti laporan <span className="mk-field__req">* minimal 1 · foto, dokumen, atau tautan</span>
-          </span>
-          {editing && editing.evidence?.length ? (
-            <p className="mk-field__hint">
-              Sudah terlampir {editing.evidenceCount} bukti: {editing.evidence.map((e) => e.fileName).join(', ')}. Tambahkan bila supervisor meminta bukti baru.
-            </p>
-          ) : null}
-          <BuktiPicker
-            items={bukti}
-            disabled={!!busy}
-            error={liveErrors.bukti}
-            onAdd={(add) => {
-              setBukti((b) => [...b, ...add])
-              setDone(null)
-            }}
-            onRemove={(k) => setBukti((b) => b.filter((x) => x.key !== k))}
-          />
-        </div>
-
-        {tried && errList.length ? (
-          <div className="mk-note-box bg-bahaya-soft text-ink" role="alert">
-            Lengkapi dulu: {errList.map((k) => FIELD_LABEL[k]).join(', ')}.
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-3 t-footnote text-ink">
-            <Switch checked={ingat} onCheckedChange={setIngat} />
-            Ingat nama & jabatan untuk laporan berikutnya
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {!editing ? (
-              <Button variant="plain" disabled={!!busy} onClick={() => resetForm(false)}>
-                Kosongkan
-              </Button>
-            ) : null}
-            <Button variant="primary" icon="kirim" disabled={!!busy} onClick={() => void onSubmit()}>
-              {busy ?? (editing ? 'Kirim ulang laporan' : 'Kirim laporan')}
-            </Button>
-          </div>
-        </div>
-
-        <div aria-live="polite">
-          {done ? (
-            <div className="mk-note-box bg-sukses-soft text-ink flex items-start gap-2" role="status">
-              <Icon name="selesai" size={18} className="shrink-0 mt-0.5 text-sukses" />
-              <span>{done}</span>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      {olderFix.length ? (
-        <Card title="Perlu perbaikan dari hari sebelumnya" subtitle="Perbaiki lalu kirim ulang agar bisa ditinjau kembali.">
-          <ReportList
-            items={olderFix}
-            withDate
-            onFix={startEdit}
-            onAttach={setAttach}
-            onWithdraw={(r) => void doWithdraw(r)}
-            editingId={editing?.id}
-          />
-        </Card>
-      ) : null}
-
-      <Card
-        title="Laporan yang sudah masuk hari ini"
-        action={
-          <span className="t-footnote text-ink-2">
-            {shown.length} laporan
-          </span>
-        }
-      >
-        <div className="mk-chips mb-3" role="group" aria-label="Saring status">
-          <Chip selected={filter === 'SEMUA'} count={total} onClick={() => setFilter('SEMUA')}>
-            Semua
-          </Chip>
-          {SH_STATUSES.map((s) => (
-            <Chip key={s} selected={filter === s} status={SH_STATUS_META[s].status} count={counts[s] ?? 0} onClick={() => setFilter(s)}>
-              {SH_STATUS_META[s].label}
-            </Chip>
-          ))}
-        </div>
-        {list.error ? (
-          <ErrorNote message={list.error} onRetry={list.reload} />
-        ) : shown.length === 0 ? (
-          <EmptyNote icon="laporan">
-            {filter === 'SEMUA' ? 'Belum ada laporan hari ini. Laporan pertama bisa ditambahkan dari form di atas.' : 'Belum ada laporan dengan status ini.'}
-          </EmptyNote>
-        ) : (
-          <ReportList items={shown} onFix={startEdit} onAttach={setAttach} onWithdraw={(r) => void doWithdraw(r)} editingId={editing?.id} />
-        )}
-      </Card>
+      </PullToRefresh>
 
       {confirmEl}
 
@@ -653,13 +817,16 @@ function ReportList({
 function RetryPanel({
   retry,
   busy,
+  status,
   onRetry,
   onAttach,
   onClose,
 }: {
   retry: Retry
   busy: boolean
-  onRetry: () => void
+  status: Record<string, BuktiState>
+  /** Tanpa kunci = coba lagi semua yang gagal. */
+  onRetry: (keys?: string[]) => void
   onAttach: () => void
   onClose: () => void
 }) {
@@ -676,23 +843,34 @@ function RetryPanel({
           </h2>
           <p className="t-footnote text-ink-2">
             Laporan “{retry.report.kegiatan}” sudah tersimpan. {retry.failed.length} dari {retry.total} bukti gagal diunggah
-            {ok === 0 ? '; laporan belum punya bukti sehingga supervisor belum bisa menyetujuinya.' : '.'}
+            {ok === 0 ? '; laporan belum punya bukti sehingga supervisor belum bisa menyetujuinya.' : '.'} Coba lagi tidak membuat laporan baru.
           </p>
         </div>
       </div>
-      <ul className="mk-list">
-        {retry.failed.map((f) => (
-          <li key={f.item.key} className="mk-lap-file">
-            <Icon name={f.item.kind === 'link' ? 'alur' : 'dokumen'} size={18} className="text-ink-2 shrink-0" />
-            <span className="mk-lap-file__name">{f.item.name}</span>
-            <span className="t-caption mk-text--late">{f.error}</span>
-          </li>
-        ))}
+      <ul className="mk-list" aria-label="Bukti yang gagal diunggah">
+        {retry.failed.map((f) => {
+          const st = status[f.item.key]
+          const view = buktiStatusView(st && st.status !== 'gagal' ? st : { status: 'gagal', error: st?.error ?? f.error })
+          return (
+            <li key={f.item.key} className="mk-lap-file">
+              <Icon name={f.item.kind === 'link' ? 'alur' : f.item.isImage ? 'lihat' : 'dokumen'} size={18} className="text-ink-2 shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="mk-lap-file__name">{f.item.name}</span>
+                <span className={cx('t-caption', 'mk-text--' + view.tone)}>{view.text}</span>
+              </div>
+              <Button size="sm" icon="unggah" disabled={busy} onClick={() => onRetry([f.item.key])}>
+                Coba lagi
+              </Button>
+            </li>
+          )
+        })}
       </ul>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="primary" icon="unggah" disabled={busy} onClick={onRetry}>
-          {busy ? 'Mengunggah ulang…' : 'Unggah ulang'}
-        </Button>
+        {retry.failed.length > 1 ? (
+          <Button size="sm" variant="primary" icon="unggah" disabled={busy} onClick={() => onRetry()}>
+            {busy ? 'Mengunggah ulang…' : 'Coba lagi semua'}
+          </Button>
+        ) : null}
         <Button size="sm" icon="tambah" disabled={busy} onClick={onAttach}>
           Pilih bukti lain
         </Button>
@@ -711,32 +889,38 @@ function AttachSheet({ report, onClose, onDone }: { report: ShReport | null; onC
   const r = report ?? last
   const [items, setItems] = useState<PendingBukti[]>([])
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<Record<string, { tone: 'late' | 'done' | 'info'; text: string }>>({})
+  const [status, setStatus] = useState<Record<string, BuktiState>>({})
   const [forId, setForId] = useState<string | null>(report?.id ?? null)
   if (report && report.id !== forId) {
     setForId(report.id)
     setItems([])
     setStatus({})
   }
+  const compressing = anyCompressing(items)
 
-  async function upload() {
-    if (!r || !items.length) return
+  /** Unggah semua bukti yang belum terkirim, atau satu kunci ("Coba lagi"). */
+  async function upload(keys?: string[]) {
+    if (!r || busy || compressing) return
+    const queue = items.filter((i) => !keys || keys.includes(i.key))
+    if (!queue.length) return
     setBusy(true)
-    setStatus(Object.fromEntries(items.map((i) => [i.key, { tone: 'info' as const, text: 'Menunggu…' }])))
-    const out = await uploadAll(fetch, r.id, items)
+    const out = await uploadAll(fetch, r.id, queue, {
+      onStatus: (key, st) => setStatus((m) => ({ ...m, [key]: st })),
+    })
     setBusy(false)
     onDone(r.id)
-    if (!out.failed.length) {
-      toast.success(`${out.uploaded.length} bukti terlampir.`)
-      setItems([])
+    const ok = new Set(out.uploaded.map((i) => i.key))
+    const remaining = items.filter((i) => !ok.has(i.key))
+    setItems(remaining)
+    setStatus((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !ok.has(k))))
+    if (!remaining.length) {
+      toast.success(keys ? 'Bukti terlampir.' : `${out.uploaded.length} bukti terlampir.`)
       setStatus({})
       onClose()
       return
     }
-    const failedKeys = new Set(out.failed.map((f) => f.item.key))
-    setItems((list) => list.filter((i) => failedKeys.has(i.key)))
-    setStatus(Object.fromEntries(out.failed.map((f) => [f.item.key, { tone: 'late' as const, text: f.error }])))
-    toast.error(`${out.failed.length} bukti gagal. Periksa lalu coba lagi.`)
+    if (out.failed.length) toast.error(`${out.failed.length} bukti gagal. Periksa lalu coba lagi.`)
+    else if (out.uploaded.length) toast.success(`${out.uploaded.length} bukti terlampir.`)
   }
 
   return (
@@ -748,20 +932,26 @@ function AttachSheet({ report, onClose, onDone }: { report: ShReport | null; onC
       title={r?.kegiatan ?? ''}
       subtitle={r ? `${r.ptName} · ${r.evidenceCount} bukti terlampir` : undefined}
       footer={
-        <Button variant="primary" icon="unggah" full disabled={busy || !items.length} onClick={() => void upload()}>
-          {busy ? 'Mengunggah…' : items.length ? `Unggah ${items.length} bukti` : 'Pilih bukti dulu'}
+        <Button variant="primary" icon="unggah" full disabled={busy || compressing || !items.length} onClick={() => void upload()}>
+          {busy ? 'Mengunggah…' : compressing ? 'Mengompres foto…' : items.length ? `Unggah ${items.length} bukti` : 'Pilih bukti dulu'}
         </Button>
       }
     >
       <div className="flex flex-col gap-4">
-        <p className="t-footnote text-ink-2">Foto, dokumen, atau tautan. Maksimal 20 MB per berkas.</p>
+        <p className="t-footnote text-ink-2">Foto, dokumen, atau tautan. Foto dikecilkan otomatis; maksimal 20 MB per berkas.</p>
         <BuktiPicker
           idPrefix="sh-attach"
           items={items}
           disabled={busy}
+          retryDisabled={compressing}
           status={status}
           onAdd={(add) => setItems((l) => [...l, ...add])}
-          onRemove={(k) => setItems((l) => l.filter((x) => x.key !== k))}
+          onUpdate={(k, next) => setItems((l) => l.map((x) => (x.key === k ? next : x)))}
+          onRemove={(k) => {
+            setItems((l) => l.filter((x) => x.key !== k))
+            setStatus((m) => Object.fromEntries(Object.entries(m).filter(([key]) => key !== k)))
+          }}
+          onRetry={(k) => void upload([k])}
         />
       </div>
     </Sheet>

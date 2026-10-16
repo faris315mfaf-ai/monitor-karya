@@ -60,6 +60,15 @@ export const ALLOWED_MIME = [
 ]
 export const ACCEPT_DOCS = '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,image/*'
 
+/**
+ * Kelas tambahan untuk input/textarea/select: teks 17px (token body-lg) di ponsel
+ * dan layar sentuh, agar Safari iOS tidak memperbesar halaman saat fokus (<16px).
+ * Bertanda penting karena gaya .mk-input tidak berlapis dan menang atas utilitas.
+ */
+export const TOUCH_TEXT = 'max-sm:text-body-lg! pointer-coarse:text-body-lg!'
+/** Sama untuk SearchField (kelasnya terpasang di pembungkus, bukan di input). */
+export const TOUCH_TEXT_SEARCH = 'max-sm:[&_input]:text-body-lg! pointer-coarse:[&_input]:text-body-lg!'
+
 /* ---------- Isian ---------- */
 
 export type ShForm = {
@@ -126,7 +135,16 @@ export function formFromReport(r: ShReport): ShForm {
 /* ---------- Bukti yang dipilih sebelum simpan ---------- */
 
 export type PendingBukti =
-  | { key: string; kind: 'file'; file: File; name: string; size: number; isImage: boolean }
+  | {
+      key: string
+      kind: 'file'
+      file: File
+      name: string
+      size: number
+      isImage: boolean
+      /** true selama foto masih dikompres di peramban (belum boleh diunggah/disimpan ke draf). */
+      compressing?: boolean
+    }
   | { key: string; kind: 'link'; name: string; url: string }
 
 let seq = 0
@@ -148,8 +166,28 @@ export function validateFile(file: { name: string; size: number; type: string })
   return null
 }
 
-export function fileBukti(file: File): PendingBukti {
-  return { key: newKey(), kind: 'file', file, name: file.name, size: file.size, isImage: file.type.startsWith('image/') }
+/** Batas berkas foto ASLI sebelum dikompres; hasil kompres tetap wajib ≤ 20 MB. */
+export const MAX_RAW_PHOTO_BYTES = 60 * 1024 * 1024
+
+/**
+ * Galat saat memilih. Foto yang akan dikompres boleh melebihi 20 MB (hasilnya
+ * diperiksa lagi dengan `validateFile` setelah dikompres), asal ≤ 60 MB.
+ */
+export function validatePick(file: { name: string; size: number; type: string }, willCompress: boolean): string | null {
+  if (!willCompress || file.size <= MAX_BUKTI_BYTES) return validateFile(file)
+  if (file.size > MAX_RAW_PHOTO_BYTES) return `${file.name} melebihi 20 MB.`
+  // Ukuran diperiksa ulang setelah kompres; di sini cukup jenis berkasnya.
+  return validateFile({ name: file.name, type: file.type, size: MAX_BUKTI_BYTES })
+}
+
+/** Bukti berkas; `key` diteruskan saat mengganti berkas asli dengan hasil kompres. */
+export function fileBukti(file: File, key: string = newKey()): Extract<PendingBukti, { kind: 'file' }> {
+  return { key, kind: 'file', file, name: file.name, size: file.size, isImage: file.type.startsWith('image/') }
+}
+
+/** Ada foto yang masih dikompres → tombol kirim/unggah menunggu. */
+export function anyCompressing(items: PendingBukti[]): boolean {
+  return items.some((b) => b.kind === 'file' && !!b.compressing)
 }
 
 /** Galat tautan; null bila boleh. */
@@ -220,22 +258,118 @@ export async function uploadOne(fetchImpl: FetchLike, reportId: string, item: Pe
 
 export type UploadOutcome = { uploaded: PendingBukti[]; failed: { item: PendingBukti; error: string }[] }
 
-/** Unggah berurutan (satu per satu) agar ponsel tidak tersendat; galat tidak menghentikan sisanya. */
+/* ---------- Antrean unggah (konkurensi terbatas) ---------- */
+
+/** Unggahan berjalan paling banyak 2 sekaligus: cukup cepat tanpa membuat ponsel tersendat. */
+export const UPLOAD_CONCURRENCY = 2
+
+export type PoolResult<R> = { ok: true; value: R } | { ok: false; error: unknown }
+export type PoolEvent<R> =
+  | { index: number; phase: 'mulai' }
+  | { index: number; phase: 'selesai'; value: R }
+  | { index: number; phase: 'gagal'; error: unknown }
+
+/**
+ * Jalankan `worker` untuk tiap item dengan paling banyak `limit` sekaligus.
+ * Item dimulai sesuai urutan masukan; galat satu item tidak menghentikan yang
+ * lain. Hasil dikembalikan sesuai urutan masukan (bukan urutan selesai).
+ */
+export async function runPool<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R> | R,
+  onStatus?: (event: PoolEvent<R>) => void
+): Promise<PoolResult<R>[]> {
+  const n = items.length
+  const results: PoolResult<R>[] = new Array(n)
+  const lanes = Math.min(n, Math.max(1, Math.floor(limit) || 1))
+  const emit = (e: PoolEvent<R>) => {
+    try {
+      onStatus?.(e)
+    } catch {}
+  }
+  let next = 0
+  async function lane() {
+    while (next < n) {
+      const index = next
+      next += 1
+      emit({ index, phase: 'mulai' })
+      try {
+        const value = await worker(items[index], index)
+        results[index] = { ok: true, value }
+        emit({ index, phase: 'selesai', value })
+      } catch (error) {
+        results[index] = { ok: false, error }
+        emit({ index, phase: 'gagal', error })
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: lanes }, () => lane()))
+  return results
+}
+
+/** Status per bukti di layar. */
+export type BuktiStatus = 'menunggu' | 'mengompres' | 'mengunggah' | 'terkirim' | 'gagal'
+export type BuktiState = { status: BuktiStatus; error?: string }
+
+export const BUKTI_STATUS_TEXT: Record<BuktiStatus, string> = {
+  menunggu: 'Menunggu…',
+  mengompres: 'Mengompres…',
+  mengunggah: 'Mengunggah…',
+  terkirim: 'Terkirim',
+  gagal: 'Gagal',
+}
+
+/** Teks & nada (kelas mk-text--…) untuk satu status bukti. */
+export function buktiStatusView(s: BuktiState): { tone: 'info' | 'done' | 'late' | 'neutral'; text: string } {
+  if (s.status === 'gagal') return { tone: 'late', text: s.error ? `Gagal: ${s.error}` : BUKTI_STATUS_TEXT.gagal }
+  if (s.status === 'terkirim') return { tone: 'done', text: BUKTI_STATUS_TEXT.terkirim }
+  if (s.status === 'menunggu') return { tone: 'neutral', text: BUKTI_STATUS_TEXT.menunggu }
+  return { tone: 'info', text: BUKTI_STATUS_TEXT[s.status] }
+}
+
+const UPLOAD_FAILED = 'Bukti gagal diunggah. Coba lagi.'
+
+export type UploadOptions = {
+  onProgress?: (done: number, total: number) => void
+  onStatus?: (key: string, state: BuktiState) => void
+  limit?: number
+}
+
+/**
+ * Unggah bukti ke satu laporan, paling banyak 2 sekaligus. Galat satu bukti
+ * tidak menghentikan sisanya. Idempotency-Key per bukti (`up-${key}`) tetap
+ * sama saat dicoba ulang, jadi ulangan tidak membuat bukti ganda.
+ * `uploaded`/`failed` mengikuti urutan masukan.
+ */
 export async function uploadAll(
   fetchImpl: FetchLike,
   reportId: string,
   items: PendingBukti[],
-  onProgress?: (done: number, total: number) => void
+  opts: UploadOptions = {}
 ): Promise<UploadOutcome> {
-  const out: UploadOutcome = { uploaded: [], failed: [] }
+  const { onProgress, onStatus } = opts
+  for (const item of items) onStatus?.(item.key, { status: 'menunggu' })
   let done = 0
-  for (const item of items) {
-    const err = await uploadOne(fetchImpl, reportId, item)
-    if (err) out.failed.push({ item, error: err })
-    else out.uploaded.push(item)
+  const results = await runPool(items, opts.limit ?? UPLOAD_CONCURRENCY, async (item) => {
+    onStatus?.(item.key, { status: 'mengunggah' })
+    let err: string | null
+    try {
+      err = await uploadOne(fetchImpl, reportId, item)
+    } catch {
+      err = UPLOAD_FAILED
+    }
+    onStatus?.(item.key, err ? { status: 'gagal', error: err } : { status: 'terkirim' })
     done += 1
     onProgress?.(done, items.length)
-  }
+    return err
+  })
+  const out: UploadOutcome = { uploaded: [], failed: [] }
+  results.forEach((r, i) => {
+    const err = r.ok ? r.value : UPLOAD_FAILED
+    if (err) out.failed.push({ item: items[i], error: err })
+    else out.uploaded.push(items[i])
+  })
   return out
 }
 
@@ -255,6 +389,7 @@ export async function submitReport(opts: {
   editId?: string | null
   idempotencyKey?: string
   onProgress?: (done: number, total: number) => void
+  onStatus?: (key: string, state: BuktiState) => void
 }): Promise<SubmitResult> {
   const body = formPayload(opts.form)
   const saved = opts.editId
@@ -267,7 +402,7 @@ export async function submitReport(opts: {
   if (!saved.ok) return { ok: false, error: saved.error }
   const report = saved.data.report
   if (!report?.id) return { ok: false, error: 'Balasan server tidak memuat laporan. Muat ulang lalu periksa daftar.' }
-  const up = await uploadAll(opts.fetchImpl, report.id, opts.bukti, opts.onProgress)
+  const up = await uploadAll(opts.fetchImpl, report.id, opts.bukti, { onProgress: opts.onProgress, onStatus: opts.onStatus })
   return { ok: true, report, ...up }
 }
 
