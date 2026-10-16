@@ -3,6 +3,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import type { SessionUser } from '@/lib/auth'
+import { can } from '@/lib/rbac'
 import { wibDateKey } from '@/lib/lock'
 import { safeEvidenceUrl } from '@/lib/security'
 import {
@@ -55,6 +56,14 @@ export type ShReport = {
   comments: ShComment[]
   canEdit: boolean
   canWithdraw: boolean
+  /**
+   * Sorotan supervisor untuk manajemen (0035). HANYA dikirim ke akun pemegang
+   * `shreport:review` (Supervisor, Super Admin); Admin subholding tidak
+   * menerima kolom ini sama sekali.
+   */
+  highlight?: boolean
+  highlightNote?: string | null
+  highlightedAt?: string | null
 }
 
 /** Kolom yang dibaca dari SubholdingReport untuk membangun ShReport. */
@@ -73,6 +82,9 @@ export const SH_REPORT_SELECT = {
   submittedAt: true,
   decidedById: true,
   decidedAt: true,
+  highlight: true,
+  highlightNote: true,
+  highlightedAt: true,
 } as const
 
 export type ShReportRow = {
@@ -90,6 +102,9 @@ export type ShReportRow = {
   submittedAt: Date
   decidedById: string | null
   decidedAt: Date | null
+  highlight?: boolean
+  highlightNote?: string | null
+  highlightedAt?: Date | null
 }
 
 const iso = (d: Date | string | null | undefined): string | null =>
@@ -119,13 +134,22 @@ export async function evidenceByReport(ids: string[], client: Client = db): Prom
   return out
 }
 
-/** Membangun ShReport[] (urutan masukan dipertahankan). */
+/** Akun ini boleh melihat sorotan + catatannya di bentuk ShReport? */
+export function seesHighlight(viewer: Pick<SessionUser, 'role'>): boolean {
+  return can(viewer.role, 'shreport:review')
+}
+
+/**
+ * Membangun ShReport[] (urutan masukan dipertahankan). Kolom sorotan hanya
+ * disertakan untuk pemegang `shreport:review` (lihat `seesHighlight`).
+ */
 export async function hydrateShReports(
   rows: ShReportRow[],
   viewer: SessionUser,
   client: Client = db
 ): Promise<ShReport[]> {
   if (!rows.length) return []
+  const withHighlight = seesHighlight(viewer)
   const ids = rows.map((r) => r.id)
   const entityIds = Array.from(new Set(rows.flatMap((r) => [r.subholdingId, r.ptId])))
 
@@ -190,6 +214,9 @@ export async function hydrateShReports(
       evidence: ev,
       comments: commentsByReport.get(r.id) ?? [],
       ...editRights(viewer, r),
+      ...(withHighlight
+        ? { highlight: !!r.highlight, highlightNote: r.highlightNote ?? null, highlightedAt: iso(r.highlightedAt) }
+        : {}),
     }
   })
 }

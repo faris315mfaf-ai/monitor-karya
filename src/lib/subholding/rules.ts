@@ -45,6 +45,9 @@ export const SH_LIMITS = {
   note: 2000,
   /** Catatan "minta perbaikan" minimal sekian huruf. */
   reviseNoteMinLetters: 5,
+  /** Catatan sorotan untuk manajemen: minimal sekian huruf, maksimal sekian karakter. */
+  highlightNoteMinLetters: 5,
+  highlightNote: 280,
   /** Ukuran halaman bawaan dan maksimum daftar laporan. */
   pageSize: 50,
   maxPageSize: 200,
@@ -169,8 +172,21 @@ export function parseShReportInput(body: unknown): Parsed<ShReportInput> {
   }
 }
 
-export type ShDecisionInput = { action: 'approve' | 'revise'; note: string }
+export type ShDecisionInput = {
+  action: 'approve' | 'revise'
+  note: string
+  /** Sorotan untuk manajemen — hanya berlaku saat approve (revise selalu false). */
+  highlight: boolean
+  /** Catatan sorotan (5–280) bila `highlight`, selain itu null. */
+  highlightNote: string | null
+}
 
+/**
+ * Keputusan supervisor. `highlight?: boolean`, `highlightNote?: string`
+ * (KONTRAK-MANAJEMEN-MOBILE.md D1): saat approve dengan highlight true,
+ * catatan wajib ≥5 huruf dan ≤280 karakter (422 bila tidak). revise
+ * mengabaikan keduanya.
+ */
 export function parseShDecision(body: unknown): Parsed<ShDecisionInput> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, error: 'Permintaan tidak valid' }
@@ -184,14 +200,36 @@ export function parseShDecision(body: unknown): Parsed<ShDecisionInput> {
   if (note.length > SH_LIMITS.note) {
     return { ok: false, error: `Catatan maksimal ${SH_LIMITS.note.toLocaleString('id-ID')} karakter`, field: 'note' }
   }
-  if (action === 'revise' && letterCount(note) < SH_LIMITS.reviseNoteMinLetters) {
+  if (action === 'revise') {
+    if (letterCount(note) < SH_LIMITS.reviseNoteMinLetters) {
+      return {
+        ok: false,
+        error: `Tulis catatan perbaikan minimal ${SH_LIMITS.reviseNoteMinLetters} huruf`,
+        field: 'note',
+      }
+    }
+    return { ok: true, data: { action, note, highlight: false, highlightNote: null } }
+  }
+  if (b.highlight !== undefined && b.highlight !== null && typeof b.highlight !== 'boolean') {
+    return { ok: false, error: 'Sorotan harus bernilai benar atau salah', field: 'highlight' }
+  }
+  if (b.highlight !== true) return { ok: true, data: { action, note, highlight: false, highlightNote: null } }
+  const highlightNote = cleanShText(b.highlightNote)
+  if (letterCount(highlightNote) < SH_LIMITS.highlightNoteMinLetters) {
     return {
       ok: false,
-      error: `Tulis catatan perbaikan minimal ${SH_LIMITS.reviseNoteMinLetters} huruf`,
-      field: 'note',
+      error: `Tulis catatan untuk manajemen minimal ${SH_LIMITS.highlightNoteMinLetters} huruf`,
+      field: 'highlightNote',
     }
   }
-  return { ok: true, data: { action, note } }
+  if (highlightNote.length > SH_LIMITS.highlightNote) {
+    return {
+      ok: false,
+      error: `Catatan untuk manajemen maksimal ${SH_LIMITS.highlightNote} karakter`,
+      field: 'highlightNote',
+    }
+  }
+  return { ok: true, data: { action, note, highlight: true, highlightNote } }
 }
 
 export function parseShComment(body: unknown): Parsed<{ body: string }> {

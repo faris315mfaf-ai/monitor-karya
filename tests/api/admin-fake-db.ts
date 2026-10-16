@@ -89,7 +89,7 @@ const DEFAULTS: Record<string, Row> = {
   approvalRequest: { status: 'DIAJUKAN', decidedById: null, decidedAt: null, decisionNote: null, appliedData: null, amount: null, divisionId: null, projectId: null, startDate: null, endDate: null },
   weeklyReportComment: { readAt: null },
   reminderRule: { enabled: true, time: null, weekday: null, params: null, lastRunAt: null, updatedById: null },
-  subholdingReport: { status: 'MENUNGGU', decidedById: null, decidedAt: null },
+  subholdingReport: { status: 'MENUNGGU', decidedById: null, decidedAt: null, highlight: false, highlightNote: null, highlightedAt: null },
   subholdingReportComment: { kind: 'KOMENTAR', readAt: null },
 }
 

@@ -620,13 +620,20 @@ describe('GET /api/sh/overview', () => {
                   reporterName: 'Budi Santoso',
                   reporterTitle: 'Manajer Proyek',
                   decidedAt: '2026-10-14T03:24:00.000Z',
+                  highlight: false,
+                  highlightNote: null,
                   evidence: [{ id: expect.any(String), fileName: 'foto.jpg', mime: 'image/jpeg', kind: 'file' }],
                 },
               ],
             },
           ],
+          // Semua PT aktif (urut nama, termasuk lewat sektor; nonaktif tidak).
+          allPts: [
+            { id: 'pt-a2', name: 'PT Alfa Dua' },
+            { id: 'pt-a1', name: 'PT Alfa Satu' },
+          ],
         },
-        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [] },
+        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [], allPts: [{ id: 'pt-b1', name: 'PT Beta Satu' }] },
       ])
     }
     signIn('u-superuser')

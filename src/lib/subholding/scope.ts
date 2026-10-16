@@ -85,6 +85,24 @@ export async function ptInSubholding(
   return { id: pt.id, code: pt.code, name: pt.name }
 }
 
+/** Semua PT aktif (urut nama) beserta path-nya — dipetakan ke subholding dengan `ptsUnder`. */
+export async function activePts(client: Client = db): Promise<(ShPt & { path: string | null })[]> {
+  return client.entity.findMany({
+    where: { type: 'PT', isActive: true },
+    select: { id: true, code: true, name: true, path: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/** PT dari `pts` yang berada di bawah path subholding (aturan sama dengan `ptsOfSubholding`). */
+export function ptsUnder<T extends { id: string; path: string | null }>(
+  sub: Pick<ShSubholding, 'id' | 'path'>,
+  pts: T[]
+): T[] {
+  if (!sub.path) return []
+  return pts.filter((p) => p.id !== sub.id && !!p.path && p.path.startsWith(sub.path))
+}
+
 /** Semua subholding aktif (urut nama) beserta path-nya. */
 export async function activeSubholdings(client: Client = db): Promise<ShSubholding[]> {
   return client.entity.findMany({

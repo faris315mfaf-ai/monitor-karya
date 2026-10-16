@@ -4,7 +4,7 @@ import { serverError } from '@/lib/api-error'
 import { startOfWibDay, wibDateKey } from '@/lib/lock'
 import { dateParam, requireShUser, unprocessable } from '@/lib/subholding/http'
 import { reporterTitle, SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
-import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
+import { activePts, activeSubholdings, ptsUnder, refuseWithoutCap } from '@/lib/subholding/scope'
 
 /**
  * GET /api/sh/overview?date=YYYY-MM-DD (`shreport:view-approved`: Superuser,
@@ -15,8 +15,12 @@ import { activeSubholdings, refuseWithoutCap } from '@/lib/subholding/scope'
  * tanggal itu ("3 laporan · 2 PT" di kartu); `pts` = PT tersebut.
  * → { date, subholdings: [{ id, name, count, ptCount,
  *       pts: [{ id, name, reports: [{ id, kegiatan, deskripsi,
- *         reporterName, reporterTitle, decidedAt,
- *         evidence: [{ id, fileName, mime, kind: 'file' | 'link' }] }] }] }] }
+ *         reporterName, reporterTitle, decidedAt, highlight, highlightNote,
+ *         evidence: [{ id, fileName, mime, kind: 'file' | 'link' }] }] }],
+ *       allPts: [{ id, name }] }] }
+ * `highlight`/`highlightNote` = sorotan supervisor (0035; catatan null bila
+ * tidak disorot). `allPts` = SEMUA PT aktif di bawah path subholding (urut
+ * nama), termasuk yang belum melapor — untuk penyaring dan "Belum melapor".
  * `reporterTitle` = label jadi ("Manajer Proyek", helper yang sama dengan
  * ShReport); `decidedAt` = ISO string atau null.
  * Urutan (kontrak Opsi A, 15 Okt 2026): subholding menurut nama, PT menurut
@@ -35,8 +39,9 @@ export async function GET(req: NextRequest) {
   if (date === 'invalid' || !date) return unprocessable('Tanggal harus berformat YYYY-MM-DD')
 
   try {
-    const [subs, reports] = await Promise.all([
+    const [subs, allPtRows, reports] = await Promise.all([
       activeSubholdings(),
+      activePts(),
       db.subholdingReport.findMany({
         where: { status: 'DISETUJUI', reportDate: date },
         select: {
@@ -49,6 +54,8 @@ export async function GET(req: NextRequest) {
           reporterTitleKind: true,
           reporterTitleField: true,
           decidedAt: true,
+          highlight: true,
+          highlightNote: true,
         },
         orderBy: [{ decidedAt: 'asc' }, { submittedAt: 'asc' }],
       }),
@@ -90,6 +97,8 @@ export async function GET(req: NextRequest) {
             reporterName: r.reporterName,
             reporterTitle: reporterTitle(r.reporterTitleKind, r.reporterTitleField),
             decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+            highlight: !!r.highlight,
+            highlightNote: r.highlight ? (r.highlightNote ?? null) : null,
             evidence: evidenceBy.get(r.id) ?? [],
           })),
         }))
@@ -100,6 +109,9 @@ export async function GET(req: NextRequest) {
         count: mine.length,
         ptCount: byPt.size,
         pts: ptList,
+        allPts: ptsUnder(s, allPtRows)
+          .map((p) => ({ id: p.id, name: p.name }))
+          .sort(byName),
       }
     })
     return NextResponse.json({ date: wibDateKey(date), subholdings })

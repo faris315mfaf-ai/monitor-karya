@@ -22,10 +22,15 @@ const NO_EVIDENCE = 'Laporan belum memiliki bukti. Persetujuan membutuhkan minim
 
 /**
  * POST /api/sh/reports/:id/decision (`shreport:review`: Supervisor, Super Admin)
- * { action: 'approve' | 'revise', note? }
+ * { action: 'approve' | 'revise', note?, highlight?: boolean, highlightNote?: string }
  *  - revise: note wajib ≥5 huruf → status PERLU_PERBAIKAN + komentar PERBAIKAN.
+ *    `highlight`/`highlightNote` diabaikan.
  *  - approve: note opsional (komentar SETUJU); wajib ≥1 bukti (409 bila tidak)
- *    → status DISETUJUI (terkunci).
+ *    → status DISETUJUI (terkunci). `highlight: true` → `highlightNote` wajib
+ *    ≥5 huruf dan ≤280 karakter (422 bila tidak); sorotan + catatan +
+ *    `highlightedAt` disimpan di UPDATE klaim yang sama (satu transaksi) dan
+ *    dicatat di AuditLog. Catatan sorotan TIDAK dikirim ke Admin subholding
+ *    (notifikasi hanya memuat `note`).
  * Klaim bersyarat `status = MENUNGGU` di dalam transaksi: dua klik / dua
  * supervisor bersamaan → satu berhasil, yang lain 409. Bukti dihitung SETELAH
  * baris laporan terkunci oleh UPDATE, dan hapus bukti mengunci baris yang sama
@@ -43,7 +48,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (body instanceof NextResponse) return body
   const parsed = parseShDecision(body)
   if (!parsed.ok) return unprocessable(parsed.error, parsed.field)
-  const { action, note } = parsed.data
+  const { action, note, highlight, highlightNote } = parsed.data
 
   const current = await visibleShReport(user, id)
   if (!current) return notFound()
@@ -55,7 +60,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       const now = new Date()
       const claim = await tx.subholdingReport.updateMany({
         where: { id, status: 'MENUNGGU' },
-        data: { status, decidedById: user.id, decidedAt: now },
+        data: {
+          status,
+          decidedById: user.id,
+          decidedAt: now,
+          ...(highlight ? { highlight: true, highlightNote, highlightedAt: now } : {}),
+        },
       })
       // Kalah balapan: belum ada yang ditulis, cukup kembalikan null (→ 409).
       if (claim.count === 0) return null
@@ -70,7 +80,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       }
       await auditSh(tx, req, user, action === 'approve' ? 'APPROVE_SH_REPORT' : 'REVISE_SH_REPORT', id, {
         before: { status: current.status },
-        after: { status, note: note || null },
+        after: {
+          status,
+          note: note || null,
+          ...(action === 'approve' ? { highlight, highlightNote } : {}),
+        },
       })
       return tx.subholdingReport.findUniqueOrThrow({ where: { id }, select: SH_REPORT_SELECT })
     }, { isolationLevel: 'ReadCommitted' })

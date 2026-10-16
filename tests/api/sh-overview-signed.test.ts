@@ -277,7 +277,7 @@ describe('GET /api/sh/overview — kind dan urutan', () => {
       { id: file, fileName: 'foto.jpg', mime: 'image/jpeg', kind: 'file' },
       { id: link, fileName: 'Tautan', mime: 'text/uri-list', kind: 'link' },
     ])
-    expect(body.subholdings[1]).toEqual({ id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [] })
+    expect(body.subholdings[1]).toEqual({ id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [], allPts: [] })
     expect(body.subholdings[2].pts[0].reports[0].evidence[0].kind).toBe('file')
   })
 

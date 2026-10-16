@@ -17,7 +17,10 @@ const MAX_ITEMS = 200
  * → { items: ShReport[], counts: { MENUNGGU, PERLU_PERBAIKAN, DISETUJUI },
  *     subholdings: [{ id, name, waiting }] }
  * `counts` memakai saringan subholding + tanggal yang sama; `waiting` per
- * subholding memakai saringan tanggal yang sama.
+ * subholding memakai saringan tanggal yang sama. Tiap item membawa
+ * `highlight`, `highlightNote`, `highlightedAt` (sorotan untuk manajemen,
+ * 0035) — kolom ini hanya untuk pemegang `shreport:review`, lihat
+ * `seesHighlight` di src/lib/subholding/report.ts.
  */
 export async function GET(req: NextRequest) {
   const user = await requireShUser()
