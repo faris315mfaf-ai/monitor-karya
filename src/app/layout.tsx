@@ -24,12 +24,10 @@ export const metadata: Metadata = {
   authors: [{ name: "Monitor Karya" }],
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
-      { url: "/logo.svg", type: "image/svg+xml" },
-    ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "512x512", type: "image/png" }],
+    // Ikon tab: logo PT. BIKE Tbk berlatar transparan (scripts/buat-ikon-merek.mjs).
+    // Ikon PWA (latar putih, maskable) ada di manifest.webmanifest.
+    icon: [{ url: "/favicon.png", sizes: "256x256", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

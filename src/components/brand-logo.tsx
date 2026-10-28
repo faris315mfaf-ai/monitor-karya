@@ -7,6 +7,46 @@ import { cn } from '@/lib/utils'
  * monogram dari nama bila belum ada. Dipakai splash, kerangka aplikasi,
  * halaman masuk, dan Pengaturan supaya rupanya sama di mana pun.
  */
+/**
+ * Logo PT. BIKE Tbk (28 Okt 2026) — dipakai untuk holding selama Super Admin
+ * belum mengunggah logo sendiri. Berkas dibangkitkan scripts/buat-ikon-merek.mjs.
+ */
+export const LOGO_HOLDING = '/brand/pt-bike-logo.png'
+
+/** Rasio sisi logo bawaan (472 × 273 px setelah dipangkas). */
+const RASIO_LOGO_HOLDING = 472 / 273
+
+/**
+ * Logo holding di halaman masuk dan layar pembuka. Logo unggahan Super Admin
+ * tetap di kotak [BrandLogo]; logo bawaan PT. BIKE Tbk berbentuk melebar
+ * (sayap) sehingga tampil utuh tanpa kotak, setinggi [height] piksel.
+ */
+export function HoldingLogo({
+  name,
+  logoData,
+  height,
+  className,
+}: {
+  name: string
+  logoData?: string | null
+  height: number
+  className?: string
+}) {
+  if (logoData) return <BrandLogo name={name} logoData={logoData} size={height} tone="slate" className={className} />
+  const width = Math.round(height * RASIO_LOGO_HOLDING)
+  return (
+    <img
+      src={LOGO_HOLDING}
+      alt={`Logo ${name}`}
+      width={width}
+      height={height}
+      style={{ width, height }}
+      className={cn('shrink-0 object-contain select-none', className)}
+      draggable={false}
+    />
+  )
+}
+
 export function initialsOf(name: string): string {
   // "PT. BIKE Tbk" -> BT, "PT Ratu Karya" -> RK, "PT Sigma" -> SI.
   const words = name.replace(/^(PT\.?|Holding|Bpk\.|Ibu)\s+/i, '').split(' ').filter(Boolean)

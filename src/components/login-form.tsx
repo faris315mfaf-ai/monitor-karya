@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { BrandLogo } from '@/components/brand-logo'
-import { Button, Icon, LogoMark } from '@/components/mk'
+import { HoldingLogo } from '@/components/brand-logo'
+import { Button, Icon } from '@/components/mk'
 import { Input } from '@/components/mk/forms'
 import { Label } from '@/components/mk/forms'
 
@@ -58,11 +58,8 @@ export function LoginForm({
     <main className="mk-login">
       <div className="mk-login__inner animate-fade-in">
         <div className="mk-login__brand">
-          {holding ? (
-            <BrandLogo name={holding.name} logoData={holding.logoData} size={72} tone="slate" />
-          ) : (
-            <LogoMark size={64} label="Monitor Karya" />
-          )}
+          {/* Holding belum terbaca (mis. basis data sedang tidak terjangkau): tetap logo PT. BIKE Tbk. */}
+          <HoldingLogo name={holding?.name ?? 'PT. BIKE Tbk'} logoData={holding?.logoData} height={holding?.logoData ? 72 : 96} />
           <h1 className="t-title-1 mt-5">{holding ? holding.name : 'Monitor Karya'}</h1>
           <p className="t-body-lg text-ink-2 mt-1">
             {holding ? 'Monitor Karya · pemantauan kerja berbasis output' : 'Pemantauan kerja berbasis output'}

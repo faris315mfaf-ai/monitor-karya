@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { useApp } from '@/components/app-provider'
-import { BrandLogo } from '@/components/brand-logo'
-import { Avatar, LogoMark } from '@/components/mk'
+import { BrandLogo, HoldingLogo } from '@/components/brand-logo'
+import { Avatar } from '@/components/mk'
 import { ROLE_LABELS } from '@/lib/constants'
 import { initials } from '@/lib/format'
 
@@ -66,11 +66,11 @@ export function SplashScreen() {
               transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
               className="flex flex-col items-center text-center px-6"
             >
-              {initiator ? (
-                <BrandLogo name={initiator.name} logoData={initiator.logoData} size={104} tone="slate" />
-              ) : (
-                <LogoMark size={96} label="Monitor Karya" />
-              )}
+              <HoldingLogo
+                name={initiator?.name ?? 'PT. BIKE Tbk'}
+                logoData={initiator?.logoData}
+                height={initiator?.logoData ? 104 : 128}
+              />
               <h1 className="t-title-1 mt-6">{initiator?.name ?? 'Monitor Karya'}</h1>
               <p className="t-body text-ink-2 mt-1">Pemantauan kerja berbasis output</p>
 
@@ -80,7 +80,13 @@ export function SplashScreen() {
                 transition={{ delay: 0.35, duration: 0.3 }}
                 className="mk-card mt-8 flex items-center gap-3 text-left !py-3 !px-4"
               >
-                {company ? <BrandLogo name={company.name} logoData={company.logoData} size={40} /> : <Avatar initials={initials(user.name)} size={40} />}
+                {company?.type === 'HOLDING' && !company.logoData ? (
+                  <HoldingLogo name={company.name} height={28} />
+                ) : company ? (
+                  <BrandLogo name={company.name} logoData={company.logoData} size={40} />
+                ) : (
+                  <Avatar initials={initials(user.name)} size={40} />
+                )}
                 <div className="min-w-0">
                   <div className="t-caption text-ink-2">Masuk sebagai</div>
                   <div className="t-body-strong truncate">{user.name}</div>
