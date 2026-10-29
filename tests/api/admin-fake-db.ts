@@ -90,7 +90,7 @@ const DEFAULTS: Record<string, Row> = {
   weeklyReportComment: { readAt: null },
   reminderRule: { enabled: true, time: null, weekday: null, params: null, lastRunAt: null, updatedById: null },
   subholdingReport: { status: 'MENUNGGU', decidedById: null, decidedAt: null, highlight: false, highlightNote: null, highlightedAt: null },
-  subholdingReportComment: { kind: 'KOMENTAR', readAt: null },
+  subholdingReportComment: { kind: 'KOMENTAR', readAt: null, editedAt: null },
   evidence: { thumbKey: null },
 }
 

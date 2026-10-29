@@ -38,6 +38,8 @@ data class ShCommentDto(
     val authorName: String = "",
     val authorRole: String = "",
     val createdAt: String = "",
+    /** Waktu suntingan terakhir penulis; null bila belum pernah disunting. */
+    val editedAt: String? = null,
     val mine: Boolean = false,
 )
 

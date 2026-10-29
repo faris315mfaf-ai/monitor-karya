@@ -31,6 +31,8 @@ export type ShComment = {
   authorName: string
   authorRole: string
   createdAt: string
+  /** Waktu suntingan terakhir oleh penulis; null bila belum pernah. */
+  editedAt: string | null
   mine: boolean
 }
 
@@ -157,7 +159,7 @@ export async function hydrateShReports(
     client.entity.findMany({ where: { id: { in: entityIds } }, select: { id: true, name: true } }),
     client.subholdingReportComment.findMany({
       where: { reportId: { in: ids } },
-      select: { id: true, reportId: true, authorId: true, kind: true, body: true, createdAt: true },
+      select: { id: true, reportId: true, authorId: true, kind: true, body: true, createdAt: true, editedAt: true },
       orderBy: { createdAt: 'asc' },
     }),
     evidenceByReport(ids, client),
@@ -186,6 +188,7 @@ export async function hydrateShReports(
       authorName: author?.name ?? 'Akun dihapus',
       authorRole: author?.role ?? '',
       createdAt: iso(c.createdAt)!,
+      editedAt: iso(c.editedAt),
       mine: c.authorId === viewer.id,
     })
     commentsByReport.set(c.reportId, list)

@@ -1255,6 +1255,8 @@ model SubholdingReportComment {
   body       String
   /// Kapan pihak lawan (admin untuk pesan supervisor, supervisor untuk balasan admin) membacanya.
   readAt     DateTime?
+  /// Kapan penulis terakhir mengubah isi komentar; null = belum pernah disunting.
+  editedAt   DateTime?
   createdAt  DateTime @default(now())
 
   @@index([reportId, createdAt])

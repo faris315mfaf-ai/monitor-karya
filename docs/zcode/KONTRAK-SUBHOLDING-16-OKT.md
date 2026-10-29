@@ -61,7 +61,7 @@ Label peran Indonesia: Admin subholding, Supervisor, Superuser, Manajemen.
   kegiatan, deskripsi, reporterName, reporterTitleKind, reporterTitleField,
   reporterTitle: 'Manajer Proyek', status, submittedAt, decidedAt, decidedByName,
   evidenceCount, evidence: [{ id, fileName, mime, size, url }],
-  comments: [{ id, kind, body, authorName, authorRole, createdAt, mine }],
+  comments: [{ id, kind, body, authorName, authorRole, createdAt, editedAt, mine }],
   canEdit, canWithdraw }
 ```
 - `GET /api/sh/options` (ADMIN_SUBHOLDING) → `{ subholding: { id, name }, pts: [{ id, code, name }], reporters: [{ name, titleKind, titleField }] }` (pelapor terakhir, unik, ≤8).
@@ -70,6 +70,7 @@ Label peran Indonesia: Admin subholding, Supervisor, Superuser, Manajemen.
 - `PATCH /api/sh/reports/:id` (ADMIN_SUBHOLDING) isian 1–5 → MENUNGGU/PERLU_PERBAIKAN saja; PERLU_PERBAIKAN → MENUNGGU.
 - `DELETE /api/sh/reports/:id` (ADMIN_SUBHOLDING) hanya MENUNGGU → hapus + bukti (berkas storage setelah commit).
 - `POST /api/sh/reports/:id/comments` `{ body }` — admin (BALASAN) atau supervisor (KOMENTAR).
+- `PATCH /api/sh/reports/:id/comments/:commentId` `{ body }` — hanya penulis (semua jenis, status apa pun; selain penulis 403) → `{ comment, report }`; isi `editedAt`, `readAt` dikosongkan (muncul lagi belum dibaca), audit `EDIT_SH_COMMENT` (29 Okt).
 - `POST /api/sh/reports/:id/decision` (SUPERVISOR) `{ action: 'approve'|'revise', note? }` — revise wajib note ≥5 huruf (jadi komentar PERBAIKAN); approve: note opsional (komentar SETUJU), wajib ≥1 bukti; klaim bersyarat status MENUNGGU (selain itu 409).
 - `GET /api/sh/inbox` (ADMIN_SUBHOLDING) → `{ items: [{ id, kind, body, createdAt, unread, authorName, report: { id, kegiatan, ptName, status, reporterName, reporterTitle, submittedAt, evidenceCount } }], reminders: [{ id, text, createdAt }], unreadCount }`; `POST /api/sh/inbox/read` `{ ids?: string[], all?: true }`. Pengingat: PT di subholding tanpa laporan pada hari kerja sebelumnya.
 - `GET /api/sh/review?status=MENUNGGU|PERLU_PERBAIKAN|DISETUJUI&subholdingId&date` (SUPERVISOR/SUPERADMIN) → `{ items: ShReport[], counts, subholdings: [{ id, name, waiting }] }`.

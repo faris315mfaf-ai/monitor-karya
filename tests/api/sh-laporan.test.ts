@@ -38,6 +38,7 @@ import { GET as optionsGet } from '@/app/api/sh/options/route'
 import { GET as reportsGet, POST as reportsPost } from '@/app/api/sh/reports/route'
 import { DELETE as reportDelete, GET as reportGet, PATCH as reportPatch } from '@/app/api/sh/reports/[id]/route'
 import { POST as commentPost } from '@/app/api/sh/reports/[id]/comments/route'
+import { PATCH as commentPatch } from '@/app/api/sh/reports/[id]/comments/[commentId]/route'
 import { POST as decisionPost } from '@/app/api/sh/reports/[id]/decision/route'
 import { GET as inboxGet } from '@/app/api/sh/inbox/route'
 import { POST as inboxReadPost } from '@/app/api/sh/inbox/read/route'
@@ -506,6 +507,53 @@ describe('komentar dan kotak masuk', () => {
 
     signIn('u-superuser')
     expect((await commentPost(req(`/api/sh/reports/${id}/comments`, 'POST', { body: 'Halo' }), ctx(id))).status).toBe(403)
+  })
+
+  it('penulis mengubah komentarnya sendiri: editedAt, readAt dikosongkan, audit; selain penulis ditolak', async () => {
+    const id = seedReport({ status: 'PERLU_PERBAIKAN' })
+    const other = seedReport({})
+    const [fix, reply] = seed('subholdingReportComment', [
+      { reportId: id, authorId: 'u-sup', kind: 'PERBAIKAN', body: 'Tambahkan foto', readAt: T0 },
+      { reportId: id, authorId: 'u-sha', kind: 'BALASAN', body: 'Siap' },
+    ])
+    const path = (rid: string, cid: string) => `/api/sh/reports/${rid}/comments/${cid}`
+    const cctx = (rid: string, cid: string) => ({ params: Promise.resolve({ id: rid, commentId: cid }) })
+    const patch = (rid: string, cid: string, body: unknown) => commentPatch(req(path(rid, cid), 'PATCH', body), cctx(rid, cid))
+
+    signIn('u-sup')
+    const ok = await patch(id, fix.id as string, { body: '  Tambahkan foto sisi utara  ' })
+    expect(ok.status).toBe(200)
+    const okb = await json(ok)
+    expect(okb.comment).toMatchObject({ id: fix.id, kind: 'PERBAIKAN', body: 'Tambahkan foto sisi utara', mine: true })
+    expect(okb.comment.editedAt).toBe(T0.toISOString())
+    expect(okb.report.comments.map((c: Json) => c.body)).toEqual(['Tambahkan foto sisi utara', 'Siap'])
+    const saved = one('subholdingReportComment', fix.id as string)
+    expect(saved).toMatchObject({ body: 'Tambahkan foto sisi utara', kind: 'PERBAIKAN', readAt: null })
+    expect(rows('auditLog', { action: 'EDIT_SH_COMMENT', targetId: id })).toHaveLength(1)
+    expect(JSON.parse(rows('auditLog', { action: 'EDIT_SH_COMMENT' })[0].beforeData as string)).toMatchObject({ body: 'Tambahkan foto' })
+
+    // Isi sama → tanpa tulisan baru.
+    expect((await patch(id, fix.id as string, { body: 'Tambahkan foto sisi utara' })).status).toBe(200)
+    expect(rows('auditLog', { action: 'EDIT_SH_COMMENT' })).toHaveLength(1)
+
+    // Bukan penulis, komentar laporan lain, isi kosong / terlalu panjang.
+    expect((await patch(id, reply.id as string, { body: 'Diubah supervisor' })).status).toBe(403)
+    expect((await patch(other, fix.id as string, { body: 'Salah laporan' })).status).toBe(404)
+    expect((await patch(id, 'tidak-ada', { body: 'Halo' })).status).toBe(404)
+    expect((await patch(id, fix.id as string, { body: '   ' })).status).toBe(422)
+    expect((await patch(id, fix.id as string, { body: 'x'.repeat(2001) })).status).toBe(422)
+
+    signIn('u-sha')
+    expect((await patch(id, reply.id as string, { body: 'Siap, foto menyusul sore ini' })).status).toBe(200)
+    expect(one('subholdingReportComment', reply.id as string).body).toBe('Siap, foto menyusul sore ini')
+    expect((await patch(id, fix.id as string, { body: 'Diubah admin' })).status).toBe(403)
+
+    // Admin subholding lain tidak melihat laporannya (anti-IDOR) → 404.
+    signIn('u-shb')
+    expect((await patch(id, reply.id as string, { body: 'Bukan milik saya' })).status).toBe(404)
+    signIn('u-superuser')
+    expect((await patch(id, fix.id as string, { body: 'Halo' })).status).toBe(403)
+    expect(one('subholdingReportComment', fix.id as string).body).toBe('Tambahkan foto sisi utara')
   })
 
   it('kotak masuk: pesan peninjau subholding sendiri, belum dibaca, pengingat PT tanpa laporan kemarin', async () => {

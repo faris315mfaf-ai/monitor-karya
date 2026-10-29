@@ -15,6 +15,7 @@ export type ShComment = {
   authorName: string
   authorRole: string
   createdAt: string
+  editedAt?: string | null
   mine: boolean
 }
 
@@ -432,6 +433,8 @@ export function todayRecap(t: ReviewToday | null | undefined): { total: number; 
 }
 
 /** Kelompok percakapan: milik sendiri di kanan. */
-export function commentWho(c: Pick<ShComment, 'mine' | 'authorName' | 'kind' | 'createdAt'>): string {
-  return [c.mine ? 'Anda' : c.authorName, COMMENT_KIND_LABEL[c.kind] ?? 'Komentar', stampLabel(c.createdAt)].filter(Boolean).join(' · ')
+export function commentWho(c: Pick<ShComment, 'mine' | 'authorName' | 'kind' | 'createdAt' | 'editedAt'>): string {
+  return [c.mine ? 'Anda' : c.authorName, COMMENT_KIND_LABEL[c.kind] ?? 'Komentar', stampLabel(c.createdAt), c.editedAt ? 'disunting' : '']
+    .filter(Boolean)
+    .join(' · ')
 }

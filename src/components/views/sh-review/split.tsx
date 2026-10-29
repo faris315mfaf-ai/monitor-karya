@@ -360,7 +360,7 @@ function Detail({ r, s, now, onPhoto }: { r: ShReport; s: ReviewState; now: Date
         <EvidenceStrip r={r} onOpen={onPhoto} />
         <Facts r={r} />
         <Description r={r} />
-        <Thread r={r} />
+        <Thread r={r} onEdited={s.reload} />
         <HighlightCard d={d} />
         {/* Panel sempit: "Kirim komentar saja" di bawah kolom; panel lebar: di bilah keputusan. */}
         <CommentField d={d} inlineSend sendClassName={d.gate.decidable ? '@min-[600px]/detail:hidden' : undefined} />

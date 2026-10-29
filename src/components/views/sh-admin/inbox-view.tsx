@@ -42,6 +42,7 @@ import {
   type InboxEntry,
 } from './logic'
 import type { ShComment, ShInbox, ShReport } from './types'
+import { CommentBody } from '../sh-review/comment-edit'
 
 type Filter = 'semua' | 'belum'
 
@@ -325,8 +326,14 @@ function MessageSheet({
                   <span className="mk-thread__meta">
                     {c.mine ? 'Anda' : c.authorName} · {formatDateTime(c.createdAt)}
                     {c.kind === 'PERBAIKAN' ? ' · minta perbaikan' : c.kind === 'SETUJU' ? ' · menyetujui' : ''}
+                    {c.editedAt ? ' · disunting' : ''}
                   </span>
-                  <span className="t-body text-ink whitespace-pre-line">{c.body}</span>
+                  <CommentBody
+                    reportId={rep.id}
+                    comment={c}
+                    onSaved={() => setNonce((n) => n + 1)}
+                    className="t-body text-ink whitespace-pre-line"
+                  />
                 </div>
               ))}
             </div>

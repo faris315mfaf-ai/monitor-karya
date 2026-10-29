@@ -16,6 +16,7 @@ export type ShComment = {
   authorName: string
   authorRole: string
   createdAt: string
+  editedAt?: string | null
   mine: boolean
 }
 

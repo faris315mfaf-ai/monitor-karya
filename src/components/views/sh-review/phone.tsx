@@ -480,7 +480,7 @@ function ScreenBody({
           <div className="flex flex-col gap-3.5 px-4">
             <Facts r={r} stacked />
             <Description r={r} />
-            <Thread r={r} />
+            <Thread r={r} onEdited={s.reload} />
             <HighlightCard d={d} compact />
             <CommentField d={d} inlineSend />
             <DecidedNote r={r} />

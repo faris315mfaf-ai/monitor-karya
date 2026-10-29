@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { Icon, Skeleton, cx } from '@/components/mk'
 import { useSignedUrl } from '../sh-overview/evidence'
+import { CommentBody } from './comment-edit'
 import { isImageMime, photosOf, toneOf, toneVars, type OverviewEvidence } from '../sh-overview/logic'
 import { slideIndex } from '../sh-overview/mobile/mobile-logic'
 import { Star } from './decision'
@@ -243,8 +244,8 @@ export function Description({ r }: { r: ShReport }) {
   return <p className="m-0 t-body-lg whitespace-pre-line break-words text-ink">{r.deskripsi}</p>
 }
 
-/** Percakapan: milik sendiri di kanan (biru lembut), lawan bicara di kiri. */
-export function Thread({ r }: { r: ShReport }) {
+/** Percakapan: milik sendiri di kanan (biru lembut, bisa diubah), lawan bicara di kiri. */
+export function Thread({ r, onEdited }: { r: ShReport; onEdited?: () => void }) {
   if (!r.comments?.length) return null
   return (
     <section aria-label="Percakapan" className="flex flex-col gap-2">
@@ -259,7 +260,12 @@ export function Thread({ r }: { r: ShReport }) {
             )}
           >
             <span className="t-caption font-normal text-ink-2">{commentWho(c)}</span>
-            <span className="t-callout font-normal whitespace-pre-line break-words text-ink">{c.body}</span>
+            <CommentBody
+              reportId={r.id}
+              comment={c}
+              onSaved={onEdited}
+              className="t-callout font-normal whitespace-pre-line break-words text-ink"
+            />
           </li>
         ))}
       </ul>
