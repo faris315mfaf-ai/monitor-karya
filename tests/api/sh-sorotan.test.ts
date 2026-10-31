@@ -299,11 +299,11 @@ describe('sorotan di endpoint baca', () => {
     expect(body.subholdings.map((s: Json) => s.id)).toEqual(['sh-a', 'sh-b'])
     const alfa = body.subholdings[0]
     expect(alfa.allPts).toEqual([
-      { id: 'pt-a2', name: 'PT Alfa Dua' },
-      { id: 'pt-a4', name: 'PT Alfa Empat' },
-      { id: 'pt-a1', name: 'PT Alfa Satu' },
+      { id: 'pt-a2', name: 'PT Alfa Dua', lastReportDate: null },
+      { id: 'pt-a4', name: 'PT Alfa Empat', lastReportDate: null },
+      { id: 'pt-a1', name: 'PT Alfa Satu', lastReportDate: null },
     ])
-    expect(body.subholdings[1].allPts).toEqual([{ id: 'pt-b1', name: 'PT Beta Satu' }])
+    expect(body.subholdings[1].allPts).toEqual([{ id: 'pt-b1', name: 'PT Beta Satu', lastReportDate: null }])
     const reports = new Map(alfa.pts.flatMap((p: Json) => p.reports).map((r: Json) => [r.id, r]))
     expect(reports.get(hi)).toMatchObject({ highlight: true, highlightNote: NOTE })
     expect(reports.get(plain)).toMatchObject({ highlight: false, highlightNote: null })

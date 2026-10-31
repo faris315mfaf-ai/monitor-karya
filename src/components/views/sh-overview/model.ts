@@ -30,8 +30,11 @@ export type V2Subholding = {
   /** PT yang punya laporan disetujui pada tanggal itu. */
   pts: V2Pt[]
   /** Semua PT aktif di bawah subholding (untuk penyaring dan "belum melapor"). */
-  allPts?: { id: string; name: string }[]
+  allPts?: V2AllPt[]
 }
+
+/** PT aktif di bawah subholding; `lastReportDate` = laporan disetujui terakhir sebelum tanggal terpilih (90 hari, null bila tak ada). */
+export type V2AllPt = { id: string; name: string; lastReportDate?: string | null }
 
 export type V2Data = { date: string; subholdings: V2Subholding[] }
 
@@ -177,6 +180,146 @@ export function weekNote(days: string[], counts: number[]): { text: string; tone
   if (streak === 1) return { text: 'Belum melapor hari ini', tone: 'warn' }
   const total = counts.reduce((a, b) => a + b, 0)
   return { text: `${total} laporan dalam 7 hari`, tone: 'muted' }
+}
+
+/* ---------- Kategori PT: sudah / belum melapor (lintas subholding) ---------- */
+
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+
+/** Jendela pencarian "terakhir melapor" di server (hari). */
+export const LAST_REPORT_WINDOW_DAYS = 90
+
+export type CoverageReporting = {
+  id: string
+  name: string
+  subId: string
+  subName: string
+  /** Jumlah laporan disetujui pada tanggal itu. */
+  count: number
+  /** Berapa di antaranya yang disorot supervisor. */
+  highlights: number
+  /** Waktu disetujui terakhir (ISO) atau null bila tak tercatat. */
+  lastAt: string | null
+}
+
+export type CoverageSilent = {
+  id: string
+  name: string
+  subId: string
+  subName: string
+  /** 'YYYY-MM-DD' laporan disetujui terakhir sebelum tanggal itu (90 hari); null = tidak ada. */
+  lastReportDate: string | null
+}
+
+export type Coverage = { reporting: CoverageReporting[]; silent: CoverageSilent[]; total: number }
+
+const byNameId = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'id')
+
+function isoMs(iso: string | null | undefined): number {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isFinite(t) ? t : -Infinity
+}
+
+function keyMs(key: string | null | undefined): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key ?? '')
+  if (!m) return null
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(t) ? null : t
+}
+
+/**
+ * Hari kerja (Sen–Jum) dari hari SETELAH `lastReportDate` sampai `dateKey`
+ * inklusif. null bila PT tidak pernah melapor dalam jendela (lastReportDate
+ * null) atau kunci tanggal tidak sah; 0 bila hanya akhir pekan yang lewat.
+ */
+export function silentDays(dateKey: string, lastReportDate: string | null | undefined): number | null {
+  if (!lastReportDate) return null
+  const from = keyMs(lastReportDate)
+  const to = keyMs(dateKey)
+  if (from === null || to === null) return null
+  let n = 0
+  for (let t = from + 86_400_000, guard = 0; t <= to && guard < 800; t += 86_400_000, guard++) {
+    const d = new Date(t).getUTCDay()
+    if (d !== 0 && d !== 6) n++
+  }
+  return n
+}
+
+/** Lama diam untuk lencana: 'Hari ini' / 'Kemarin' (1), 'n hari kerja' (≥2), 'Lebih dari 90 hari' (null). */
+export function silentLabel(days: number | null, range: 'today' | 'yesterday' | 'week' = 'today'): string {
+  if (days === null) return `Lebih dari ${LAST_REPORT_WINDOW_DAYS} hari`
+  if (days <= 0) return 'Akhir pekan'
+  if (days === 1) return range === 'yesterday' ? 'Kemarin' : 'Hari ini'
+  return `${days} hari kerja`
+}
+
+/** 'terakhir melapor Rab 22 Okt' atau 'belum ada laporan dalam 90 hari'. */
+export function lastReportLabel(lastReportDate: string | null | undefined): string {
+  if (!lastReportDate) return `belum ada laporan dalam ${LAST_REPORT_WINDOW_DAYS} hari`
+  const t = keyMs(lastReportDate)
+  if (t === null) return `belum ada laporan dalam ${LAST_REPORT_WINDOW_DAYS} hari`
+  const d = new Date(t)
+  return `terakhir melapor ${HARI[d.getUTCDay()]} ${d.getUTCDate()} ${BULAN_PENDEK[d.getUTCMonth()]}`
+}
+
+/**
+ * Cakupan pelaporan PT lintas subholding menurut penyaring (subholding →
+ * hanya itu; PT → hanya PT itu).
+ *  - reporting: PT dengan laporan disetujui pada tanggal data; sorotan dulu,
+ *    lalu jumlah laporan menurun, lalu nama.
+ *  - silent: PT aktif tanpa laporan; yang tak pernah melapor dalam jendela di
+ *    atas, lalu hari kerja diam menurun, lalu nama.
+ */
+export function ptCoverage(data: V2Data | null | undefined, f: Filter): Coverage {
+  const reporting: CoverageReporting[] = []
+  const silent: CoverageSilent[] = []
+  for (const s of data?.subholdings ?? []) {
+    if (f.sub && s.id !== f.sub) continue
+    const done = new Set<string>()
+    for (const p of s.pts ?? []) {
+      if (f.pt && p.id !== f.pt) continue
+      if (!p.reports?.length) continue
+      done.add(p.id)
+      let lastAt: string | null = null
+      for (const r of p.reports) if (r.decidedAt && isoMs(r.decidedAt) > isoMs(lastAt)) lastAt = r.decidedAt
+      reporting.push({
+        id: p.id, name: p.name, subId: s.id, subName: s.name,
+        count: p.reports.length, highlights: p.reports.filter((r) => r.highlight).length, lastAt,
+      })
+    }
+    for (const p of s.allPts ?? []) {
+      if (f.pt && p.id !== f.pt) continue
+      if (done.has(p.id)) continue
+      silent.push({ id: p.id, name: p.name, subId: s.id, subName: s.name, lastReportDate: p.lastReportDate ?? null })
+    }
+  }
+  reporting.sort((a, b) => Number(b.highlights > 0) - Number(a.highlights > 0) || b.count - a.count || byNameId(a, b))
+  const date = data?.date ?? ''
+  const rank = (r: CoverageSilent) => (r.lastReportDate ? (silentDays(date, r.lastReportDate) ?? 0) : Infinity)
+  silent.sort((a, b) => {
+    const ra = rank(a)
+    const rb = rank(b)
+    return ra === rb ? byNameId(a, b) : ra > rb ? -1 : 1
+  })
+  return { reporting, silent, total: reporting.length + silent.length }
+}
+
+export type CoverageTab = 'semua' | 'sudah' | 'belum'
+
+/** Hitungan tab Semua / Sudah / Belum. */
+export function coverageCounts(c: Coverage): Record<CoverageTab, number> {
+  return { semua: c.total, sudah: c.reporting.length, belum: c.silent.length }
+}
+
+/** Kelompokkan baris per subholding (urut nama subholding; urutan baris dipertahankan). */
+export function groupBySub<T extends { subId: string; subName: string }>(rows: T[]): { subId: string; subName: string; rows: T[] }[] {
+  const map = new Map<string, { subId: string; subName: string; rows: T[] }>()
+  for (const r of rows) {
+    const g = map.get(r.subId) ?? { subId: r.subId, subName: r.subName, rows: [] }
+    g.rows.push(r)
+    map.set(r.subId, g)
+  }
+  return [...map.values()].sort((a, b) => a.subName.localeCompare(b.subName, 'id'))
 }
 
 /* ---------- Penyaring tersimpan per perangkat ---------- */

@@ -11,12 +11,13 @@
  */
 
 import { useId, useMemo, useState } from 'react'
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
+import { MotionConfig, motion } from 'framer-motion'
 import { EmptyNote, ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
 import { PullToRefresh } from '@/components/mk/pull-refresh'
 import { EvidenceLightbox, type LightboxState } from '../evidence'
+import { CoverageSection, CoverageTiles, jumpToCoverage } from '../coverage'
 import { displayName, photosOf, toneOf, toneVars } from '../logic'
-import { NO_FILTER, ptBuckets, statusSummary, type Filter, type FlatV2 } from '../model'
+import { NO_FILTER, coverageCounts, ptBuckets, ptCoverage, statusSummary, type CoverageTab, type Filter, type FlatV2 } from '../model'
 import type { OverviewRange, OverviewScreenProps } from '../screen-types'
 import {
   addDays, backLabel, buildGroups, dayHeading, findSub, highlightCards, missingSentence, monoOf, progressPct,
@@ -42,8 +43,8 @@ export function MobileOverview(props: OverviewScreenProps) {
   const [lightbox, setLightbox] = useState<LightboxState>(null)
   const [sheet, setSheet] = useState<'sub' | 'pt' | null>(null)
   const [query, setQuery] = useState('')
-  const [silentOpen, setSilentOpen] = useState(false)
-  const ids = { status: useId(), sorotan: useId(), list: useId(), silent: useId(), silentList: useId() }
+  const [covTab, setCovTab] = useState<CoverageTab>('semua')
+  const ids = { status: useId(), sorotan: useId(), list: useId() }
 
   const sub = findSub(data, filter.sub)
   const heading = screenHeading(data, filter)
@@ -54,7 +55,7 @@ export function MobileOverview(props: OverviewScreenProps) {
   const sorotan = useMemo(() => highlightCards(data, filter), [data, filter])
   const buckets = useMemo(() => ptBuckets(findSub(data, filter.sub)), [data, filter.sub])
   const reportingPts = buckets.reporting
-  const silent = sub && !filter.pt ? buckets.silent : []
+  const coverage = useMemo(() => ptCoverage(data, filter), [data, filter])
 
   const dateLine = isWeek ? weekRangeLabel(week?.start ?? addDays(dateKey, -6), week?.end ?? dateKey) : dayHeading(dateKey)
 
@@ -63,8 +64,21 @@ export function MobileOverview(props: OverviewScreenProps) {
     setSheet(k)
   }
   const pick = (f: Filter) => {
-    setSilentOpen(false)
     onFilter(f)
+  }
+  // Ketuk PT "sudah melapor": persempit daftar laporan, lalu bawa pengguna ke daftar itu.
+  const openPt = (subId: string, ptId: string) => {
+    onFilter({ sub: subId, pt: ptId })
+    requestAnimationFrame(() => {
+      const el = document.getElementById(ids.list)
+      if (!el) return
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })
+    })
+  }
+  const pickTile = (t: 'sudah' | 'belum') => {
+    setCovTab(t)
+    jumpToCoverage()
   }
   const openPhoto = (r: FlatV2, index: number) => {
     const photos = photosOf(r.evidence)
@@ -185,6 +199,17 @@ export function MobileOverview(props: OverviewScreenProps) {
                 ) : null}
               </section>
 
+              {/* Ubin pintasan + kategori PT sudah / belum melapor (lintas subholding) */}
+              <CoverageTiles counts={coverageCounts(coverage)} tab={covTab} onPick={pickTile} />
+              <CoverageSection
+                coverage={coverage}
+                tab={covTab}
+                onTab={setCovTab}
+                dateKey={dateKey}
+                range={range}
+                onOpenPt={openPt}
+              />
+
               {/* Chip PT (subholding dipilih, tanpa PT) */}
               {sub && !filter.pt && reportingPts.length > 0 ? (
                 <div role="group" aria-label="PT yang melapor" className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none]">
@@ -229,48 +254,6 @@ export function MobileOverview(props: OverviewScreenProps) {
                   ))
                 )}
               </section>
-
-              {/* Belum melapor (tingkat PT), dapat dilipat */}
-              {silent.length ? (
-                <section aria-labelledby={ids.silent} className="flex flex-col gap-1.5">
-                  <button
-                    type="button"
-                    aria-expanded={silentOpen}
-                    aria-controls={ids.silentList}
-                    onClick={() => setSilentOpen((v) => !v)}
-                    className={cx('t-footnote flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] px-1 text-left font-semibold text-waspada', FOCUS)}
-                  >
-                    <span id={ids.silent} className="flex-1">
-                      Belum melapor · {silent.length} PT
-                    </span>
-                    <Icon
-                      name="bawah"
-                      size={14}
-                      strokeWidth={2.6}
-                      className={cx('transition-transform duration-[var(--dur-base)] ease-[var(--ease-standard)]', silentOpen && 'rotate-180')}
-                    />
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {silentOpen ? (
-                      <motion.ul
-                        id={ids.silentList}
-                        key="diam"
-                        initial={{ opacity: 0, y: -6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-                        className="m-0 list-none overflow-hidden rounded-[var(--radius-md)] bg-surface p-0"
-                      >
-                        {silent.map((p, i) => (
-                          <li key={p.id} className={cx('t-callout px-4 py-3 font-normal text-ink-2', i > 0 && 'shadow-[inset_0_1px_0_var(--line)]')}>
-                            {p.name}
-                          </li>
-                        ))}
-                      </motion.ul>
-                    ) : null}
-                  </AnimatePresence>
-                </section>
-              ) : null}
             </>
           )}
         </div>

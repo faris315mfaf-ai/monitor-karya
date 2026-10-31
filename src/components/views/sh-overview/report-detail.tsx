@@ -10,7 +10,8 @@
  * Info: inisial + nama subholding & tombol Tutup, judul, blok "Catatan
  * supervisor" bila laporan disorot (16 Okt 2026), daftar bergaris
  * (PT pelaksana, Pelapor, Disetujui, Bukti — baris kosong disembunyikan),
- * deskripsi utuh, lalu dokumen yang dibuka di tab baru.
+ * deskripsi utuh, lalu dokumen yang dibuka di tab baru. Bila `pdfHref` diberikan,
+ * baris aksi "Lihat PDF" (tab baru) tampil di bawah judul.
  *
  * Radix Dialog menjaga fokus (terkunci, kembali ke pemicu), Esc, klik latar,
  * dan kunci gulir halaman. Animasi masuk lewat @starting-style, hanya bila
@@ -23,6 +24,7 @@ import { Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { EvidenceThumb, useSignedUrl } from './evidence'
 import { docsOf, heroLabel, initialOf, photosOf, toneVars, type OverviewEvidence } from './logic'
 import { approvedLabel, buktiLabel, clampIndex, docActionLabel, photoAlt } from './detail-logic'
+import { PdfButton } from './pdf-link'
 
 export type DetailReport = {
   id: string
@@ -47,10 +49,13 @@ export function ReportDetail({
   report,
   onClose,
   onOpenPhoto,
+  pdfHref,
 }: {
   report: DetailReport | null
   onClose: () => void
   onOpenPhoto: (photoIndex: number) => void
+  /** Alamat PDF laporan (shPdfHref); diisi → baris aksi "Lihat PDF" di bawah judul. */
+  pdfHref?: (report: DetailReport) => string
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   // Judul baris pemicu dicatat sendiri: konten dirender bersyarat di dalam
@@ -91,7 +96,7 @@ export function ReportDetail({
                 'motion-safe:starting:translate-y-full min-[600px]:motion-safe:starting:translate-y-4 min-[600px]:motion-safe:starting:opacity-0'
               )}
             >
-              <DetailBody key={report.id} report={report} titleRef={titleRef} descId={descId} onOpenPhoto={onOpenPhoto} />
+              <DetailBody key={report.id} report={report} titleRef={titleRef} descId={descId} onOpenPhoto={onOpenPhoto} pdfHref={pdfHref} />
             </DialogPrimitive.Content>
           ) : null}
         </DialogPrimitive.Overlay>
@@ -106,11 +111,13 @@ function DetailBody({
   titleRef,
   descId,
   onOpenPhoto,
+  pdfHref,
 }: {
   report: DetailReport
   titleRef: RefObject<HTMLHeadingElement | null>
   descId: string
   onOpenPhoto: (photoIndex: number) => void
+  pdfHref?: (report: DetailReport) => string
 }) {
   const photos = photosOf(report.evidence)
   const docs = docsOf(report.evidence)
@@ -190,6 +197,12 @@ function DetailBody({
         >
           {report.kegiatan}
         </DialogPrimitive.Title>
+
+        {pdfHref ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <PdfButton href={pdfHref(report)}>Lihat PDF</PdfButton>
+          </div>
+        ) : null}
 
         {report.highlight ? <SupervisorNote note={report.highlightNote} /> : null}
 

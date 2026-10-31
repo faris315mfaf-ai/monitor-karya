@@ -6,6 +6,9 @@ import { dateParam, requireShUser, unprocessable } from '@/lib/subholding/http'
 import { reporterTitle, SH_EVIDENCE_TARGET } from '@/lib/subholding/rules'
 import { activePts, activeSubholdings, ptsUnder, refuseWithoutCap } from '@/lib/subholding/scope'
 
+const DAY_MS = 86_400_000
+const LAST_REPORT_WINDOW_DAYS = 90
+
 /**
  * GET /api/sh/overview?date=YYYY-MM-DD (`shreport:view-approved`: Superuser,
  * Manajemen, Supervisor, Super Admin). Bawaan hari ini (WIB).
@@ -17,10 +20,13 @@ import { activePts, activeSubholdings, ptsUnder, refuseWithoutCap } from '@/lib/
  *       pts: [{ id, name, reports: [{ id, kegiatan, deskripsi,
  *         reporterName, reporterTitle, decidedAt, highlight, highlightNote,
  *         evidence: [{ id, fileName, mime, kind: 'file' | 'link' }] }] }],
- *       allPts: [{ id, name }] }] }
+ *       allPts: [{ id, name, lastReportDate }] }] }
  * `highlight`/`highlightNote` = sorotan supervisor (0035; catatan null bila
  * tidak disorot). `allPts` = SEMUA PT aktif di bawah path subholding (urut
  * nama), termasuk yang belum melapor — untuk penyaring dan "Belum melapor".
+ * `allPts[].lastReportDate` = tanggal ('YYYY-MM-DD' WIB) laporan DISETUJUI
+ * terakhir PT itu SEBELUM `date`, dalam jendela 90 hari ke belakang; null bila
+ * tidak ada (dipakai kategori "Belum melapor": sudah berapa lama diam).
  * `reporterTitle` = label jadi ("Manajer Proyek", helper yang sama dengan
  * ShReport); `decidedAt` = ISO string atau null.
  * Urutan (kontrak Opsi A, 15 Okt 2026): subholding menurut nama, PT menurut
@@ -39,7 +45,7 @@ export async function GET(req: NextRequest) {
   if (date === 'invalid' || !date) return unprocessable('Tanggal harus berformat YYYY-MM-DD')
 
   try {
-    const [subs, allPtRows, reports] = await Promise.all([
+    const [subs, allPtRows, reports, earlier] = await Promise.all([
       activeSubholdings(),
       activePts(),
       db.subholdingReport.findMany({
@@ -59,7 +65,18 @@ export async function GET(req: NextRequest) {
         },
         orderBy: [{ decidedAt: 'asc' }, { submittedAt: 'asc' }],
       }),
+      // Satu kueri untuk "terakhir melapor" tiap PT; direduksi di memori.
+      db.subholdingReport.findMany({
+        where: {
+          status: 'DISETUJUI',
+          reportDate: { gte: new Date(date.getTime() - LAST_REPORT_WINDOW_DAYS * DAY_MS), lt: date },
+        },
+        select: { ptId: true, reportDate: true },
+        orderBy: { reportDate: 'desc' },
+      }),
     ])
+    const lastDate = new Map<string, string>()
+    for (const r of earlier) if (!lastDate.has(r.ptId)) lastDate.set(r.ptId, wibDateKey(r.reportDate))
     const reportIds = reports.map((r) => r.id)
     const ptIds = Array.from(new Set(reports.map((r) => r.ptId)))
     const [evidence, ptNames] = await Promise.all([
@@ -110,7 +127,7 @@ export async function GET(req: NextRequest) {
         ptCount: byPt.size,
         pts: ptList,
         allPts: ptsUnder(s, allPtRows)
-          .map((p) => ({ id: p.id, name: p.name }))
+          .map((p) => ({ id: p.id, name: p.name, lastReportDate: lastDate.get(p.id) ?? null }))
           .sort(byName),
       }
     })

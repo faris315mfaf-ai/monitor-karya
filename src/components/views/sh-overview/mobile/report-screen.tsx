@@ -20,6 +20,8 @@ import { Icon, cx } from '@/components/mk'
 import { approvedLabel } from '../detail-logic'
 import { displayName, docsOf, photosOf, subholdingLabel, toneOf, toneVars } from '../logic'
 import type { FlatV2 } from '../model'
+import { PdfButton } from '../pdf-link'
+import { shPdfHref } from '@/lib/subholding/pdf-href'
 import { DocRow, GallerySlide } from './photo'
 import { EDGE_WIDTH, FADE, NAV_SPRING, counterLabel, monoOf, shouldDismiss, slideIndex } from './mobile-logic'
 
@@ -118,7 +120,7 @@ export function ReportScreen({
               ) : null}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(40px+env(safe-area-inset-bottom))]">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
               {photos.length ? <Gallery report={report} onOpen={onOpenPhoto} /> : null}
 
               <div className="flex flex-col gap-3.5 px-5 pt-4">
@@ -176,6 +178,13 @@ export function ReportScreen({
                   </section>
                 ) : null}
               </div>
+            </div>
+
+            {/* Dock bawah: Lihat PDF selalu terjangkau ibu jari (mockup layar D). */}
+            <div className="flex flex-none items-center bg-glass px-5 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 shadow-[inset_0_1px_0_var(--line)] backdrop-blur-[20px] backdrop-saturate-[1.8]">
+              <PdfButton href={shPdfHref({ id: report.id })} size="lg" full>
+                Lihat PDF
+              </PdfButton>
             </div>
 
             {/* Zona tepi kiri: mulai geser-kembali. Di bawah bilah atas supaya tombol kembali tetap bisa diketuk. */}

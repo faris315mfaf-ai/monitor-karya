@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="id" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup pelaporan PT dan PDF</title>
+<style>
+/* Token disalin dari design-system/tokens.css (subset yang dipakai mockup). */
+:root, [data-theme="light"] {
+  --bg:#f5f5f7; --surface:#fff; --surface-2:#fafafc; --fill-1:#f2f2f5; --fill-2:#e5e5ea; --line:#e3e3e8; --line-strong:#8e8e93;
+  --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#8e8e93;
+  --accent:#d11a2a; --accent-fill:#d11a2a; --accent-soft:#fdecee; --on-accent:#fff; --accent-cerah:#FF4D57; --merah-dalam:#9E0F1C;
+  --sukses:#18794e; --sukses-soft:#e6f4ec; --waspada:#a05a00; --waspada-soft:#fff3e0; --bahaya:#c4142a; --bahaya-soft:#fdecec;
+  --info:#0a66d6; --info-soft:#e8f1fd;
+  --glass:rgba(255,255,255,.72); --scrim:rgba(0,0,0,.32);
+  --shadow-card:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05);
+  --shadow-sheet:0 24px 64px rgba(0,0,0,.24);
+  --shadow-control:0 1px 3px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04);
+  --paper:#fff; --paper-ink:#1d1d1f;
+}
+[data-theme="dark"] {
+  --bg:#050506; --surface:#131316; --surface-2:#19191d; --fill-1:#212126; --fill-2:#2c2c32; --line:#26262c; --line-strong:#6c6c73;
+  --ink:#f5f5f7; --ink-2:#aeaeb2; --ink-3:#8e8e93;
+  --accent:#ff6961; --accent-fill:#e0242f; --accent-soft:#3a1214; --on-accent:#fff; --accent-cerah:#FF6B6B; --merah-dalam:#B3121F;
+  --sukses:#3dd47a; --sukses-soft:#0f2a1c; --waspada:#ffb340; --waspada-soft:#2e1f06; --bahaya:#ff6b6b; --bahaya-soft:#3a1214;
+  --info:#4da3ff; --info-soft:#0b2340;
+  --glass:rgba(20,20,24,.72); --scrim:rgba(0,0,0,.55);
+  --shadow-card:0 0 0 .5px rgba(255,255,255,.06); --shadow-sheet:0 24px 64px rgba(0,0,0,.6);
+  --shadow-control:0 1px 3px rgba(0,0,0,.5);
+  --paper:#fff; --paper-ink:#1d1d1f; /* kertas PDF tetap putih di mode malam */
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg{display:block;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- halaman mockup ---------- */
+.top{max-width:1240px;margin:0 auto;padding:28px 16px 8px;display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.top h1{margin:0;font-size:26px;letter-spacing:-.02em;line-height:1.15}
+.top p{margin:6px 0 0;color:var(--ink-2);max-width:62ch}
+.chip-demo{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--waspada);background:var(--waspada-soft);border-radius:999px;padding:3px 10px;margin-bottom:10px}
+.theme{min-height:44px;padding:0 16px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow-card);font-weight:600;font-size:14px}
+.sect{max-width:1240px;margin:0 auto;padding:28px 16px 0}
+.sect>h2{margin:0 0 4px;font-size:19px;letter-spacing:-.01em}
+.sect>p.lead{margin:0 0 18px;color:var(--ink-2);max-width:70ch}
+.boards{display:flex;flex-wrap:wrap;gap:28px 24px;align-items:flex-start}
+figure{margin:0}
+figcaption{margin:0 0 10px;font-size:13px;color:var(--ink-2);max-width:375px}
+figcaption b{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;margin-bottom:2px}
+figcaption b i{font-style:normal;min-width:22px;height:22px;border-radius:999px;background:var(--accent-fill);color:var(--on-accent);font-size:12px;display:grid;place-items:center}
+figure.wide figcaption{max-width:none}
+
+/* ---------- bingkai ponsel ---------- */
+.phone{position:relative;width:375px;height:760px;background:var(--bg);border-radius:38px;box-shadow:0 0 0 9px #1d1d1f,0 24px 60px rgba(0,0,0,.28);overflow:hidden;display:flex;flex-direction:column}
+[data-theme="dark"] .phone{box-shadow:0 0 0 9px #2c2c32,0 24px 60px rgba(0,0,0,.6)}
+.sb{height:46px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 6px;font-size:14px;font-weight:600}
+.sb span:last-child{display:flex;gap:5px;align-items:center}
+.scroll{flex:1;min-height:0;overflow-y:auto;padding:0 16px 18px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.tabbar{flex:none;margin:0 10px 10px;border-radius:26px;background:var(--glass);backdrop-filter:blur(20px) saturate(180%);box-shadow:0 1px 1px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.12);display:flex;padding:6px}
+.tabbar span{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--ink-2);padding:6px 0;border-radius:20px}
+.tabbar span.on{color:var(--accent);background:var(--accent-soft)}
+.eyebrow{font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.02em}
+.h1{margin:2px 0 0;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.sub{color:var(--ink-2);font-size:13px}
+
+/* ---------- komponen ---------- */
+.seg{display:flex;background:var(--fill-1);border-radius:10px;padding:2px;gap:2px}
+.seg button{flex:1;min-height:36px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;justify-content:center;gap:6px}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-control)}
+.seg .n{font-size:11px;min-width:20px;height:18px;padding:0 5px;border-radius:999px;background:var(--fill-2);color:var(--ink-2);display:grid;place-items:center;font-weight:700}
+.seg button[aria-selected="true"] .n.sk{background:var(--sukses-soft);color:var(--sukses)}
+.seg button[aria-selected="true"] .n.wd{background:var(--waspada-soft);color:var(--waspada)}
+.card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow-card)}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.badge.ok{color:var(--sukses);background:var(--sukses-soft)}
+.badge.wd{color:var(--waspada);background:var(--waspada-soft)}
+.badge.bd{color:var(--bahaya);background:var(--bahaya-soft)}
+.badge.if{color:var(--info);background:var(--info-soft)}
+.badge.nt{color:var(--ink-2);background:var(--fill-1)}
+.btn{min-height:44px;padding:0 16px;border-radius:12px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--fill-1);color:var(--ink)}
+.btn.pri{background:var(--accent-fill);color:var(--on-accent)}
+.btn.sm{min-height:36px;font-size:13px;padding:0 12px;border-radius:10px}
+.btn:active{transform:scale(.97)}
+.mono{width:36px;height:36px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.m1{background:#e8f1fd;color:#0a66d6}.m2{background:#e8f5ec;color:#1a7340}.m3{background:#fdecf2;color:#c2255c}.m4{background:#f0ebfc;color:#6e3fd8}
+[data-theme="dark"] .m1{background:#0b2340;color:#4da3ff}[data-theme="dark"] .m2{background:#0e2a19;color:#3dd47a}[data-theme="dark"] .m3{background:#3a1424;color:#ff6b9a}[data-theme="dark"] .m4{background:#241a3f;color:#b79bff}
+.rows{background:var(--surface);border-radius:16px;box-shadow:var(--shadow-card);overflow:hidden}
+.row{display:flex;gap:12px;align-items:center;padding:12px 14px;min-height:60px;width:100%;text-align:left}
+.row+.row{box-shadow:inset 0 1px 0 var(--line)}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{display:block;font-size:13px;color:var(--ink-2)}
+.row .end{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:12px;color:var(--ink-2)}
+.cap{font-size:12px;font-weight:600;color:var(--ink-2);padding:0 4px;margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center}
+.cap.wd{color:var(--waspada)}
+.cap.ok{color:var(--sukses)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tile{padding:12px 14px;text-align:left;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-card);display:block;width:100%}
+.tile[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent),var(--shadow-card)}
+.tile .v{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.tile .l{font-size:13px;color:var(--ink-2);display:flex;gap:6px;align-items:center}
+.bar{height:8px;border-radius:999px;background:var(--fill-2);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent-cerah),var(--accent-fill))}
+.pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:12px -16px 0;padding:0 16px}
+.pills::-webkit-scrollbar{display:none}
+.pill{min-height:36px;padding:0 14px;border-radius:999px;background:var(--fill-1);font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.pill[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.note{margin:14px 0 0;padding:10px 12px;border-radius:12px;background:var(--info-soft);color:var(--info);font-size:13px;display:flex;gap:8px}
+.navbar{display:flex;align-items:center;gap:6px;min-height:44px;margin:0 -8px}
+.navbar .back{display:flex;align-items:center;gap:2px;color:var(--accent);font-size:16px;min-height:44px;padding:0 8px}
+.navbar .ttl{flex:1;text-align:center;font-weight:700;font-size:16px}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.thumb{aspect-ratio:1;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:600}
+.t1{background:linear-gradient(135deg,#5ac8fa,#0a66d6)}.t2{background:linear-gradient(135deg,#34c759,#1a7340)}.t3{background:linear-gradient(135deg,#ff9f0a,#b84a00)}
+.dock{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 26px;background:var(--glass);backdrop-filter:blur(20px) saturate(180%);box-shadow:inset 0 1px 0 var(--line);display:flex;gap:10px}
+.dock .btn{flex:1}
+
+/* ---------- kertas PDF ---------- */
+.paper{background:var(--paper);color:var(--paper-ink);border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.2);padding:18px 18px 14px;font-size:8.5px;line-height:1.45;aspect-ratio:210/297;width:100%;display:flex;flex-direction:column;overflow:hidden}
+.paper .lh{display:flex;gap:8px;align-items:center;padding-bottom:8px;border-bottom:1.5px solid #d11a2a}
+.paper .lh .lg{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#ff4d57,#9e0f1c);color:#fff;display:grid;place-items:center;font-weight:800;font-size:9px}
+.paper .lh b{font-size:10px;display:block}
+.paper .lh span{color:#6e6e73;font-size:7.5px}
+.paper h4{margin:10px 0 4px;font-size:11.5px;letter-spacing:-.01em}
+.paper dl{display:grid;grid-template-columns:62px 1fr;gap:1px 6px;margin:0 0 8px}
+.paper dt{color:#6e6e73}.paper dd{margin:0;font-weight:600}
+.paper h5{margin:8px 0 3px;font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;color:#6e6e73}
+.paper p{margin:0 0 4px}
+.paper .ph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:3px}
+.paper .ph i{aspect-ratio:4/3;border-radius:2px;display:block}
+.paper table{border-collapse:collapse;width:100%;font-size:7.8px}
+.paper th,.paper td{border-bottom:.5px solid #e3e3e8;text-align:left;padding:2px 3px}
+.paper th{color:#6e6e73;font-weight:600}
+.paper .sg{margin-top:auto;display:flex;justify-content:space-between;gap:10px;padding-top:8px}
+.paper .sg div{flex:1;text-align:center;color:#6e6e73}
+.paper .sg div i{display:block;height:22px;border-bottom:.5px solid #8e8e93;margin-bottom:2px}
+.paper .ft{display:flex;justify-content:space-between;color:#8e8e93;font-size:7px;padding-top:6px;border-top:.5px solid #e3e3e8;margin-top:8px}
+
+/* lembar PDF di ponsel */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:54px;background:var(--bg);border-radius:20px 20px 0 0;box-shadow:var(--shadow-sheet);display:flex;flex-direction:column}
+.sheet .grab{width:38px;height:5px;border-radius:999px;background:var(--ink-3);margin:8px auto 4px;opacity:.6}
+.sheet .hd{display:flex;align-items:center;gap:8px;padding:2px 12px 10px}
+.sheet .hd .tt{flex:1;min-width:0;text-align:center}
+.sheet .hd .tt b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet .hd .tt span{font-size:12px;color:var(--ink-2)}
+.sheet .hd button{min-height:44px;min-width:56px;color:var(--accent);font-size:16px;font-weight:500}
+.viewer{flex:1;min-height:0;overflow:hidden;padding:4px 22px 0;background:var(--fill-1);display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:flex-start;padding-top:14px}
+.pgind{align-self:center;font-size:12px;font-weight:600;background:var(--glass);backdrop-filter:blur(12px);padding:3px 10px;border-radius:999px;box-shadow:var(--shadow-control)}
+.pdfbar{flex:none;display:flex;gap:8px;padding:10px 14px 28px;background:var(--surface);box-shadow:inset 0 1px 0 var(--line)}
+.pdfbar .btn{flex:1;flex-direction:column;gap:2px;min-height:52px;font-size:12px}
+.pdfbar .btn.pri{flex:1.6;flex-direction:row;font-size:15px}
+
+/* ---------- bingkai lebar (supervisor) ---------- */
+figure.wide{overflow-x:auto;padding:10px 10px 18px}
+.tablet{position:relative;width:1180px;max-width:none;height:700px;background:var(--bg);border-radius:22px;box-shadow:0 0 0 8px #1d1d1f,0 24px 60px rgba(0,0,0,.28);overflow:hidden;display:grid;grid-template-columns:76px 330px 1fr}
+[data-theme="dark"] .tablet{box-shadow:0 0 0 8px #2c2c32,0 24px 60px rgba(0,0,0,.6)}
+.rail{background:var(--surface);box-shadow:inset -1px 0 0 var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0}
+.rail span{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;color:var(--ink-2)}
+.rail span.on{background:var(--accent-soft);color:var(--accent)}
+.rail .lg{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent-cerah),var(--merah-dalam));color:#fff;font-weight:800;font-size:13px;margin-bottom:10px}
+.queue{background:var(--bg);box-shadow:inset -1px 0 0 var(--line);padding:16px 12px;overflow:hidden}
+.queue .row{padding:10px 12px}
+.queue .rows .row[aria-current="true"]{background:var(--accent-soft)}
+.detail{padding:18px 22px;overflow:hidden;position:relative}
+.detail .actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 14px}
+.modal-scrim{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;padding:22px}
+.modal{width:min(880px,100%);height:100%;max-height:640px;background:var(--surface);border-radius:20px;box-shadow:var(--shadow-sheet);display:grid;grid-template-columns:1fr 270px;overflow:hidden}
+.modal .view{background:var(--fill-1);padding:18px;display:flex;justify-content:center;overflow:hidden}
+.modal .view{align-items:flex-start}
+.modal .view .paper{width:350px;flex:none}
+.modal .side{padding:16px;display:flex;flex-direction:column;gap:14px}
+.modal .side h3{margin:0;font-size:17px}
+.chk{display:flex;gap:10px;align-items:center;min-height:36px;font-size:14px}
+.chk i{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;flex:none}
+.chk i.on{background:var(--accent-fill);color:var(--on-accent)}
+.chk i.off{box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+
+/* ---------- catatan ---------- */
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.notes .card{padding:16px 18px}
+.notes h3{margin:0 0 8px;font-size:15px}
+.notes ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:14px}
+.notes li+li{margin-top:4px}
+.foot{max-width:1240px;margin:0 auto;padding:28px 16px 48px;color:var(--ink-2);font-size:13px}
+@media (prefers-reduced-motion:no-preference){.btn,.tile,.pill{transition:transform .12s ease,box-shadow .2s ease,background .2s ease}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3L12 4zM12 10v4.5M12 17.4v.1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M7 3h7l5 5v12a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z M14 3v5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.6 16.6h1.3a1 1 0 000-2H8.6v3.4M12.2 14.6v3.4h.8a1.7 1.7 0 000-3.4h-.8zM16.8 14.6h-1.7v3.4M15.1 16.3h1.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M6 12v7a1 1 0 001 1h10a1 1 0 001-1v-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 9V4h10v5M7 17H5a1 1 0 01-1-1v-5a2 2 0 012-2h12a2 2 0 012 2v5a1 1 0 01-1 1h-2M7 14h10v6H7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8L12 3.5z" fill="currentColor"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v12a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1zM9 13h6M9 17h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 8l8 5.5L20 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 20c.8-3.6 3.5-5.5 7-5.5s6.2 1.9 7 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8v.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div>
+    <span class="chip-demo"><svg width="14" height="14"><use href="#i-info"/></svg>Mockup · data contoh, belum terhubung ke aplikasi</span>
+    <h1>Pelaporan PT dan lihat PDF</h1>
+    <p>Tiga perubahan di akun Manajemen / Ketua Umum dan Supervisor: kategori <b>Belum melapor</b> gabungan semua subholding, daftar <b>Sudah melapor</b> di dashboard, dan tombol <b>Lihat PDF</b>.</p>
+  </div>
+  <button class="theme" id="theme" type="button" aria-pressed="false">Mode malam</button>
+</header>
+
+<!-- ============ BAGIAN 1 & 2: DASHBOARD MANAJEMEN ============ -->
+<section class="sect" aria-labelledby="s1">
+  <h2 id="s1">1 dan 2 · Dashboard Manajemen: sudah dan belum melapor</h2>
+  <p class="lead">Satu ringkasan di atas, lalu dua kategori yang sejajar. Ketuk ubin atau tab untuk berpindah. Layar pertama bisa dicoba.</p>
+  <div class="boards">
+
+    <figure>
+      <figcaption><b><i>A</i> Ringkasan (bisa dicoba)</b>Tab Semua / Sudah / Belum. Ubin Sudah dan Belum ikut menjadi pintasan kategori.</figcaption>
+      <div class="phone" id="phoneA">
+        <div class="sb"><span>09.41</span><span><svg width="18" height="12" viewBox="0 0 18 12"><rect width="3" height="4" y="8" rx="1" fill="currentColor"/><rect x="5" width="3" height="7" y="5" rx="1" fill="currentColor"/><rect x="10" width="3" height="10" y="2" rx="1" fill="currentColor"/><rect x="15" width="3" height="12" rx="1" fill="currentColor"/></svg></span></div>
+        <div class="scroll" id="scrollA">
+          <div class="eyebrow">Dashboard Manajemen</div>
+          <h3 class="h1">Pelaporan hari ini</h3>
+          <div class="sub">Jumat, 30 Oktober 2026 · semua subholding</div>
+          <div class="seg" style="margin-top:12px" role="group" aria-label="Rentang">
+            <button type="button" aria-pressed="true">Hari ini</button><button type="button" aria-pressed="false">Kemarin</button><button type="button" aria-pressed="false">7 hari</button>
+          </div>
+          <div class="card" style="padding:14px 16px;margin-top:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:15px">PT sudah melapor</b><span class="sub"><b style="color:var(--ink);font-size:20px">12</b> dari 18</span></div>
+            <div class="bar" role="img" aria-label="12 dari 18 PT sudah melapor"><i style="width:66.7%"></i></div>
+          </div>
+          <div class="tiles">
+            <button class="tile" type="button" data-go="sudah" aria-pressed="false"><div class="l"><svg width="16" height="16" style="color:var(--sukses)"><use href="#i-check"/></svg>Sudah melapor</div><div class="v" style="color:var(--sukses)">12</div></button>
+            <button class="tile" type="button" data-go="belum" aria-pressed="false"><div class="l"><svg width="16" height="16" style="color:var(--waspada)"><use href="#i-warn"/></svg>Belum melapor</div><div class="v" style="color:var(--waspada)">6</div></button>
+          </div>
+          <div class="seg" style="margin-top:14px" role="tablist" aria-label="Kategori PT" id="tabsA">
+            <button type="button" role="tab" data-tab="semua" aria-selected="true">Semua <span class="n">18</span></button>
+            <button type="button" role="tab" data-tab="sudah" aria-selected="false">Sudah <span class="n sk">12</span></button>
+            <button type="button" role="tab" data-tab="belum" aria-selected="false">Belum <span class="n wd">6</span></button>
+          </div>
+          <div id="listA"></div>
+        </div>
+        <div class="tabbar"><span class="on"><svg width="22" height="22"><use href="#i-home"/></svg>Beranda</span><span><svg width="22" height="22"><use href="#i-doc"/></svg>Laporan</span><span><svg width="22" height="22"><use href="#i-mail"/></svg>Kotak masuk</span><span><svg width="22" height="22"><use href="#i-user"/></svg>Akun</span></div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b><i>B</i> Kategori Belum melapor</b>Satu daftar gabungan lintas subholding, bukan lagi terselip per subholding. Urut dari yang paling lama diam. Penyaring subholding opsional.</figcaption>
+      <div class="phone">
+        <div class="sb"><span>09.41</span><span></span></div>
+        <div class="scroll">
+          <div class="navbar"><span class="back"><svg width="20" height="20"><use href="#i-back"/></svg>Ringkasan</span></div>
+          <h3 class="h1" style="margin-top:0">Belum melapor</h3>
+          <div class="sub">6 PT · Jumat, 30 Okt 2026</div>
+          <div class="pills" role="group" aria-label="Subholding">
+            <button class="pill" type="button" aria-pressed="true">Semua (6)</button><button class="pill" type="button" aria-pressed="false">Energi (2)</button><button class="pill" type="button" aria-pressed="false">Properti (1)</button><button class="pill" type="button" aria-pressed="false">Logistik (2)</button><button class="pill" type="button" aria-pressed="false">Teknologi (1)</button>
+          </div>
+          <div class="note"><svg width="18" height="18"><use href="#i-info"/></svg><span>Hari kerja saja yang dihitung. Sabtu dan Minggu tidak menambah hitungan diam.</span></div>
+          <div class="rows" style="margin-top:12px" id="listB"></div>
+        </div>
+        <div class="tabbar"><span class="on"><svg width="22" height="22"><use href="#i-home"/></svg>Beranda</span><span><svg width="22" height="22"><use href="#i-doc"/></svg>Laporan</span><span><svg width="22" height="22"><use href="#i-mail"/></svg>Kotak masuk</span><span><svg width="22" height="22"><use href="#i-user"/></svg>Akun</span></div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b><i>C</i> Kategori Sudah melapor</b>PT yang laporannya sudah disetujui. Terkelompok per subholding. Laporan yang ditandai supervisor memakai label Sorotan.</figcaption>
+      <div class="phone">
+        <div class="sb"><span>09.41</span><span></span></div>
+        <div class="scroll">
+          <div class="navbar"><span class="back"><svg width="20" height="20"><use href="#i-back"/></svg>Ringkasan</span></div>
+          <h3 class="h1" style="margin-top:0">Sudah melapor</h3>
+          <div class="sub">12 PT · 31 laporan disetujui</div>
+          <div class="pills" role="group" aria-label="Subholding">
+            <button class="pill" type="button" aria-pressed="true">Semua (12)</button><button class="pill" type="button" aria-pressed="false">Energi (4)</button><button class="pill" type="button" aria-pressed="false">Properti (3)</button><button class="pill" type="button" aria-pressed="false">Logistik (3)</button><button class="pill" type="button" aria-pressed="false">Teknologi (2)</button>
+          </div>
+          <div id="listC"></div>
+        </div>
+        <div class="tabbar"><span class="on"><svg width="22" height="22"><use href="#i-home"/></svg>Beranda</span><span><svg width="22" height="22"><use href="#i-doc"/></svg>Laporan</span><span><svg width="22" height="22"><use href="#i-mail"/></svg>Kotak masuk</span><span><svg width="22" height="22"><use href="#i-user"/></svg>Akun</span></div>
+      </div>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============ BAGIAN 3: LIHAT PDF ============ -->
+<section class="sect" aria-labelledby="s3">
+  <h2 id="s3">3 · Tombol Lihat PDF (Manajemen dan Supervisor)</h2>
+  <p class="lead">Tombol ada di rincian laporan. Menekannya membuka pratinjau PDF dalam lembar; dari sana Unduh, Bagikan, atau Cetak.</p>
+  <div class="boards">
+
+    <figure>
+      <figcaption><b><i>D</i> Rincian laporan · Manajemen</b>Tombol utama "Lihat PDF" menempel di bawah supaya selalu terjangkau ibu jari. Bagikan sebagai tombol kedua.</figcaption>
+      <div class="phone">
+        <div class="sb"><span>09.41</span><span></span></div>
+        <div class="scroll" style="padding-bottom:110px">
+          <div class="navbar"><span class="back"><svg width="20" height="20"><use href="#i-back"/></svg>Sudah melapor</span></div>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:2px"><div class="mono m1">NE</div><div><div style="font-weight:700;font-size:18px">PT Nusa Energi</div><div class="sub">Subholding Energi</div></div></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><span class="badge ok"><svg width="12" height="12"><use href="#i-check"/></svg>Disetujui 15.42</span><span class="badge if">3 laporan</span><span class="badge wd"><svg width="12" height="12"><use href="#i-star"/></svg>Sorotan supervisor</span></div>
+          <div class="card" style="padding:14px 16px;margin-top:14px">
+            <div class="cap" style="margin:0 0 4px;padding:0">Laporan 1 dari 3</div>
+            <b style="font-size:16px">Pemasangan panel distribusi gardu B</b>
+            <p class="sub" style="margin:6px 0 0;color:var(--ink)">Pemasangan panel selesai 80 persen. Uji beban dijadwalkan Senin. Satu komponen pemutus daya tertunda dari pemasok.</p>
+            <div class="thumbs" style="margin-top:12px"><div class="thumb t1">Foto 1</div><div class="thumb t2">Foto 2</div><div class="thumb t3">Foto 3</div></div>
+          </div>
+          <div class="card" style="padding:14px 16px;margin-top:12px"><div class="cap" style="margin:0 0 4px;padding:0">Laporan 2 dari 3</div><b style="font-size:16px">Inspeksi jalur kabel utara</b><p class="sub" style="margin:6px 0 0">Tidak ada temuan. Pemeliharaan rutin berikutnya Rabu.</p></div>
+        </div>
+        <div class="dock"><button class="btn pri" type="button"><svg width="20" height="20"><use href="#i-pdf"/></svg>Lihat PDF</button><button class="btn" type="button" style="flex:.55" aria-label="Bagikan"><svg width="20" height="20"><use href="#i-share"/></svg></button></div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b><i>E</i> Pratinjau PDF</b>Lembar naik dari bawah, bisa diseret tutup. Halaman A4 dengan kop, isi laporan, bukti, dan kolom persetujuan. Kertas tetap putih di mode malam.</figcaption>
+      <div class="phone">
+        <div class="sb"><span>09.41</span><span></span></div>
+        <div class="scroll" style="opacity:.35;pointer-events:none"><div class="h1">PT Nusa Energi</div></div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="hd"><button type="button">Tutup</button><div class="tt"><b>Laporan-PT-Nusa-Energi-2026-10-30.pdf</b><span>2 halaman · 184 KB</span></div><span style="min-width:56px"></span></div>
+          <div class="viewer">
+            <div class="paper">
+              <div class="lh"><div class="lg">MK</div><div><b>Monitor Karya · PT BIKE Tbk</b><span>Laporan harian PT · dibuat 30 Okt 2026, 16.05 WIB</span></div></div>
+              <h4>PT Nusa Energi</h4>
+              <dl><dt>Subholding</dt><dd>Energi</dd><dt>Tanggal</dt><dd>Jumat, 30 Oktober 2026</dd><dt>Pelapor</dt><dd>Admin PT · Rina Wulandari</dd><dt>Status</dt><dd>Disetujui supervisor 15.42</dd></dl>
+              <h5>Laporan 1 · Pemasangan panel distribusi gardu B</h5>
+              <p>Pemasangan panel selesai 80 persen. Uji beban dijadwalkan Senin. Satu komponen pemutus daya tertunda dari pemasok.</p>
+              <div class="ph"><i class="t1"></i><i class="t2"></i><i class="t3"></i></div>
+              <h5>Laporan 2 · Inspeksi jalur kabel utara</h5>
+              <p>Tidak ada temuan. Pemeliharaan rutin berikutnya Rabu.</p>
+              <h5>Ringkasan</h5>
+              <table><tr><th>Laporan</th><th>Bukti</th><th>Progres</th></tr><tr><td>Panel gardu B</td><td>3 foto</td><td>80%</td></tr><tr><td>Jalur kabel utara</td><td>1 foto</td><td>100%</td></tr></table>
+              <div class="sg"><div><i></i>Admin PT</div><div><i></i>Supervisor</div></div>
+              <div class="ft"><span>Dokumen dibuat otomatis oleh Monitor Karya</span><span>Hal. 1 / 2</span></div>
+            </div>
+            <span class="pgind">1 / 2</span>
+          </div>
+          <div class="pdfbar"><button class="btn pri" type="button"><svg width="20" height="20"><use href="#i-down"/></svg>Unduh PDF</button><button class="btn" type="button"><svg width="20" height="20"><use href="#i-share"/></svg>Bagikan</button><button class="btn" type="button"><svg width="20" height="20"><use href="#i-print"/></svg>Cetak</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b><i>F</i> Daftar PT: pintasan PDF</b>Di baris PT juga ada ikon PDF kecil, jadi Manajemen tidak perlu membuka rincian untuk sekadar mengambil berkasnya.</figcaption>
+      <div class="phone">
+        <div class="sb"><span>09.41</span><span></span></div>
+        <div class="scroll">
+          <div class="navbar"><span class="back"><svg width="20" height="20"><use href="#i-back"/></svg>Ringkasan</span></div>
+          <h3 class="h1" style="margin-top:0">Sudah melapor</h3>
+          <div class="sub">Subholding Energi · 4 PT</div>
+          <div class="rows" style="margin-top:14px" id="listF"></div>
+          <button class="btn" type="button" style="width:100%;margin-top:14px"><svg width="20" height="20"><use href="#i-pdf"/></svg>Lihat PDF seluruh Subholding Energi</button>
+          <p class="sub" style="margin:8px 4px 0">Gabungan semua PT di atas dalam satu berkas, satu PT per bagian.</p>
+        </div>
+        <div class="tabbar"><span class="on"><svg width="22" height="22"><use href="#i-home"/></svg>Beranda</span><span><svg width="22" height="22"><use href="#i-doc"/></svg>Laporan</span><span><svg width="22" height="22"><use href="#i-mail"/></svg>Kotak masuk</span><span><svg width="22" height="22"><use href="#i-user"/></svg>Akun</span></div>
+      </div>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ============ SUPERVISOR ============ -->
+<section class="sect" aria-labelledby="s4">
+  <h2 id="s4">3 · Supervisor: tablet dan desktop</h2>
+  <p class="lead">Di tampilan lebar, tombol Lihat PDF ada di baris aksi rincian, di samping Setujui. Pratinjau terbuka sebagai dialog dengan pilihan isi.</p>
+  <figure class="wide">
+    <figcaption><b><i>G</i> Antrean laporan, rincian, dan pratinjau PDF</b>Supervisor boleh melihat PDF laporan yang belum disetujui; tanda air "DRAF" tercetak di halaman sampai disetujui.</figcaption>
+    <div class="tablet">
+      <nav class="rail" aria-label="Menu"><span class="lg" style="display:grid;place-items:center">MK</span><span class="on"><svg width="24" height="24"><use href="#i-doc"/></svg></span><span><svg width="24" height="24"><use href="#i-mail"/></svg></span><span><svg width="24" height="24"><use href="#i-user"/></svg></span></nav>
+      <div class="queue">
+        <div class="eyebrow">Supervisor Energi</div>
+        <h3 class="h1" style="font-size:22px">Antrean laporan</h3>
+        <div class="seg" style="margin:10px 0 12px"><button type="button" aria-pressed="true">Menunggu <span class="n">3</span></button><button type="button" aria-pressed="false">Disetujui</button></div>
+        <div class="rows" id="listG"></div>
+      </div>
+      <div class="detail">
+        <div style="display:flex;gap:12px;align-items:center"><div class="mono m1" style="width:44px;height:44px">NE</div><div style="flex:1"><div style="font-weight:700;font-size:20px;letter-spacing:-.01em">PT Nusa Energi</div><div class="sub">Pemasangan panel distribusi gardu B · diajukan 14.58</div></div><span class="badge wd"><svg width="12" height="12"><use href="#i-clock"/></svg>Menunggu tinjauan</span></div>
+        <div class="actions">
+          <button class="btn pri" type="button"><svg width="20" height="20"><use href="#i-pdf"/></svg>Lihat PDF</button>
+          <button class="btn" type="button"><svg width="20" height="20"><use href="#i-check"/></svg>Setujui</button>
+          <button class="btn" type="button">Minta perbaikan</button>
+        </div>
+        <div class="card" style="padding:16px 18px">
+          <b>Isi laporan</b>
+          <p style="margin:6px 0 12px;color:var(--ink-2)">Pemasangan panel selesai 80 persen. Uji beban dijadwalkan Senin. Satu komponen pemutus daya tertunda dari pemasok.</p>
+          <div class="thumbs" style="max-width:420px"><div class="thumb t1">Foto 1</div><div class="thumb t2">Foto 2</div><div class="thumb t3">Foto 3</div></div>
+        </div>
+        <div class="modal-scrim">
+          <div class="modal" role="dialog" aria-label="Pratinjau PDF">
+            <div class="view">
+              <div class="paper" style="position:relative">
+                <div style="position:absolute;inset:0;display:grid;place-items:center;pointer-events:none"><span style="font-size:54px;font-weight:800;letter-spacing:.1em;color:rgba(209,26,42,.12);transform:rotate(-28deg)">DRAF</span></div>
+                <div class="lh"><div class="lg">MK</div><div><b>Monitor Karya · PT BIKE Tbk</b><span>Laporan harian PT · dibuat 30 Okt 2026, 15.10 WIB</span></div></div>
+                <h4>PT Nusa Energi</h4>
+                <dl><dt>Subholding</dt><dd>Energi</dd><dt>Tanggal</dt><dd>Jumat, 30 Oktober 2026</dd><dt>Pelapor</dt><dd>Admin PT · Rina Wulandari</dd><dt>Status</dt><dd>Menunggu tinjauan</dd></dl>
+                <h5>Laporan 1 · Pemasangan panel distribusi gardu B</h5>
+                <p>Pemasangan panel selesai 80 persen. Uji beban dijadwalkan Senin. Satu komponen pemutus daya tertunda dari pemasok.</p>
+                <div class="ph"><i class="t1"></i><i class="t2"></i><i class="t3"></i></div>
+                <h5>Komentar</h5>
+                <p><b>Supervisor:</b> Mohon lampirkan nomor pesanan komponen yang tertunda.</p>
+                <div class="sg"><div><i></i>Admin PT</div><div><i></i>Supervisor</div></div>
+                <div class="ft"><span>Dokumen dibuat otomatis oleh Monitor Karya</span><span>Hal. 1 / 1</span></div>
+              </div>
+            </div>
+            <div class="side">
+              <div style="display:flex;justify-content:space-between;align-items:center"><h3>Lihat PDF</h3><button type="button" aria-label="Tutup" style="min-height:44px;min-width:44px;color:var(--accent);font-weight:600">Tutup</button></div>
+              <div>
+                <div class="cap" style="margin:0 0 6px;padding:0">Isi berkas</div>
+                <div class="chk"><i class="on"><svg width="14" height="14"><use href="#i-check"/></svg></i>Foto dan bukti</div>
+                <div class="chk"><i class="on"><svg width="14" height="14"><use href="#i-check"/></svg></i>Komentar supervisor</div>
+                <div class="chk"><i class="off"></i>Riwayat persetujuan</div>
+              </div>
+              <div>
+                <div class="cap" style="margin:0 0 6px;padding:0">Cakupan</div>
+                <div class="seg"><button type="button" aria-pressed="true">Laporan ini</button><button type="button" aria-pressed="false">Semua hari ini</button></div>
+              </div>
+              <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
+                <button class="btn pri" type="button"><svg width="20" height="20"><use href="#i-down"/></svg>Unduh PDF</button>
+                <div style="display:flex;gap:8px"><button class="btn" type="button" style="flex:1"><svg width="20" height="20"><use href="#i-share"/></svg>Bagikan</button><button class="btn" type="button" style="flex:1"><svg width="20" height="20"><use href="#i-print"/></svg>Cetak</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+</section>
+
+<!-- ============ CATATAN ============ -->
+<section class="sect" aria-labelledby="s5">
+  <h2 id="s5">Catatan rancangan</h2>
+  <p class="lead">Yang saya asumsikan di mockup. Koreksi bila tidak sesuai sebelum dibangun.</p>
+  <div class="notes">
+    <div class="card"><h3>Kategori PT</h3><ul>
+      <li>Belum melapor = PT aktif tanpa laporan disetujui pada tanggal yang dipilih. Ikut rentang Hari ini / Kemarin / 7 hari.</li>
+      <li>Satu daftar lintas subholding, dengan penyaring subholding bila perlu.</li>
+      <li>Urutan: paling lama diam dulu. Hari kerja saja yang dihitung.</li>
+      <li>Sudah melapor memakai data yang sama dengan sekarang; yang baru hanya tempat dan penampilannya di dashboard.</li></ul></div>
+    <div class="card"><h3>Lihat PDF</h3><ul>
+      <li>Manajemen: hanya laporan yang sudah disetujui. Supervisor: juga yang belum, dengan tanda air DRAF.</li>
+      <li>Cakupan: satu PT sehari, atau seluruh subholding sehari (satu PT per bagian).</li>
+      <li>Isi: kop, data laporan, narasi, foto bukti, komentar, kolom persetujuan. Riwayat persetujuan opsional.</li>
+      <li>Hak akses sama dengan melihat laporan; tidak ada jalur baru ke berkas bukti.</li></ul></div>
+    <div class="card"><h3>Perlu keputusan Anda</h3><ul>
+      <li>PDF dibuat di server (rapi, seragam, bisa dikirim lewat tautan) atau di peramban (tanpa beban server, tampilan bisa beda antarperangkat). Saran: server.</li>
+      <li>Apakah Manajemen perlu tombol PDF untuk rentang 7 hari (rekap mingguan)?</li>
+      <li>Apakah Android memakai tombol yang sama dengan pratinjau PDF bawaan sistem?</li></ul></div>
+  </div>
+</section>
+
+<div class="foot">Dibuat 31 Oktober 2026 · token warna dan jarak dari <code>design-system/tokens.css</code> · semua nama PT dan angka adalah data contoh.</div>
+
+<script>
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s) };
+  var chev = '<svg width="16" height="16" style="color:var(--ink-3)"><use href="#i-chev"/></svg>';
+  var subCls = { Energi: 'm1', Properti: 'm2', Logistik: 'm3', Teknologi: 'm4' };
+  var ini = function (n) { return n.replace(/^PT\s+/, '').split(' ').map(function (w) { return w[0] }).join('').slice(0, 2).toUpperCase() };
+
+  var sudah = [
+    { n: 'PT Nusa Energi', s: 'Energi', c: 3, t: '15.42', star: true },
+    { n: 'PT Surya Daya', s: 'Energi', c: 2, t: '15.10' },
+    { n: 'PT Mitra Gas', s: 'Energi', c: 2, t: '14.35' },
+    { n: 'PT Bumi Panel', s: 'Energi', c: 1, t: '13.50' },
+    { n: 'PT Graha Utama', s: 'Properti', c: 4, t: '16.01', star: true },
+    { n: 'PT Cipta Hunian', s: 'Properti', c: 3, t: '15.20' },
+    { n: 'PT Lintas Bangun', s: 'Properti', c: 2, t: '11.45' },
+    { n: 'PT Armada Nusantara', s: 'Logistik', c: 3, t: '15.55' },
+    { n: 'PT Jalur Cepat', s: 'Logistik', c: 2, t: '14.05' },
+    { n: 'PT Gudang Prima', s: 'Logistik', c: 1, t: '10.30' },
+    { n: 'PT Data Sentra', s: 'Teknologi', c: 2, t: '15.38' },
+    { n: 'PT Sinyal Karya', s: 'Teknologi', c: 1, t: '12.15' }
+  ];
+  var belum = [
+    { n: 'PT Tirta Energi', s: 'Energi', d: 4, last: 'Rab 22 Okt' },
+    { n: 'PT Agung Logistik', s: 'Logistik', d: 3, last: 'Kam 23 Okt' },
+    { n: 'PT Pesona Properti', s: 'Properti', d: 2, last: 'Sen 26 Okt' },
+    { n: 'PT Kirana Teknologi', s: 'Teknologi', d: 1, last: 'Kam 29 Okt' },
+    { n: 'PT Sejahtera Angkut', s: 'Logistik', d: 1, last: 'Kam 29 Okt' },
+    { n: 'PT Bahari Listrik', s: 'Energi', d: 1, last: 'Kam 29 Okt' }
+  ];
+
+  function rowSudah(p, opts) {
+    opts = opts || {};
+    return '<button class="row" type="button"><div class="mono ' + subCls[p.s] + '">' + ini(p.n) + '</div>' +
+      '<div class="t"><b>' + p.n + '</b><span>' + (opts.noSub ? '' : p.s + ' · ') + p.c + ' laporan' + (p.star ? ' · <span style="color:var(--waspada);display:inline">Sorotan</span>' : '') + '</span></div>' +
+      '<div class="end"><span class="badge ok"><svg width="12" height="12"><use href="#i-check"/></svg>' + p.t + '</span></div>' +
+      (opts.pdf ? '<span class="btn sm" style="min-width:44px;padding:0" aria-label="Lihat PDF ' + p.n + '"><svg width="20" height="20" style="color:var(--accent)"><use href="#i-pdf"/></svg></span>' : chev) + '</button>';
+  }
+  function rowBelum(p) {
+    var warn = p.d >= 2;
+    return '<div class="row"><div class="mono ' + subCls[p.s] + '">' + ini(p.n) + '</div>' +
+      '<div class="t"><b>' + p.n + '</b><span>' + p.s + ' · terakhir melapor ' + p.last + '</span></div>' +
+      '<div class="end"><span class="badge ' + (warn ? 'bd' : 'wd') + '"><svg width="12" height="12"><use href="#i-' + (warn ? 'clock' : 'warn') + '"/></svg>' + (p.d === 1 ? 'Hari ini' : p.d + ' hari kerja') + '</span></div></div>';
+  }
+  function group(title, items, fn) {
+    return '<div class="cap">' + title + '</div><div class="rows">' + items.map(fn).join('') + '</div>';
+  }
+  function bySub(list) {
+    var out = {};
+    list.forEach(function (p) { (out[p.s] = out[p.s] || []).push(p) });
+    return out;
+  }
+
+  /* A: bisa dicoba */
+  var tab = 'semua';
+  function renderA() {
+    var h = '';
+    if (tab === 'semua' || tab === 'belum') {
+      h += '<div class="cap wd"><span>Belum melapor · ' + belum.length + ' PT</span><span class="sub" style="font-weight:500">semua subholding</span></div><div class="rows">' +
+        (tab === 'semua' ? belum.slice(0, 3) : belum).map(rowBelum).join('') + '</div>';
+      if (tab === 'semua') h += '<button class="btn" type="button" style="width:100%;margin-top:10px" data-go="belum">Lihat semua ' + belum.length + ' PT belum melapor</button>';
+    }
+    if (tab === 'semua' || tab === 'sudah') {
+      h += '<div class="cap ok"><span>Sudah melapor · ' + sudah.length + ' PT</span></div>';
+      if (tab === 'semua') h += '<div class="rows">' + sudah.slice(0, 4).map(function (p) { return rowSudah(p) }).join('') + '</div><button class="btn" type="button" style="width:100%;margin-top:10px" data-go="sudah">Lihat semua ' + sudah.length + ' PT sudah melapor</button>';
+      else {
+        var g = bySub(sudah);
+        Object.keys(g).forEach(function (k) { h += '<div class="cap"><span>' + k + '</span><span>' + g[k].length + ' PT</span></div><div class="rows">' + g[k].map(function (p) { return rowSudah(p, { noSub: true }) }).join('') + '</div>' });
+      }
+    }
+    $('#listA').innerHTML = h;
+    document.querySelectorAll('#tabsA button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === tab)) });
+    document.querySelectorAll('#phoneA .tile').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.go === tab)) });
+  }
+  function go(t) { tab = t; renderA(); if (t !== 'semua') { var el = $('#tabsA'); $('#scrollA').scrollTo({ top: el.offsetTop - 8, behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth' }) } }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tab],[data-go]');
+    if (!b || !$('#phoneA').contains(b)) return;
+    go(b.dataset.tab || b.dataset.go);
+  });
+  renderA();
+
+  /* B, C, F, G: statis */
+  $('#listB').innerHTML = belum.map(rowBelum).join('');
+  var g = bySub(sudah), hc = '';
+  Object.keys(g).forEach(function (k) {
+    hc += '<div class="cap"><span>' + k + '</span><span>' + g[k].length + ' PT</span></div><div class="rows">' + g[k].map(function (p) { return rowSudah(p, { noSub: true }) }).join('') + '</div>';
+  });
+  $('#listC').innerHTML = hc;
+  $('#listF').innerHTML = g.Energi.map(function (p) { return rowSudah(p, { noSub: true, pdf: true }) }).join('');
+  var q = [
+    { n: 'PT Nusa Energi', m: 'Pemasangan panel gardu B', t: '14.58', cur: true },
+    { n: 'PT Surya Daya', m: 'Uji beban trafo 2', t: '14.40' },
+    { n: 'PT Mitra Gas', m: 'Inspeksi jalur pipa selatan', t: '13.55' }
+  ];
+  $('#listG').innerHTML = q.map(function (p) {
+    return '<button class="row"' + (p.cur ? ' aria-current="true"' : '') + ' type="button"><div class="mono m1">' + ini(p.n) + '</div><div class="t"><b>' + p.n + '</b><span>' + p.m + '</span></div><div class="end"><span class="badge wd">' + p.t + '</span></div></button>';
+  }).join('');
+
+  /* tema */
+  var tb = $('#theme');
+  tb.addEventListener('click', function () {
+    var dark = document.documentElement.getAttribute('data-theme') !== 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    tb.setAttribute('aria-pressed', String(dark));
+    tb.textContent = dark ? 'Mode terang' : 'Mode malam';
+  });
+})();
+</script>
+</body>
+</html>

@@ -26,6 +26,7 @@ import { useBox } from '../sh-overview/tablet/tablet-overview'
 import { ActiveBg, FadeSwap, Mono } from '../sh-overview/tablet/parts'
 import { SubPicker } from '../sh-overview/tablet/panes'
 import type { SubRow } from '../sh-overview/tablet/logic'
+import { PdfLink } from './pdf-link'
 import { Description, DecidedNote, EvidenceStrip, Facts, HighlightNote, SubMono, Thread, evidenceOf } from './body'
 import {
   ApproveButton, CommentField, CommentOnlyButton, DecisionHint, HighlightCard, ReviseButton, useDecision,
@@ -300,6 +301,7 @@ function DetailPane({ s, now, onPhoto }: { s: ReviewState; now: Date; onPhoto: (
             <strong className="font-semibold text-ink">{subholdingLabel(r.subholdingName)}</strong> · {r.ptName}
           </span>
           <span className="shrink-0 t-footnote tabular-nums text-ink-2">{positionText(idx, s.items.length)}</span>
+          <PdfLink reportId={r.id} title={r.kegiatan} />
           <NavButton label="Laporan sebelumnya" icon="naik" disabled={!prev} onClick={() => prev && s.select(prev)} />
           <NavButton label="Laporan berikutnya" icon="turun" disabled={!next} onClick={() => next && s.select(next)} />
         </div>

@@ -54,7 +54,10 @@ tes `tests/api/sh-sorotan.test.ts` (baru) + penyesuaian minimal tes sh yang ada)
    highlight true → note wajib 5–280 huruf (422 bila tidak). Disimpan bersama persetujuan dalam
    transaksi yang sama. revise mengabaikan highlight. Audit log mencatat highlight.
 3. `GET /api/sh/overview?date=` (kompatibel mundur): tiap laporan + `highlight`, `highlightNote`;
-   tiap subholding + `allPts: [{id,name}]` = SEMUA PT aktif di bawah path subholding (urut nama).
+   tiap subholding + `allPts: [{id,name,lastReportDate}]` = SEMUA PT aktif di bawah path subholding (urut nama).
+   `lastReportDate` ('YYYY-MM-DD' WIB) = laporan DISETUJUI terakhir PT itu SEBELUM `date`, jendela 90 hari
+   ke belakang; `null` bila tak ada. Dipakai kategori "Belum melapor" (lintas subholding, urut paling lama diam)
+   dan "Sudah melapor" di dashboard (rentang hari; rentang 7 hari tidak memakainya).
 4. `GET /api/sh/overview/week?end=YYYY-MM-DD[&subholdingId=]` (cap `shreport:view-approved`):
    `WeekData` (lihat model.ts). `days` = 7 hari berakhir di `end` (bawaan hari ini WIB).
    `counts[i]` = laporan DISETUJUI per `reportDate`. Dengan `subholdingId`: subholding itu saja +

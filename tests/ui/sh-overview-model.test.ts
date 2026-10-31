@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  NO_FILTER, dayLabel, flatten, highlightFirst, isWeekend, loadFilter, matchesQuery, ptBuckets, saveFilter,
-  scoped, silentStreak, statusSummary, validFilter, weekNote, type V2Data,
+  NO_FILTER, coverageCounts, dayLabel, flatten, groupBySub, highlightFirst, isWeekend, lastReportLabel, loadFilter,
+  matchesQuery, ptBuckets, ptCoverage, saveFilter, scoped, silentDays, silentLabel, silentStreak, statusSummary,
+  validFilter, weekNote, type V2Data,
 } from '@/components/views/sh-overview/model'
 
 const rep = (id: string, highlight = false) => ({ id, kegiatan: `K ${id}`, deskripsi: '', highlight, evidence: [] })
@@ -101,5 +102,105 @@ describe('penyaring tersimpan', () => {
     vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } } })
     expect(loadFilter()).toEqual(NO_FILTER)
     expect(() => saveFilter({ sub: null, pt: null })).not.toThrow()
+  })
+})
+
+describe('kategori PT sudah / belum melapor', () => {
+  // Kamis 15 Okt 2026. lastReportDate: Rab 14, Jum 9, Sen 12, tak ada.
+  const cov: V2Data = {
+    date: '2026-10-15',
+    subholdings: [
+      {
+        id: 'energi', name: 'Energi', count: 4, ptCount: 2,
+        pts: [
+          { id: 'e1', name: 'PT Nusa Energi', reports: [{ ...rep('n1'), decidedAt: '2026-10-15T08:10:00Z' }, { ...rep('n2', true), decidedAt: '2026-10-15T08:42:00Z' }] },
+          { id: 'e2', name: 'PT Surya Daya', reports: [{ ...rep('s1'), decidedAt: '2026-10-15T07:00:00Z' }, { ...rep('s2'), decidedAt: '2026-10-15T09:00:00Z' }] },
+        ],
+        allPts: [
+          { id: 'e1', name: 'PT Nusa Energi' }, { id: 'e2', name: 'PT Surya Daya' },
+          { id: 'e3', name: 'PT Tirta Energi', lastReportDate: '2026-10-09' },
+          { id: 'e4', name: 'PT Bahari Listrik', lastReportDate: '2026-10-14' },
+        ],
+      },
+      {
+        id: 'logistik', name: 'Logistik', count: 1, ptCount: 1,
+        pts: [{ id: 'l1', name: 'PT Jalur Cepat', reports: [rep('j1')] }],
+        allPts: [
+          { id: 'l1', name: 'PT Jalur Cepat' },
+          { id: 'l2', name: 'PT Agung Logistik', lastReportDate: '2026-10-12' },
+          { id: 'l3', name: 'PT Armada Baru', lastReportDate: null },
+          { id: 'l4', name: 'PT Cakra Angkut', lastReportDate: '2026-10-12' },
+        ],
+      },
+    ],
+  }
+
+  it('silentDays menghitung hari kerja setelah tanggal terakhir sampai tanggal data, akhir pekan dilewati', () => {
+    expect(silentDays('2026-10-15', '2026-10-14')).toBe(1)
+    expect(silentDays('2026-10-15', '2026-10-12')).toBe(3)
+    expect(silentDays('2026-10-15', '2026-10-09')).toBe(4) // Sen, Sel, Rab, Kam (Sab–Min dilewati)
+    expect(silentDays('2026-10-12', '2026-10-09')).toBe(1) // Senin setelah Jumat
+    expect(silentDays('2026-10-11', '2026-10-09')).toBe(0) // Minggu
+    expect(silentDays('2026-10-15', '2026-10-15')).toBe(0)
+    expect(silentDays('2026-10-15', '2026-10-20')).toBe(0)
+    expect(silentDays('2026-10-15', null)).toBeNull()
+    expect(silentDays('rusak', '2026-10-09')).toBeNull()
+  })
+
+  it('silentLabel dan lastReportLabel', () => {
+    expect(silentLabel(1, 'today')).toBe('Hari ini')
+    expect(silentLabel(1, 'yesterday')).toBe('Kemarin')
+    expect(silentLabel(4, 'today')).toBe('4 hari kerja')
+    expect(silentLabel(null, 'today')).toBe('Lebih dari 90 hari')
+    expect(silentLabel(0, 'today')).toBe('Akhir pekan')
+    expect(lastReportLabel('2026-10-22')).toBe('terakhir melapor Kam 22 Okt')
+    expect(lastReportLabel('2026-10-14')).toBe('terakhir melapor Rab 14 Okt')
+    expect(lastReportLabel(null)).toBe('belum ada laporan dalam 90 hari')
+    expect(lastReportLabel(undefined)).toBe('belum ada laporan dalam 90 hari')
+  })
+
+  it('ptCoverage: melapor urut sorotan, jumlah, nama; lastAt = decidedAt terbesar', () => {
+    const c = ptCoverage(cov, NO_FILTER)
+    expect(c.reporting.map((p) => [p.id, p.count, p.highlights])).toEqual([['e1', 2, 1], ['e2', 2, 0], ['l1', 1, 0]])
+    expect(c.reporting[0]).toMatchObject({ subId: 'energi', subName: 'Energi', name: 'PT Nusa Energi', lastAt: '2026-10-15T08:42:00Z' })
+    expect(c.reporting[1].lastAt).toBe('2026-10-15T09:00:00Z')
+    expect(c.reporting[2].lastAt).toBeNull()
+    expect(c.total).toBe(8)
+  })
+
+  it('ptCoverage: belum melapor lintas subholding, tak pernah melapor dulu, lalu paling lama diam, lalu nama', () => {
+    const c = ptCoverage(cov, NO_FILTER)
+    // l3 (null) → e3 (4 hari) → l2 & l4 (3 hari, urut nama) → e4 (1 hari)
+    expect(c.silent.map((p) => p.id)).toEqual(['l3', 'e3', 'l2', 'l4', 'e4'])
+    expect(c.silent[0]).toMatchObject({ lastReportDate: null, subId: 'logistik', subName: 'Logistik' })
+    expect(c.silent.map((p) => p.subId)).toEqual(['logistik', 'energi', 'logistik', 'logistik', 'energi'])
+    expect(c.silent.every((p) => !c.reporting.some((r) => r.id === p.id))).toBe(true)
+  })
+
+  it('ptCoverage menghormati penyaring subholding dan PT', () => {
+    const energi = ptCoverage(cov, { sub: 'energi', pt: null })
+    expect(energi.reporting.map((p) => p.id)).toEqual(['e1', 'e2'])
+    expect(energi.silent.map((p) => p.id)).toEqual(['e3', 'e4'])
+    expect(energi.total).toBe(4)
+    const satu = ptCoverage(cov, { sub: 'energi', pt: 'e3' })
+    expect(satu.reporting).toEqual([])
+    expect(satu.silent.map((p) => p.id)).toEqual(['e3'])
+    expect(satu.total).toBe(1)
+    expect(ptCoverage(cov, { sub: 'energi', pt: 'e1' }).reporting.map((p) => p.id)).toEqual(['e1'])
+    expect(ptCoverage(null, NO_FILTER)).toEqual({ reporting: [], silent: [], total: 0 })
+  })
+
+  it('PT tanpa allPts (API lama) tidak memunculkan belum melapor dan lastReportDate opsional', () => {
+    const old: V2Data = { date: '2026-10-15', subholdings: [{ id: 'x', name: 'X', count: 1, ptCount: 1, pts: [{ id: 'p', name: 'PT P', reports: [rep('r')] }] }] }
+    const c = ptCoverage(old, NO_FILTER)
+    expect(c.silent).toEqual([])
+    expect(c.reporting.map((p) => p.id)).toEqual(['p'])
+  })
+
+  it('coverageCounts dan groupBySub', () => {
+    const c = ptCoverage(cov, NO_FILTER)
+    expect(coverageCounts(c)).toEqual({ semua: 8, sudah: 3, belum: 5 })
+    const g = groupBySub(c.reporting)
+    expect(g.map((x) => [x.subId, x.rows.map((r) => r.id)])).toEqual([['energi', ['e1', 'e2']], ['logistik', ['l1']]])
   })
 })

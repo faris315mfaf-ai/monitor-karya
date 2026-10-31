@@ -19,9 +19,11 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProper
 import { MotionConfig, motion } from 'framer-motion'
 import { ErrorNote, cx } from '@/components/mk'
 import { EvidenceLightbox, type LightboxState } from '../evidence'
+import { shPdfHref } from '@/lib/subholding/pdf-href'
+import { CoverageTiles, jumpToCoverage } from '../coverage'
 import { ReportDetail, type DetailReport } from '../report-detail'
 import { displayName, photosOf, subholdingLabel, toneOf } from '../logic'
-import { NO_FILTER, flatten, scoped, statusSummary, type Filter, type FlatV2 } from '../model'
+import { NO_FILTER, coverageCounts, flatten, ptCoverage, scoped, statusSummary, type CoverageTab, type Filter, type FlatV2 } from '../model'
 import type { OverviewScreenProps } from '../screen-types'
 import { AllView, ContentSkeleton, ScopeView, WeekView, type ContentActions } from './content'
 import {
@@ -71,6 +73,7 @@ export function TabletOverview(props: OverviewScreenProps) {
   const [lightbox, setLightbox] = useState<LightboxState>(null)
   // Perpindahan dipicu dari dalam isi (kartu/nama PT): fokus pindah ke kepala isi baru.
   const [focusNext, setFocusNext] = useState(false)
+  const [covTab, setCovTab] = useState<CoverageTab>('semua')
 
   const isWeek = range === 'week'
   const sub = useMemo(() => data?.subholdings.find((s) => s.id === filter.sub) ?? null, [data, filter.sub])
@@ -78,6 +81,7 @@ export function TabletOverview(props: OverviewScreenProps) {
   const all = useMemo(() => ({ line: allLine(data, week, range) }), [data, week, range])
   const list = useMemo(() => scoped(data, filter), [data, filter])
   const allList = useMemo(() => flatten(data), [data])
+  const coverage = useMemo(() => ptCoverage(data, filter), [data, filter])
   const curRow = rows.find((r) => r.id === filter.sub) ?? null
   const L = paneLayout(box?.w ?? 0, Boolean(filter.sub))
 
@@ -107,6 +111,7 @@ export function TabletOverview(props: OverviewScreenProps) {
     open: (r) => setDetail(toDetail(r)),
     photo: (r, i) => openPhoto(r, i),
   }
+  const cov = { coverage, tab: covTab, onTab: setCovTab, dateKey, range }
 
   const subNav = !data && !week ? (
     <SideSkeleton />
@@ -162,7 +167,7 @@ export function TabletOverview(props: OverviewScreenProps) {
       </div>
     )
   } else if (!filter.sub || !head) {
-    content = <AllView mode={L.mode} data={data} list={allList} act={act} />
+    content = <AllView mode={L.mode} data={data} list={allList} act={act} cov={cov} />
   } else {
     const ptDone = sub ? sub.pts.filter((p) => p.reports.length > 0).length : 0
     const ptTotal = sub ? sub.allPts?.length ?? Math.max(sub.ptCount ?? 0, sub.pts.length) : 0
@@ -178,6 +183,7 @@ export function TabletOverview(props: OverviewScreenProps) {
         ptTotal={ptTotal}
         ptSelected={Boolean(filter.pt)}
         act={act}
+        cov={cov}
       />
     )
   }
@@ -202,6 +208,16 @@ export function TabletOverview(props: OverviewScreenProps) {
               >
                 <SideHeader context={context} range={range} onRange={pickRange} />
                 {status ? <StatusCard {...status} /> : null}
+                {status ? (
+                  <CoverageTiles
+                    counts={coverageCounts(coverage)}
+                    tab={covTab}
+                    onPick={(t) => {
+                      setCovTab(t)
+                      jumpToCoverage()
+                    }}
+                  />
+                ) : null}
                 {subNav}
               </aside>
             ) : (
@@ -248,7 +264,12 @@ export function TabletOverview(props: OverviewScreenProps) {
         ) : null}
       </div>
 
-      <ReportDetail report={detail} onClose={() => setDetail(null)} onOpenPhoto={(i) => detail && openPhoto(detail, i)} />
+      <ReportDetail
+        report={detail}
+        onClose={() => setDetail(null)}
+        onOpenPhoto={(i) => detail && openPhoto(detail, i)}
+        pdfHref={(r) => shPdfHref({ id: r.id })}
+      />
       {/* Setelah pop-up supaya lightbox yang dibuka dari pop-up tampil di atasnya. */}
       <EvidenceLightbox state={lightbox} onChange={setLightbox} />
     </MotionConfig>

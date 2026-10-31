@@ -372,4 +372,30 @@ describe('GET /api/sh/overview — kind dan urutan', () => {
     })
     expect(byId.get(legacy)).toMatchObject({ reporterName: 'Pelapor', reporterTitle: 'Kepala Keuangan', decidedAt: null })
   })
+
+  it('allPts[].lastReportDate: DISETUJUI terakhir SEBELUM tanggal, jendela 90 hari, selain itu null', async () => {
+    const day = (key: string) => new Date(`${key}T00:00:00+07:00`)
+    // pt-a1: terakhir Senin 12 Okt (Jumat 9 Okt lebih lama; hari itu sendiri dan masa depan tidak dihitung).
+    seedReport({ status: 'DISETUJUI', reportDate: day('2026-10-09'), decidedAt: T0 })
+    seedReport({ status: 'DISETUJUI', reportDate: day('2026-10-12'), decidedAt: T0 })
+    seedReport({ status: 'DISETUJUI', reportDate: TODAY, decidedAt: T0 })
+    seedReport({ status: 'DISETUJUI', reportDate: day('2026-10-15'), decidedAt: T0 })
+    // pt-a0: yang belum disetujui diabaikan; yang disetujui di luar 90 hari tidak terhitung.
+    seedReport({ ptId: 'pt-a0', status: 'MENUNGGU', reportDate: day('2026-10-13') })
+    seedReport({ ptId: 'pt-a0', status: 'DISETUJUI', reportDate: day('2026-07-01'), decidedAt: T0 })
+    // pt-z1: tepat di tepi jendela (90 hari sebelum 14 Okt = 16 Jul) masih terhitung.
+    seedReport({ subholdingId: 'sh-z', ptId: 'pt-z1', createdById: 'u-shz', status: 'DISETUJUI', reportDate: day('2026-07-16'), decidedAt: T0 })
+
+    signIn('u-superuser')
+    const body = (await json(await overviewGet(new NextRequest('http://localhost/api/sh/overview')))) as Json
+    const last = (subId: string) =>
+      Object.fromEntries(body.subholdings.find((s: Json) => s.id === subId).allPts.map((p: Json) => [p.id, p.lastReportDate]))
+    expect(last('sh-a')).toEqual({ 'pt-a0': null, 'pt-a1': '2026-10-12' })
+    expect(last('sh-z')).toEqual({ 'pt-z1': '2026-07-16' })
+
+    // Tanggal lain: patokan bergeser (sebelum 12 Okt → 9 Okt).
+    const earlier = (await json(await overviewGet(new NextRequest('http://localhost/api/sh/overview?date=2026-10-12')))) as Json
+    const alfa = earlier.subholdings.find((s: Json) => s.id === 'sh-a')
+    expect(alfa.allPts.find((p: Json) => p.id === 'pt-a1').lastReportDate).toBe('2026-10-09')
+  })
 })

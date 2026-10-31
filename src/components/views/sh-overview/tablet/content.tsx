@@ -10,9 +10,10 @@
 
 import { useId, useLayoutEffect, useRef } from 'react'
 import { ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
+import { CoverageSection } from '../coverage'
 import { timeLabel } from '../detail-logic'
 import { displayName, photosOf, subholdingLabel, toneOf, toneVars, type Tone } from '../logic'
-import { dayLabel, type Filter, type FlatV2, type V2Data, type WeekData } from '../model'
+import { dayLabel, type Coverage, type CoverageTab, type Filter, type FlatV2, type V2Data, type WeekData } from '../model'
 import type { OverviewRange } from '../screen-types'
 import {
   heatCells, ptBlocks, ptShort, reportMeta, scopeMeta, subCards, weekHighlights, weekRangeLabel, weekRows,
@@ -30,6 +31,15 @@ export type ContentActions = {
   photo: (r: FlatV2, index: number) => void
 }
 
+/** Kategori PT sudah / belum melapor: status tab dipegang TabletOverview (ubin di panel kiri mengendalikannya). */
+export type CoverageProps = {
+  coverage: Coverage
+  tab: CoverageTab
+  onTab: (t: CoverageTab) => void
+  dateKey: string
+  range: OverviewRange
+}
+
 function pad(mode: PaneMode) {
   return mode === 'three' ? 'px-7 pt-7 pb-10' : 'px-6 pt-6 pb-10'
 }
@@ -41,11 +51,13 @@ export function AllView({
   data,
   list,
   act,
+  cov,
 }: {
   mode: PaneMode
   data: V2Data
   list: FlatV2[]
   act: ContentActions
+  cov: CoverageProps
 }) {
   const uid = useId()
   const hi = list.filter((r) => r.highlight)
@@ -66,6 +78,8 @@ export function AllView({
           <p className={cx(CARD, 'm-0 px-4 py-3.5 t-callout font-normal text-ink-2')}>Tidak ada sorotan untuk tanggal ini.</p>
         )}
       </section>
+
+      <CoverageSection {...cov} wide title="Pelaporan PT" onOpenPt={(sub, pt) => act.pick({ sub, pt })} />
 
       <section aria-labelledby={`${uid}-all`} className="flex flex-col gap-3">
         <SectionHead id={`${uid}-all`} title="Semua laporan" aside={`${list.length} laporan disetujui`} />
@@ -145,6 +159,7 @@ export function ScopeView({
   ptTotal,
   ptSelected,
   act,
+  cov,
 }: {
   mode: PaneMode
   range: OverviewRange
@@ -156,6 +171,7 @@ export function ScopeView({
   ptTotal?: number
   ptSelected: boolean
   act: ContentActions
+  cov: CoverageProps
 }) {
   const hi = list.filter((r) => r.highlight)
   const blocks = ptBlocks(list)
@@ -185,6 +201,8 @@ export function ScopeView({
           ))}
         </section>
       ) : null}
+
+      <CoverageSection {...cov} wide title="Pelaporan PT" onOpenPt={(sub, pt) => act.pick({ sub, pt })} />
 
       {blocks.map((b) => (
         <section key={b.ptId || b.ptName} aria-label={displayName(b.ptName)} className="flex flex-col gap-2">

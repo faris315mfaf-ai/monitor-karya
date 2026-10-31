@@ -695,11 +695,12 @@ describe('GET /api/sh/overview', () => {
           ],
           // Semua PT aktif (urut nama, termasuk lewat sektor; nonaktif tidak).
           allPts: [
-            { id: 'pt-a2', name: 'PT Alfa Dua' },
-            { id: 'pt-a1', name: 'PT Alfa Satu' },
+            { id: 'pt-a2', name: 'PT Alfa Dua', lastReportDate: null },
+            // Laporan "Disetujui kemarin" di atas → terakhir melapor kemarin (13 Okt).
+            { id: 'pt-a1', name: 'PT Alfa Satu', lastReportDate: '2026-10-13' },
           ],
         },
-        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [], allPts: [{ id: 'pt-b1', name: 'PT Beta Satu' }] },
+        { id: 'sh-b', name: 'Subholding Beta', count: 0, ptCount: 0, pts: [], allPts: [{ id: 'pt-b1', name: 'PT Beta Satu', lastReportDate: null }] },
       ])
     }
     signIn('u-superuser')

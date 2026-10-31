@@ -28,6 +28,7 @@ import { subholdingLabel, toneOf } from '../sh-overview/logic'
 import { EDGE_WIDTH, FADE, NAV_SPRING, dayHeading, monoOf, shouldDismiss, type PickSection } from '../sh-overview/mobile/mobile-logic'
 import { PickerSheet } from '../sh-overview/mobile/picker-sheet'
 import { wibDateKey } from '../sh-overview/logic'
+import { PdfLink } from './pdf-link'
 import { Description, DecidedNote, EvidenceGallery, Facts, HighlightNote, SubMono, Thread, evidenceOf } from './body'
 import { ApproveButton, CommentField, DecisionHint, HighlightCard, ReviseButton, useDecision } from './decision'
 import {
@@ -472,6 +473,7 @@ function ScreenBody({
               {sent.text}
               {sent.wait ? <span className={sent.warn ? 'font-semibold text-waspada' : undefined}>{sent.wait}</span> : null}
             </span>
+            <PdfLink reportId={r.id} title={r.kegiatan} className="mt-1 min-h-11 self-start" />
           </div>
           <div className="px-4">
             <HighlightNote r={r} />
