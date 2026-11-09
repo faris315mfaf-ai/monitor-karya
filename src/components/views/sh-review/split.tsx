@@ -2,7 +2,9 @@
 
 /**
  * Persetujuan Supervisor — tablet & desktop (papan S-Tablet-Lanskap dan
- * S-Tablet-Tegak, 16 Okt 2026).
+ * S-Tablet-Tegak, 16 Okt 2026). Memenuhi layar: selebar area konten shell
+ * (menembus padding & batas lebar isi) dan sampai tepi bawah layar; dock/tab
+ * bar bawah melayang di atasnya, jadi isi panel diberi ruang `--dock-clear`.
  *
  * Lebar kontainer ≥ 1000px: tiga panel — subholding (jumlah menunggu +
  * umur terlama) · antrean · rincian. Di bawahnya dua panel: antrean dengan
@@ -60,15 +62,20 @@ export function ReviewSplit() {
     <MotionConfig reducedMotion="user">
       <div
         ref={ref}
-        style={{ ...PANE_VARS, height: box?.h ?? 'calc(100dvh - 160px)' }}
-        className="flex min-h-[480px] w-full overflow-hidden rounded-[var(--radius-xl)] border border-line bg-bg"
+        style={{
+          ...PANE_VARS,
+          height: box ? box.h + box.pad : 'calc(100dvh - 160px)',
+          ['--dock-clear' as string]: `${box?.pad ?? 0}px`,
+          ...(box?.edge ? { marginLeft: box.edge.left, width: box.edge.width, maxWidth: 'none', marginBottom: -box.pad } : null),
+        }}
+        className="flex min-h-[480px] w-full overflow-hidden border-t border-line bg-bg"
       >
         {box ? (
           <>
             {three ? (
               <aside
                 aria-label="Subholding"
-                className="scrollbar-thin flex h-full w-[252px] shrink-0 flex-col gap-4 overflow-y-auto overscroll-contain bg-[var(--tab-side)] px-3 pt-6 pb-6 shadow-[inset_-1px_0_0_var(--line)]"
+                className="scrollbar-thin flex h-full w-[252px] shrink-0 flex-col gap-4 overflow-y-auto overscroll-contain bg-[var(--tab-side)] px-3 pt-6 pb-[calc(var(--dock-clear)+24px)] shadow-[inset_-1px_0_0_var(--line)]"
               >
                 <Heading total={s.totalWaiting} ready={Boolean(s.data)} />
                 <SubNav s={s} now={now} />
@@ -219,7 +226,7 @@ function QueuePane({ s, three, now }: { s: ReviewState; three: boolean; now: Dat
         ) : null}
         <StatusTabs value={s.tab} counts={s.counts} onChange={s.pickTab} />
       </div>
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-5">
+      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-[calc(var(--dock-clear)+20px)]">
         {!s.data ? (
           s.error ? (
             <div className="px-1 pt-2">
@@ -348,7 +355,8 @@ function Detail({ r, s, now, onPhoto }: { r: ShReport; s: ReviewState; now: Date
   const sent = sentLine(r, now)
   return (
     <div className="flex min-h-full flex-col">
-      <div className="flex flex-1 flex-col gap-[18px] px-6 pt-5 pb-8">
+      {/* Tanpa bilah keputusan, isi sendiri yang memberi ruang dock bawah. */}
+      <div className={cx('flex flex-1 flex-col gap-[18px] px-6 pt-5', d.gate.decidable ? 'pb-8' : 'pb-[calc(var(--dock-clear)+32px)]')}>
         <header className="flex flex-col gap-1.5">
           <h2 data-pane-focus tabIndex={-1} className="m-0 t-title-2 text-ink outline-none">
             {r.kegiatan}
@@ -373,7 +381,7 @@ function Detail({ r, s, now, onPhoto }: { r: ShReport; s: ReviewState; now: Date
           role="group"
           aria-label="Keputusan"
           className={cx(
-            'sticky bottom-0 z-[1] flex flex-none flex-col items-end gap-1.5 pt-3 pr-5 pb-2.5 pl-6',
+            'sticky bottom-0 z-[1] flex flex-none flex-col items-end gap-1.5 pt-3 pr-5 pb-[calc(var(--dock-clear)+10px)] pl-6',
             'bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] shadow-[inset_0_1px_0_var(--line)] backdrop-blur-[24px] backdrop-saturate-[1.8]'
           )}
         >
