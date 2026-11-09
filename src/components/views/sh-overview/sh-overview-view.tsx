@@ -8,10 +8,13 @@
  * per perangkat.
  *
  * Data: GET /api/sh/overview?date=YYYY-MM-DD dan, untuk 7 hari,
- * GET /api/sh/overview/week?end=…[&subholdingId=…].
+ * GET /api/sh/overview/week?end=…[&subholdingId=…]. Diperbarui sendiri di
+ * belakang tiap 30 detik selama tab terlihat dan saat tab kembali terlihat,
+ * jadi laporan yang baru disetujui supervisor muncul tanpa memuat ulang
+ * (tanpa redup/kerangka; gagal sesaat tetap menampilkan data terakhir).
  */
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useResource } from '@/hooks/use-resource'
 import { useApp } from '@/components/app-provider'
 import { ROLE_LABELS } from '@/lib/constants'
@@ -24,6 +27,8 @@ import { MobileOverview } from './mobile'
 import { TabletOverview } from './tablet'
 
 const COMPACT = '(max-width: 599.98px)'
+/** Selang penyegaran latar dashboard (laporan baru disetujui supervisor). */
+const POLL_MS = 30_000
 
 const noopSubscribe = () => () => {}
 
@@ -53,12 +58,14 @@ export function ShOverviewView() {
   const [pickedView, setPickedView] = useState<DayView | null>(null)
   const dayView: DayView = pickedView ?? (hydrated ? loadDayView() : 'gulir')
 
-  const day = useResource<V2Data>(`/api/sh/overview?date=${dateKey}`)
+  const day = useResource<V2Data>(`/api/sh/overview?date=${dateKey}`, { keepStale: true })
   const filter = useMemo(() => (day.data ? validFilter(day.data, rawFilter) : rawFilter), [day.data, rawFilter])
   const weekUrl = range === 'week'
     ? `/api/sh/overview/week?end=${dateKey}${filter.sub ? `&subholdingId=${encodeURIComponent(filter.sub)}` : ''}`
     : null
-  const week = useResource<WeekData>(weekUrl)
+  const week = useResource<WeekData>(weekUrl, { keepStale: true })
+  // Penyegaran latar tidak meredupkan layar; muat ulang oleh pengguna tetap menampilkan status memuat.
+  const [quiet, setQuiet] = useState(false)
 
   const onFilter = useCallback((f: Filter) => {
     setPicked(f)
@@ -68,19 +75,41 @@ export function ShOverviewView() {
     setPickedView(v)
     saveDayView(v)
   }, [])
+  const pickRange = useCallback((r: OverviewRange) => {
+    setQuiet(false)
+    setRange(r)
+  }, [])
+  const { reload: reloadDay } = day
+  const { reload: reloadWeek } = week
   const reload = useCallback(() => {
-    day.reload()
-    if (weekUrl) week.reload()
-  }, [day, week, weekUrl])
+    setQuiet(false)
+    reloadDay()
+    if (weekUrl) reloadWeek()
+  }, [reloadDay, reloadWeek, weekUrl])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      setQuiet(true)
+      reloadDay()
+      if (weekUrl) reloadWeek()
+    }
+    const t = window.setInterval(refresh, POLL_MS)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(t)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [reloadDay, reloadWeek, weekUrl])
 
   const props = {
     roleName: ROLE_LABELS[user.role] ?? 'Manajemen',
     range,
-    onRange: setRange,
+    onRange: pickRange,
     dateKey,
     data: day.data ?? null,
     week: range === 'week' ? (week.data ?? null) : null,
-    loading: day.loading || (range === 'week' && week.loading),
+    loading: !quiet && (day.loading || (range === 'week' && week.loading)),
     error: day.error ?? (range === 'week' ? week.error : null) ?? null,
     reload,
     filter,

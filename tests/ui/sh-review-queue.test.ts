@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ageLabel, commentWho, isResent, longWaitCount, longWaitLine, neighborId, oldestOf, positionText, queueFlag, queueGroups,
+  ageLabel, commentWho, isResent, longWaitCount, longWaitLine, neighborId, oldestOf, positionText, queueEventLine, queueFlag, queueGroups,
   reportDateLabel, sentLine, stampLabel, subLine, todayRecap, waitDays, waitingHeadline, type ShReport,
 } from '@/components/views/sh-review/logic'
 
@@ -14,6 +14,31 @@ const base: ShReport = {
   decidedByName: null, evidenceCount: 1, evidence: [{ id: 'e', fileName: 'a.jpg', mime: 'image/jpeg' }], comments: [],
 }
 const rep = (o: Partial<ShReport>): ShReport => ({ ...base, ...o })
+
+describe('waktu di antrean', () => {
+  const c = (kind: string, createdAt: string) => ({ id: kind + createdAt, kind, body: 'x', authorName: 'A', authorRole: '', createdAt, editedAt: null, mine: false })
+
+  it('menunggu: jam kirim hari ini; kiriman ulang setelah perbaikan; hari lain dengan tanggal', () => {
+    expect(queueEventLine(base, NOW)).toBe('Dikirim 08.00')
+    expect(queueEventLine(rep({ submittedAt: '2026-10-14T09:20:00Z' }), NOW)).toBe('Dikirim Rabu 14 Okt, 16.20')
+    expect(queueEventLine(rep({ comments: [c('PERBAIKAN', '2026-10-14T09:00:00Z')] }), NOW)).toBe('Diperbaiki & dikirim ulang 08.00')
+    expect(queueEventLine(rep({ submittedAt: null as unknown as string }), NOW)).toBe('')
+  })
+
+  it('perbaikan: kapan diminta, dan kapan admin membalas setelahnya', () => {
+    const r = rep({ status: 'PERLU_PERBAIKAN', decidedAt: '2026-10-15T02:30:00Z' })
+    expect(queueEventLine(r, NOW)).toBe('Diminta perbaikan 09.30')
+    expect(queueEventLine({ ...r, comments: [c('BALASAN', '2026-10-15T02:00:00Z')] }, NOW)).toBe('Diminta perbaikan 09.30')
+    expect(queueEventLine({ ...r, comments: [c('BALASAN', '2026-10-15T02:45:00Z'), c('BALASAN', '2026-10-15T02:55:00Z')] }, NOW)).toBe(
+      'Diminta perbaikan 09.30 · dibalas admin 09.55'
+    )
+  })
+
+  it('disetujui: jam persetujuan supervisor', () => {
+    expect(queueEventLine(rep({ status: 'DISETUJUI', decidedAt: '2026-10-15T02:42:00Z' }), NOW)).toBe('Disetujui 09.42')
+    expect(queueEventLine(rep({ status: 'DISETUJUI', decidedAt: null }), NOW)).toBe('')
+  })
+})
 
 describe('umur antrean (WIB)', () => {
   it('waitDays menghitung hari kalender WIB, bukan 24 jam', () => {
@@ -52,12 +77,12 @@ describe('penanda & kelompok', () => {
     expect(queueFlag(base)).toBeNull()
   })
 
-  it('queueGroups membagi lama/hari ini dan membuang kelompok kosong', () => {
-    const items = [rep({ id: 'a', submittedAt: '2026-10-13T01:00:00Z' }), rep({ id: 'b' }), rep({ id: 'c' })]
+  it('queueGroups: hari ini dulu (kiriman terbaru), lalu lebih dari sehari; kelompok kosong dibuang', () => {
+    const items = [rep({ id: 'b' }), rep({ id: 'c' }), rep({ id: 'a', submittedAt: '2026-10-13T01:00:00Z' })]
     const g = queueGroups(items, 'MENUNGGU', NOW)
     expect(g.map((x) => [x.key, x.title, x.items.map((r) => r.id)])).toEqual([
-      ['old', 'Lebih dari sehari · 1', ['a']],
       ['today', 'Masuk hari ini · 2', ['b', 'c']],
+      ['old', 'Lebih dari sehari · 1', ['a']],
     ])
     expect(queueGroups([rep({ id: 'b' })], 'MENUNGGU', NOW).map((x) => x.key)).toEqual(['today'])
     expect(queueGroups(items, 'DISETUJUI', NOW)).toEqual([{ key: 'all', title: '3 laporan', warn: false, items }])

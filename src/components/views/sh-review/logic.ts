@@ -330,16 +330,17 @@ export const FLAG_LABEL: Record<Exclude<QueueFlag, null>, string> = {
 export type QueueGroup<T> = { key: string; title: string; warn: boolean; items: T[] }
 
 /**
- * Kelompok antrean ponsel: Menunggu dibagi "Lebih dari sehari" (kuning) dan
- * "Masuk hari ini"; status lain satu kelompok. Kelompok kosong dibuang.
+ * Kelompok antrean ponsel: Menunggu dibagi "Masuk hari ini" lalu "Lebih dari
+ * sehari" (kuning) — sejalan dengan urutan kiriman terbaru dulu; status lain
+ * satu kelompok. Kelompok kosong dibuang.
  */
 export function queueGroups<T extends Pick<ShReport, 'submittedAt'>>(items: T[], status: ShStatus, now: Date = new Date()): QueueGroup<T>[] {
   if (status !== 'MENUNGGU') return items.length ? [{ key: 'all', title: `${items.length} laporan`, warn: false, items }] : []
-  const old = items.filter((r) => waitDays(r.submittedAt, now) >= 1)
   const fresh = items.filter((r) => waitDays(r.submittedAt, now) < 1)
+  const old = items.filter((r) => waitDays(r.submittedAt, now) >= 1)
   return [
-    { key: 'old', title: `Lebih dari sehari · ${old.length}`, warn: true, items: old },
     { key: 'today', title: `Masuk hari ini · ${fresh.length}`, warn: false, items: fresh },
+    { key: 'old', title: `Lebih dari sehari · ${old.length}`, warn: true, items: old },
   ].filter((g) => g.items.length > 0)
 }
 
@@ -410,6 +411,38 @@ export function sentLine(
   const by = r.decidedByName ? ` oleh ${r.decidedByName}` : ''
   const verb = r.status === 'DISETUJUI' ? 'Disetujui' : 'Diminta perbaikan'
   return { text: `${verb} ${stampLabel(r.decidedAt ?? r.submittedAt)}${by}`, wait: '', warn: false }
+}
+
+/** Jam saja bila hari yang sama dengan `now` (WIB), selain itu "Rabu 14 Okt, 16.20". */
+function clockOrStamp(iso: string | null | undefined, now: Date): string {
+  const p = wibParts(iso)
+  if (!p) return ''
+  const n = wibParts(now.toISOString())
+  if (n && dayNumber(n) === dayNumber(p)) return `${String(p.h).padStart(2, '0')}.${String(p.min).padStart(2, '0')}`
+  return stampLabel(iso)
+}
+
+/**
+ * Baris waktu di antrean (9 Nov 2026): kapan admin subholding mengirim atau
+ * mengirim ulang hasil perbaikan, kapan perbaikan diminta (dan kapan admin
+ * membalas), kapan disetujui. Jam saja untuk hari ini.
+ */
+export function queueEventLine(
+  r: Pick<ShReport, 'status' | 'submittedAt' | 'decidedAt' | 'comments'>,
+  now: Date = new Date()
+): string {
+  if (r.status === 'MENUNGGU') {
+    const t = clockOrStamp(r.submittedAt, now)
+    return t ? `${isResent(r) ? 'Diperbaiki & dikirim ulang' : 'Dikirim'} ${t}` : ''
+  }
+  const t = clockOrStamp(r.decidedAt, now)
+  if (r.status === 'DISETUJUI') return t ? `Disetujui ${t}` : ''
+  const decided = r.decidedAt ? new Date(r.decidedAt).getTime() : -Infinity
+  const reply = (r.comments ?? [])
+    .filter((c) => c.kind === 'BALASAN' && new Date(c.createdAt).getTime() > decided)
+    .at(-1)
+  const parts = [t && `Diminta perbaikan ${t}`, reply && `dibalas admin ${clockOrStamp(reply.createdAt, now)}`]
+  return parts.filter(Boolean).join(' · ')
 }
 
 /** "2 dari 6". */

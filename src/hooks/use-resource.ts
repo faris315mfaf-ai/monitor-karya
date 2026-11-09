@@ -18,8 +18,13 @@ type State<T> = {
  * effect body, so this satisfies React 19's `set-state-in-effect` rule. A 401
  * means the session is gone, so the browser goes to the sign-in page instead of
  * each view inventing its own "unauthorized" state.
+ *
+ * `keepStale`: a failed re-read of the SAME url keeps the last good data (the
+ * error is still reported) — for screens that refresh themselves in the
+ * background and should not blank out on a passing network hiccup.
  */
-export function useResource<T>(url: string | null) {
+export function useResource<T>(url: string | null, opts: { keepStale?: boolean } = {}) {
+  const keepStale = opts.keepStale ?? false
   const router = useRouter()
   const [nonce, setNonce] = useState(0)
   const [state, setState] = useState<State<T>>({
@@ -53,14 +58,19 @@ export function useResource<T>(url: string | null) {
       })
       .catch((e: Error) => {
         if (!cancelled) {
-          setState({ data: null, loading: false, error: e.message || 'Gagal memuat data', key })
+          setState((prev) => ({
+            data: keepStale && prev.key?.startsWith(`${url}#`) ? prev.data : null,
+            loading: false,
+            error: e.message || 'Gagal memuat data',
+            key,
+          }))
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [url, key, router])
+  }, [url, key, router, keepStale])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
 

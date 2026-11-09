@@ -7,7 +7,8 @@
  * bar bawah melayang di atasnya, jadi isi panel diberi ruang `--dock-clear`.
  *
  * Lebar kontainer ≥ 1000px: tiga panel — subholding (jumlah menunggu +
- * umur terlama) · antrean · rincian. Di bawahnya dua panel: antrean dengan
+ * umur terlama; bisa dikecilkan ke samping jadi lajur inisial, pilihan
+ * diingat per perangkat) · antrean · rincian. Di bawahnya dua panel: antrean dengan
  * pemilih subholding popover di atasnya · rincian. Lebar diukur pada kontainer
  * (shell punya sidebar), tiap panel bergulir sendiri.
  *
@@ -18,7 +19,7 @@
  * laporan berikutnya terbuka.
  */
 
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from 'framer-motion'
 import { ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
 import { EvidenceLightbox, type LightboxState } from '../sh-overview/evidence'
@@ -46,12 +47,40 @@ const PANE_VARS = {
 
 const THREE_MIN = 1000
 
+/** Panel subholding dikecilkan (lajur inisial) — tersimpan per perangkat. */
+const SUBNAV_KEY = 'mk:sh-review:subholding-kecil'
+const noopSubscribe = () => () => {}
+
+function loadSubCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SUBNAV_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function saveSubCollapsed(v: boolean): void {
+  try {
+    window.localStorage.setItem(SUBNAV_KEY, v ? '1' : '0')
+  } catch {
+    /* penyimpanan diblokir: pilihan berlaku selama sesi */
+  }
+}
+
 export function ReviewSplit() {
   const s = useReview()
   const { ref, box } = useBox()
   const [lightbox, setLightbox] = useState<LightboxState>(null)
   const [now] = useState(() => new Date())
   const three = (box?.w ?? 0) >= THREE_MIN
+  // Pilihan tersimpan baru dibaca setelah hidrasi (localStorage tidak ada di server).
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false)
+  const [pickedSmall, setPickedSmall] = useState<boolean | null>(null)
+  const small = pickedSmall ?? (hydrated ? loadSubCollapsed() : false)
+  const toggleSmall = () => {
+    setPickedSmall(!small)
+    saveSubCollapsed(!small)
+  }
 
   const openPhoto = (r: ShReport, index: number) => {
     const items = evidenceOf(r)
@@ -75,10 +104,30 @@ export function ReviewSplit() {
             {three ? (
               <aside
                 aria-label="Subholding"
-                className="scrollbar-thin flex h-full w-[252px] shrink-0 flex-col gap-4 overflow-y-auto overscroll-contain bg-[var(--tab-side)] px-3 pt-6 pb-[calc(var(--dock-clear)+24px)] shadow-[inset_-1px_0_0_var(--line)]"
+                className={cx(
+                  'scrollbar-thin flex h-full shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain bg-[var(--tab-side)] pt-6 pb-[calc(var(--dock-clear)+24px)] shadow-[inset_-1px_0_0_var(--line)]',
+                  'motion-safe:transition-[width] motion-safe:duration-[var(--dur-base)] motion-safe:ease-[var(--ease-standard)]',
+                  small ? 'w-[76px] px-2' : 'w-[252px] px-3'
+                )}
               >
-                <Heading total={s.totalWaiting} ready={Boolean(s.data)} />
-                <SubNav s={s} now={now} />
+                <div className={cx('flex items-start gap-1', small ? 'justify-center' : 'justify-between')}>
+                  <Heading total={s.totalWaiting} ready={Boolean(s.data)} hidden={small} />
+                  <button
+                    type="button"
+                    onClick={toggleSmall}
+                    aria-expanded={!small}
+                    aria-label={small ? 'Lebarkan panel subholding' : 'Kecilkan panel subholding'}
+                    title={small ? 'Lebarkan panel subholding' : 'Kecilkan panel subholding'}
+                    className={cx(
+                      'flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-2 hover:bg-fill-1 hover:text-ink',
+                      'motion-safe:transition-[transform,background-color] motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.92]',
+                      FOCUS_RING
+                    )}
+                  >
+                    <Icon name={small ? 'kanan' : 'kiri'} size={18} strokeWidth={2.4} />
+                  </button>
+                </div>
+                <SubNav s={s} now={now} small={small} />
               </aside>
             ) : null}
             <QueuePane s={s} three={three} now={now} />
@@ -91,9 +140,10 @@ export function ReviewSplit() {
   )
 }
 
-function Heading({ total, ready }: { total: number; ready: boolean }) {
+function Heading({ total, ready, hidden }: { total: number; ready: boolean; hidden?: boolean }) {
+  // Panel dikecilkan: judul tetap ada untuk pembaca layar.
   return (
-    <div className="flex flex-col gap-0.5 px-2">
+    <div className={cx('flex min-w-0 flex-col gap-0.5 px-2', hidden && 'sr-only')}>
       <span className="t-footnote font-semibold text-ink-2">{ready ? waitingHeadline(total) : 'Memuat antrean…'}</span>
       <h1 className="m-0 t-title-2 tracking-[-0.025em] text-ink">Persetujuan</h1>
     </div>
@@ -102,7 +152,7 @@ function Heading({ total, ready }: { total: number; ready: boolean }) {
 
 /* ---------- Panel subholding ---------- */
 
-function SubNav({ s, now }: { s: ReviewState; now: Date }) {
+function SubNav({ s, now, small }: { s: ReviewState; now: Date; small: boolean }) {
   const subs = s.subholdings
   if (!s.data) {
     return (
@@ -117,7 +167,7 @@ function SubNav({ s, now }: { s: ReviewState; now: Date }) {
   return (
     <LayoutGroup id="sv-sub">
       <nav aria-label="Pilih subholding" className="flex flex-col gap-0.5">
-        <SubButton name="Semua subholding" mono="∑" id={null} line={all} count={s.totalWaiting} current={s.sub === null} onClick={() => s.pickSub(null)} />
+        <SubButton name="Semua subholding" mono="∑" id={null} line={all} count={s.totalWaiting} current={s.sub === null} small={small} onClick={() => s.pickSub(null)} />
         {subs.map((x) => (
           <SubButton
             key={x.id}
@@ -126,6 +176,7 @@ function SubNav({ s, now }: { s: ReviewState; now: Date }) {
             line={subLine(x, now)}
             count={x.waiting}
             current={s.sub === x.id}
+            small={small}
             onClick={() => s.pickSub(x.id)}
           />
         ))}
@@ -141,6 +192,7 @@ function SubButton({
   line,
   count,
   current,
+  small,
   onClick,
 }: {
   name: string
@@ -149,8 +201,39 @@ function SubButton({
   line: { text: string; warn: boolean }
   count: number
   current: boolean
+  /** Lajur inisial: hanya lingkaran + lencana; nama di label & tooltip. */
+  small: boolean
   onClick: () => void
 }) {
+  if (small) {
+    const label = [name, count > 0 ? `${count} menunggu` : null, line.text].filter(Boolean).join(', ')
+    return (
+      <button
+        type="button"
+        aria-current={current ? 'page' : undefined}
+        aria-label={label}
+        title={label}
+        onClick={onClick}
+        className={cx(
+          'relative flex h-[52px] w-full cursor-pointer items-center justify-center rounded-[12px]',
+          !current && 'hover:bg-fill-1',
+          'motion-safe:transition-[transform,background-color] motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.96]',
+          FOCUS_RING
+        )}
+      >
+        {current ? <ActiveBg layoutId="sv-sub-aktif" className="rounded-[12px]" /> : null}
+        <Mono name={name} text={mono} tone={id ? toneOf(id) : null} size={34} className="relative" />
+        {count > 0 ? (
+          <span
+            aria-hidden
+            className="absolute top-1 right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent-fill px-[5px] t-caption font-bold tabular-nums text-on-accent"
+          >
+            {count}
+          </span>
+        ) : null}
+      </button>
+    )
+  }
   return (
     <button
       type="button"

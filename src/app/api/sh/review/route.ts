@@ -13,8 +13,8 @@ const MAX_ITEMS = 200
 /**
  * GET /api/sh/review?status=MENUNGGU|PERLU_PERBAIKAN|DISETUJUI&subholdingId&date=YYYY-MM-DD
  * (`shreport:review`: Supervisor, Super Admin). Bawaan status MENUNGGU; tanpa
- * `date` = semua tanggal. MENUNGGU diurut terlama dulu (antrean), status lain
- * diurut keputusan terbaru. Maksimal 200 butir.
+ * `date` = semua tanggal. MENUNGGU diurut kiriman terbaru dulu (9 Nov 2026,
+ * keputusan pemilik), status lain diurut keputusan terbaru. Maksimal 200 butir.
  * → { items: ShReport[], counts: { MENUNGGU, PERLU_PERBAIKAN, DISETUJUI },
  *     subholdings: [{ id, name, waiting, oldestAt }],
  *     today: { approved, highlighted, revised } }
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       db.subholdingReport.findMany({
         where: { ...base, status: statusRaw },
         select: SH_REPORT_SELECT,
-        orderBy: statusRaw === 'MENUNGGU' ? [{ submittedAt: 'asc' }] : [{ decidedAt: 'desc' }, { submittedAt: 'desc' }],
+        orderBy: statusRaw === 'MENUNGGU' ? [{ submittedAt: 'desc' }] : [{ decidedAt: 'desc' }, { submittedAt: 'desc' }],
         take: MAX_ITEMS,
       }),
       statusCounts(base),

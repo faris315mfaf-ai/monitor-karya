@@ -3,15 +3,15 @@
 /**
  * Bagian antrean bersama ponsel & tablet: kontrol status dengan jempol yang
  * bergeser (layoutId, pegas kritis) dan isi satu baris antrean (gambar kecil,
- * judul dua baris, umur, asal, satu penanda).
+ * judul dua baris, umur, asal, waktu kirim/perbaikan/persetujuan, satu penanda).
  */
 
 import { useId } from 'react'
 import { motion } from 'framer-motion'
-import { cx } from '@/components/mk'
+import { Icon, cx } from '@/components/mk'
 import { QueueThumb } from './body'
 import { Star } from './decision'
-import { FLAG_LABEL, LONG_WAIT_DAYS, STATUS_TABS, ageLabel, queueFlag, waitDays, type ShReport, type ShStatus } from './logic'
+import { FLAG_LABEL, LONG_WAIT_DAYS, STATUS_TABS, ageLabel, queueEventLine, queueFlag, waitDays, type ShReport, type ShStatus } from './logic'
 
 export const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
 export const SNAP = { type: 'spring', bounce: 0, duration: 0.3 } as const
@@ -83,17 +83,24 @@ export function QueueRowContent({
   const flag = queueFlag(r)
   const pt = r.ptName.replace(/^PT\.?\s+/i, '')
   const meta = [subLabel, pt, r.reporterName].filter(Boolean).join(' · ')
+  const when = queueEventLine(r, now)
   return (
     <>
       <QueueThumb r={r} size={thumb} />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-baseline gap-2">
           <span className="line-clamp-2 min-w-0 flex-1 t-body-strong leading-[1.3] text-ink">{r.kegiatan}</span>
-          {waiting && !trailing ? (
+          {waiting && days >= 1 && !trailing ? (
             <span className={cx('shrink-0 t-caption tabular-nums', long ? 'font-bold text-waspada' : 'text-ink-2')}>{ageLabel(days)}</span>
           ) : null}
         </span>
         <span className="truncate t-caption font-normal text-ink-2">{meta}</span>
+        {when ? (
+          <span className="flex min-w-0 items-center gap-1 t-caption font-medium tabular-nums text-ink-2">
+            <Icon name="waktu" size={12} strokeWidth={2.2} className="flex-none" />
+            <span className="truncate">{when}</span>
+          </span>
+        ) : null}
         {flag ? (
           <span
             className={cx(
