@@ -25,7 +25,7 @@ import { ReportFeed } from '../report-feed'
 import { ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewRange, OverviewScreenProps } from '../screen-types'
 import { dayHeading, toDetail } from './logic'
-import { RangeControl } from './parts'
+import { PageHeader } from './panes'
 
 const pdfOf = (r: DetailReport) => shPdfHref({ id: r.id })
 
@@ -58,15 +58,7 @@ export function TabletDayFeed({ roleName, range, onRange, dateKey, data, loading
           busy && 'opacity-60'
         )}
       >
-        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="t-footnote font-semibold text-ink-2">{context}</span>
-            <h1 className="m-0 t-title-1 tracking-[-0.025em] text-ink">Laporan terbaru</h1>
-          </div>
-          <div className="w-full max-w-[360px]">
-            <RangeControl value={range} onChange={pickRange} />
-          </div>
-        </header>
+        <PageHeader context={context} range={range} onRange={pickRange} />
 
         {!data ? (
           loading || !error ? (

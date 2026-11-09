@@ -5,10 +5,11 @@
  * desktop, rentang Hari ini / Kemarin (canvas "Opsi dashboard Ketum", papan
  * "Opsi 1 · akordeon + rincian — Z Fold 7 terbuka").
  *
- * Kontainer ≥ 760px: dua panel. Kiri: kepala + rentang, kartu status, dan
- * akordeon subholding → PT → laporan (bergulir sendiri). Kanan: rincian
- * laporan terpilih — bawaan laporan terbaru di PT/subholding yang terbuka —
- * dengan tombol Lihat PDF. Lebih sempit: satu kolom, rincian di pop-up.
+ * Halaman penuh seperti tampilan Semua terbuka: kepala + rentang, kartu
+ * status, lalu kontainer ≥ 760px dua kolom — kiri akordeon subholding → PT →
+ * laporan (ikut gulir halaman), kanan panel rincian yang menempel di layar
+ * (sticky) dan bergulir sendiri; bawaan laporan terbaru di PT/subholding yang
+ * terbuka, dengan Lihat PDF. Lebih sempit: satu kolom, rincian di pop-up.
  * Akordeon yang terbuka = Filter dashboard (ikut ke rentang 7 hari).
  */
 
@@ -26,10 +27,16 @@ import { ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewRange, OverviewScreenProps } from '../screen-types'
 import { dayHeading, dayLayout, dayWord, toDetail } from './logic'
 import { FadeSwap } from './parts'
-import { SideHeader } from './panes'
-import { PANE_VARS, useBox } from './use-box'
+import { PageHeader } from './panes'
+import { useBox } from './use-box'
 
 const pdfOf = (r: DetailReport) => shPdfHref({ id: r.id })
+
+/**
+ * Panel rincian menempel di bawah bilah atas shell (tablet: tetap di atas,
+ * ≥1024px: tanpa bilah atas) dan menyisakan ruang dock bawah.
+ */
+const STICKY = 'sticky top-[88px] h-[calc(100dvh-196px)] lg:top-6 lg:h-[calc(100dvh-72px)] min-h-[420px]'
 
 export function TabletDaySplit({
   roleName, range, onRange, dateKey, data, loading, error, reload, filter, onFilter, dayView, onDayView,
@@ -47,6 +54,7 @@ export function TabletDaySplit({
   const L = dayLayout(box?.w ?? 0)
   const current = L.split ? selectedReport(subs, open, picked) : null
   const context = [roleName, dayHeading(dateKey)].filter(Boolean).join(' · ')
+  const busy = loading && Boolean(data)
 
   // Membuka/menutup akordeon mengembalikan rincian ke laporan terbaru di bagian yang terbuka.
   const pickOpen = (f: Filter) => {
@@ -68,70 +76,64 @@ export function TabletDaySplit({
     if (items.length) setLightbox({ items, index: Math.min(index, items.length - 1), title: r.kegiatan })
   }
 
-  const busy = loading && Boolean(data)
-
-  const list = !data ? (
-    loading || !error ? (
-      <ListSkeleton />
-    ) : (
-      <div className="rounded-[var(--radius-lg)] bg-surface p-4 shadow-[var(--shadow-card)]">
-        <ErrorNote message={error ?? 'Laporan belum termuat.'} onRetry={reload} />
-      </div>
-    )
-  ) : (
-    <>
-      <ReportingStatusCard status={status} />
-      <div className="flex flex-col gap-2">
-        <ListBar view={dayView} onView={onDayView} />
-        <HierarchyTree
-          subs={subs}
-          open={open}
-          onOpen={pickOpen}
-          onReport={openReport}
-          dateKey={data.date || dateKey}
-          selectedId={current?.id ?? null}
-        />
-      </div>
-    </>
-  )
-
   return (
     <MotionConfig reducedMotion="user">
       <div
         ref={ref}
-        style={{ ...PANE_VARS, height: box?.h ?? 'calc(100dvh - 160px)' }}
-        className="flex min-h-[480px] w-full overflow-hidden rounded-[var(--radius-xl)] border border-line bg-bg"
+        aria-busy={busy || undefined}
+        className={cx(
+          'mx-auto flex w-full max-w-[1120px] flex-col gap-4 pb-10',
+          'motion-safe:transition-opacity motion-safe:duration-[var(--dur-base)]',
+          busy && 'opacity-60'
+        )}
       >
-        {box ? (
-          <>
-            <section
-              aria-label="Subholding, PT, dan laporan"
-              aria-busy={busy || undefined}
-              style={L.split ? { width: L.listW } : undefined}
-              className={cx(
-                'scrollbar-thin flex h-full flex-col gap-4 overflow-y-auto overscroll-contain bg-[var(--tab-side)] px-3.5 pt-[26px] pb-6',
-                L.split ? 'shrink-0 shadow-[inset_-1px_0_0_var(--line)]' : 'flex-1',
-                'motion-safe:transition-opacity motion-safe:duration-[var(--dur-base)]',
-                busy && 'opacity-60'
-              )}
-            >
-              <SideHeader context={context} title="Laporan terbaru" range={range} onRange={pickRange} />
-              {list}
-            </section>
+        <PageHeader context={context} range={range} onRange={pickRange} />
 
-            {L.split ? (
-              <FadeSwap k={current?.id ?? (data ? 'kosong' : 'memuat')} label="Rincian laporan" className="h-full flex-1 bg-surface">
-                {current ? (
-                  <ReportDetailPanel report={toDetail(current)} onOpenPhoto={(i) => openPhoto(current, i)} pdfHref={pdfOf} />
-                ) : data ? (
-                  <NoReport range={range} />
-                ) : (
-                  <DetailSkeleton />
-                )}
-              </FadeSwap>
-            ) : null}
+        {!data ? (
+          loading || !error ? (
+            <Loading />
+          ) : (
+            <div className="rounded-[var(--radius-lg)] bg-surface p-4 shadow-[var(--shadow-card)]">
+              <ErrorNote message={error ?? 'Laporan belum termuat.'} onRetry={reload} />
+            </div>
+          )
+        ) : (
+          <>
+            <ReportingStatusCard status={status} />
+            <ListBar view={dayView} onView={onDayView} />
+            <div className="flex items-start gap-4">
+              <section
+                aria-label="Subholding, PT, dan laporan"
+                style={L.split ? { width: L.listW } : undefined}
+                className={cx('min-w-0', L.split ? 'flex-none' : 'flex-1')}
+              >
+                <HierarchyTree
+                  subs={subs}
+                  open={open}
+                  onOpen={pickOpen}
+                  onReport={openReport}
+                  dateKey={data.date || dateKey}
+                  selectedId={current?.id ?? null}
+                />
+              </section>
+
+              {L.split ? (
+                <section
+                  aria-label="Rincian laporan"
+                  className={cx(STICKY, 'min-w-0 flex-1 overflow-hidden rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-card)]')}
+                >
+                  <FadeSwap k={current?.id ?? 'kosong'} className="h-full">
+                    {current ? (
+                      <ReportDetailPanel report={toDetail(current)} onOpenPhoto={(i) => openPhoto(current, i)} pdfHref={pdfOf} />
+                    ) : (
+                      <NoReport range={range} />
+                    )}
+                  </FadeSwap>
+                </section>
+              ) : null}
+            </div>
           </>
-        ) : null}
+        )}
       </div>
 
       {L.split ? null : (
@@ -161,24 +163,18 @@ function NoReport({ range }: { range: OverviewRange }) {
   )
 }
 
-function ListSkeleton() {
+function Loading() {
   return (
-    <div className="flex flex-col gap-2.5" aria-busy="true" aria-label="Memuat laporan">
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Memuat laporan">
       <Skeleton h={128} r={22} />
-      {[0, 1, 2, 3].map((i) => (
-        <Skeleton key={i} h={72} r={22} />
-      ))}
-    </div>
-  )
-}
-
-function DetailSkeleton() {
-  return (
-    <div className="flex flex-col gap-4 p-6" aria-hidden>
-      <Skeleton h={260} r={22} />
-      <Skeleton h={28} w="70%" r={8} />
-      <Skeleton h={14} w="40%" r={6} />
-      <Skeleton h={120} r={14} />
+      <div className="flex items-start gap-4">
+        <div className="flex w-[40%] flex-none flex-col gap-2.5">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} h={72} r={22} />
+          ))}
+        </div>
+        <Skeleton h={420} r={22} className="flex-1" />
+      </div>
     </div>
   )
 }

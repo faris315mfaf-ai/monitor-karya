@@ -9,7 +9,8 @@
 >   terbuka (jam, sorotan, judul, uraian, catatan supervisor, foto ≤4/"+n", pelapor, PDF). Ponsel per PT;
 >   tablet (`tablet/day-feed.tsx`) kisi kartu dengan nama PT, rincian di pop-up `ReportDetail`.
 > - **Ringkas** (opsi 1) — `hierarchy-view.tsx`: akordeon; yang terbuka = `Filter` (ikut ke 7 hari).
->   Tablet (`tablet/day-split.tsx`) ≥ 760px: daftar + panel rincian (`ReportDetailPanel`), lebih sempit pop-up.
+>   Tablet (`tablet/day-split.tsx`): halaman penuh seperti Semua terbuka (kepala `PageHeader` yang sama);
+>   ≥ 760px akordeon kiri + panel rincian menempel (sticky, `ReportDetailPanel`), lebih sempit pop-up.
 > - Bersama: `reporting-status.tsx` (kartu status, keterangan urutan, pemilih tampilan); logika
 >   `hierarchy.ts` (tes `tests/ui/sh-overview-hierarchy.test.ts`).
 > - Rentang **7 hari** tidak berubah (D3 ponsel, D4 `TabletWeek`).

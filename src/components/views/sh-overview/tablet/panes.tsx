@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Panel kiri layar tablet & desktop (D4): kepala ringkasan + rentang,
+ * Panel kiri layar tablet & desktop (D4): kepala halaman/ringkasan + rentang,
  * navigasi subholding, daftar PT (cari + Melapor/Belum melapor +
  * lencana jumlah), dan pemilih subholding popover untuk tata letak dua panel.
  */
@@ -17,6 +17,29 @@ import { ptPanel, ptShort, type PtItem, type SubRow } from './logic'
 import { ActiveBg, FOCUS_RING, FadeSwap, Mono, RangeControl, Star } from './parts'
 
 /* ---------- Kepala & status ---------- */
+
+/** Kepala halaman rentang hari (kedua tampilan): konteks + judul, rentang di kanan. */
+export function PageHeader({
+  context,
+  range,
+  onRange,
+}: {
+  context: string
+  range: OverviewRange
+  onRange: (r: OverviewRange) => void
+}) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="t-footnote font-semibold text-ink-2">{context}</span>
+        <h1 className="m-0 t-title-1 tracking-[-0.025em] text-ink">Laporan terbaru</h1>
+      </div>
+      <div className="w-full max-w-[360px]">
+        <RangeControl value={range} onChange={onRange} />
+      </div>
+    </header>
+  )
+}
 
 export function SideHeader({
   context,
