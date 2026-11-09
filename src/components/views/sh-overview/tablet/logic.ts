@@ -1,9 +1,8 @@
 /**
  * Logika murni layar tablet & desktop dashboard Manajemen/Superuser
  * (KONTRAK-MANAJEMEN-MOBILE.md bagian D4). Tanpa React supaya bisa diuji di
- * Node: tata letak panel menurut lebar kontainer (tiga/dua panel 7 hari,
- * daftar + rincian opsi B), baris panel subholding dan PT, rincian laporan,
- * dan tabel 7 hari.
+ * Node: tata letak panel 7 hari menurut lebar kontainer, baris panel
+ * subholding dan PT, rincian laporan, dan tabel 7 hari.
  */
 
 import type { DetailReport } from '../report-detail'
@@ -32,19 +31,6 @@ export function paneLayout(width: number, hasSub: boolean): { mode: PaneMode; si
   if (w >= THREE_PANE_MIN) return { mode: 'three', sideW: hasSub ? 250 : 300, ptW: 290 }
   const narrow = w < 760
   return { mode: 'two', sideW: hasSub ? (narrow ? 264 : 300) : narrow ? 248 : 268, ptW: 0 }
-}
-
-/** Lebar kontainer minimum untuk daftar + rincian berdampingan (opsi B, rentang hari). */
-export const DAY_SPLIT_MIN = 760
-
-/**
- * Tata letak opsi B: ≥ DAY_SPLIT_MIN dua panel — daftar ±42% (340–460px),
- * sisanya rincian. Lebih sempit satu kolom; rincian dibuka di pop-up.
- */
-export function dayLayout(width: number): { split: boolean; listW: number } {
-  const w = Number.isFinite(width) ? Math.max(0, width) : 0
-  if (w < DAY_SPLIT_MIN) return { split: false, listW: w }
-  return { split: true, listW: Math.min(460, Math.max(340, Math.round(w * 0.42))) }
 }
 
 /** Tinggi area panel: sisa layar di bawah posisi atas kontainer dikurangi padding bawah konten shell. */

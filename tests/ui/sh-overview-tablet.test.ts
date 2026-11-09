@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NO_FILTER, flatten, type V2Data, type WeekData } from '@/components/views/sh-overview/model'
 import {
-  DAY_SPLIT_MIN, THREE_PANE_MIN, allLine, contentKey, dayHeading, dayLayout, dayWord, fillHeight, heatCells, heatPct,
+  THREE_PANE_MIN, allLine, contentKey, dayHeading, dayWord, fillHeight, heatCells, heatPct,
   paneLayout, ptNameOf, ptPanel, ptShort, shortDay, subRows, toDetail, weekHighlights, weekRangeLabel, weekRows,
 } from '@/components/views/sh-overview/tablet/logic'
 
@@ -56,20 +56,6 @@ describe('paneLayout', () => {
     expect(paneLayout(700, true).sideW).toBe(264)
     expect(paneLayout(700, false).sideW).toBe(248)
     expect(paneLayout(Number.NaN, false).mode).toBe('two')
-  })
-})
-
-describe('dayLayout (opsi B)', () => {
-  it('dua panel mulai 760px kontainer: daftar ±42%, dijepit 340–460', () => {
-    expect(DAY_SPLIT_MIN).toBe(760)
-    expect(dayLayout(968)).toEqual({ split: true, listW: 407 })
-    expect(dayLayout(760)).toEqual({ split: true, listW: 340 })
-    expect(dayLayout(1400)).toEqual({ split: true, listW: 460 })
-  })
-  it('lebih sempit satu kolom; lebar tidak sah → 0', () => {
-    expect(dayLayout(759)).toEqual({ split: false, listW: 759 })
-    expect(dayLayout(Number.NaN)).toEqual({ split: false, listW: 0 })
-    expect(dayLayout(-5)).toEqual({ split: false, listW: 0 })
   })
 })
 

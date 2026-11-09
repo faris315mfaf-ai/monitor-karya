@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * Dashboard Ketua Umum & Manajemen opsi B (hierarchy.ts): hierarki
- * subholding → PT → laporan terbaru di atas, kartu status, status akordeon,
- * dan laporan yang tampil di panel rincian tablet.
+ * Dashboard Ketua Umum & Manajemen opsi 2 "tinggal gulir" (hierarchy.ts):
+ * subholding → PT → laporan terbaru di atas, kartu status, dan teks kepala.
  */
 
 import {
-  approvedAt, buildHierarchy, defaultOpen, donePct, findReport, newestFirst, openState, ptMeta, reportingStatus, selectedReport,
-  subMeta, togglePt, toggleSub,
+  approvedAt, buildHierarchy, donePct, newestFirst, ptMeta, reportingStatus, sectionMeta,
 } from '@/components/views/sh-overview/hierarchy'
-import { NO_FILTER, type V2Data, type V2Report } from '@/components/views/sh-overview/model'
+import type { V2Data, V2Report } from '@/components/views/sh-overview/model'
 
 // Jam WIB = UTC + 7.
 const at = (wib: string) => `2026-11-09T${String(Number(wib.slice(0, 2)) - 7).padStart(2, '0')}:${wib.slice(3)}:00.000Z`
@@ -112,60 +110,15 @@ describe('kartu status', () => {
   })
 })
 
-describe('akordeon', () => {
-  const subs = buildHierarchy(DATA)
-
-  it('awal: subholding terbaru dengan PT terbarunya; tanpa laporan → tertutup', () => {
-    expect(defaultOpen(subs)).toEqual({ sub: 'logistik', pt: 'armada' })
-    expect(defaultOpen(buildHierarchy({ date: '2026-11-09', subholdings: [DATA.subholdings[3]] }))).toEqual(NO_FILTER)
-  })
-
-  it('filter tersimpan menang; tanpa filter terbuka bawaan sampai pengguna menutupnya', () => {
-    expect(openState(subs, { sub: 'energi', pt: null }, false)).toEqual({ sub: 'energi', pt: null })
-    expect(openState(subs, NO_FILTER, false)).toEqual({ sub: 'logistik', pt: 'armada' })
-    expect(openState(subs, NO_FILTER, true)).toEqual(NO_FILTER)
-  })
-
-  it('ketuk subholding: buka dengan PT terbaru, ketuk lagi menutup', () => {
-    const energi = subs[1]
-    expect(toggleSub(energi, { sub: 'logistik', pt: 'armada' })).toEqual({ sub: 'energi', pt: 'nusa' })
-    expect(toggleSub(energi, { sub: 'energi', pt: 'mitra' })).toEqual(NO_FILTER)
-    expect(toggleSub(subs[2], NO_FILTER)).toEqual({ sub: 'agro', pt: null })
-  })
-
-  it('ketuk PT: buka, ketuk lagi menutup PT (subholding tetap terbuka)', () => {
-    expect(togglePt('energi', 'mitra', { sub: 'energi', pt: 'nusa' })).toEqual({ sub: 'energi', pt: 'mitra' })
-    expect(togglePt('energi', 'mitra', { sub: 'energi', pt: 'mitra' })).toEqual({ sub: 'energi', pt: null })
-  })
-})
-
-describe('panel rincian', () => {
-  const subs = buildHierarchy(DATA)
-
-  it('pilihan pengguna dipakai bila masih ada di data', () => {
-    expect(selectedReport(subs, { sub: 'logistik', pt: 'armada' }, 'm1')?.id).toBe('m1')
-    expect(findReport(subs, 'n1')?.ptName).toBe('PT Nusa Energi')
-    expect(findReport(subs, 'tidak-ada')).toBeNull()
-    expect(findReport(subs, null)).toBeNull()
-  })
-
-  it('tanpa pilihan: terbaru di PT terbuka → subholding terbuka → semua', () => {
-    expect(selectedReport(subs, { sub: 'energi', pt: 'mitra' }, null)?.id).toBe('m1')
-    expect(selectedReport(subs, { sub: 'energi', pt: null }, 'hilang')?.id).toBe('n2')
-    expect(selectedReport(subs, { sub: 'agro', pt: null }, null)?.id).toBe('a2')
-    expect(selectedReport(subs, NO_FILTER, null)?.id).toBe('a2')
-    expect(selectedReport([], NO_FILTER, null)).toBeNull()
-  })
-})
-
 describe('teks', () => {
   const subs = buildHierarchy(DATA)
 
-  it('keterangan subholding', () => {
-    expect(subMeta(subs[0])).toBe('2 PT melapor · 2 belum')
-    expect(subMeta({ ...subs[0], silent: [] })).toBe('2 PT melapor')
-    expect(subMeta(subs[2])).toBe('Belum ada laporan disetujui · 1 PT')
-    expect(subMeta(subs[3])).toBe('Belum ada laporan disetujui')
+  it('keterangan subholding: laporan, PT melapor dari total, jam terakhir', () => {
+    expect(sectionMeta(subs[0], '2026-11-09')).toBe('3 laporan · 2 dari 4 PT melapor · terakhir 16.02')
+    expect(sectionMeta(subs[1], '2026-11-08')).toBe('3 laporan · 2 dari 3 PT melapor · terakhir 9 Nov 15.42')
+    expect(sectionMeta({ ...subs[0], lastAt: null }, '2026-11-09')).toBe('3 laporan · 2 dari 4 PT melapor')
+    expect(sectionMeta(subs[2], '2026-11-09')).toBe('Belum ada laporan disetujui · 1 PT')
+    expect(sectionMeta(subs[3], '2026-11-09')).toBe('Belum ada laporan disetujui')
   })
 
   it('keterangan PT: jumlah laporan dan jam terakhir (WIB)', () => {

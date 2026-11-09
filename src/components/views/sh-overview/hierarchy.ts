@@ -1,19 +1,16 @@
 /**
- * Dashboard Ketua Umum & Manajemen, opsi B (canvas "Opsi dashboard Ketum",
- * 9 Nov 2026): hierarki subholding → PT → laporan, terbaru di atas. Logika
- * murni tanpa React, dipakai layar ponsel dan tablet.
+ * Dashboard Ketua Umum & Manajemen, opsi 2 "tinggal gulir" (canvas "Opsi
+ * dashboard Ketum", 9 Nov 2026): subholding → PT → laporan, semuanya terbuka,
+ * terbaru di atas. Logika murni tanpa React, dipakai layar ponsel dan tablet.
  *
  * Urutan: laporan menurut waktu disetujui menurun; PT dan subholding menurut
  * laporan terbarunya. Subholding/PT tanpa laporan di bawah, urut nama. PT yang
  * belum melapor ikut di subholdingnya (urutan ptCoverage: paling lama diam dulu).
- *
- * Status buka akordeon = Filter dashboard (tersimpan per perangkat), jadi
- * pilihan subholding/PT juga berlaku saat beralih ke rentang 7 hari.
  */
 
 import { timeLabel } from './detail-logic'
 import { wibDateKey } from './logic'
-import { NO_FILTER, flatten, ptCoverage, type CoverageSilent, type Filter, type FlatV2, type V2Data } from './model'
+import { NO_FILTER, flatten, ptCoverage, type CoverageSilent, type FlatV2, type V2Data } from './model'
 
 export type HierPt = {
   id: string
@@ -115,56 +112,6 @@ export function donePct(s: ReportingStatus): number {
   return s.total > 0 ? Math.min(100, Math.round((s.done / s.total) * 1000) / 10) : 0
 }
 
-/** Akordeon awal sebelum pengguna memilih: subholding terbaru dengan PT terbarunya. */
-export function defaultOpen(subs: readonly HierSub[]): Filter {
-  const s = subs.find((x) => x.pts.length > 0)
-  return s ? { sub: s.id, pt: s.pts[0].id } : NO_FILTER
-}
-
-/**
- * Akordeon yang terbuka. Filter tersimpan menang; tanpa filter, subholding
- * terbaru dibuka sampai pengguna menutupnya sendiri (`touched`).
- */
-export function openState(subs: readonly HierSub[], filter: Filter, touched: boolean): Filter {
-  if (filter.sub) return filter
-  return touched ? NO_FILTER : defaultOpen(subs)
-}
-
-/** Ketuk kepala subholding: tutup bila terbuka, selain itu buka dengan PT terbarunya. */
-export function toggleSub(sub: HierSub, open: Filter): Filter {
-  if (open.sub === sub.id) return NO_FILTER
-  return { sub: sub.id, pt: sub.pts[0]?.id ?? null }
-}
-
-/** Ketuk baris PT: tutup bila terbuka, selain itu buka (subholding tetap). */
-export function togglePt(subId: string, ptId: string, open: Filter): Filter {
-  return open.sub === subId && open.pt === ptId ? { sub: subId, pt: null } : { sub: subId, pt: ptId }
-}
-
-export function findReport(subs: readonly HierSub[], id: string | null | undefined): FlatV2 | null {
-  if (!id) return null
-  for (const s of subs) for (const p of s.pts) for (const r of p.reports) if (r.id === id) return r
-  return null
-}
-
-/**
- * Laporan yang tampil di panel rincian tablet: pilihan pengguna bila masih
- * ada, selain itu laporan terbaru di PT terbuka → subholding terbuka → semua.
- */
-export function selectedReport(subs: readonly HierSub[], open: Filter, picked: string | null): FlatV2 | null {
-  const hit = findReport(subs, picked)
-  if (hit) return hit
-  const sub = open.sub ? subs.find((s) => s.id === open.sub) : undefined
-  const pt = sub && open.pt ? sub.pts.find((p) => p.id === open.pt) : undefined
-  return pt?.reports[0] ?? sub?.pts[0]?.reports[0] ?? subs.find((s) => s.pts.length)?.pts[0]?.reports[0] ?? null
-}
-
-/** "3 PT melapor · 2 belum" / "Belum ada laporan disetujui · 4 PT". */
-export function subMeta(s: HierSub): string {
-  if (!s.pts.length) return s.silent.length ? `Belum ada laporan disetujui · ${s.silent.length} PT` : 'Belum ada laporan disetujui'
-  return s.silent.length ? `${s.pts.length} PT melapor · ${s.silent.length} belum` : `${s.pts.length} PT melapor`
-}
-
 const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
 /**
@@ -178,6 +125,17 @@ export function approvedAt(iso: string | null | undefined, dateKey: string): str
   if (key === dateKey) return jam
   const [, m, d] = key.split('-').map(Number)
   return `${d} ${BULAN_PENDEK[m - 1]} ${jam}`
+}
+
+/**
+ * Keterangan kepala subholding: "4 laporan · 3 dari 5 PT melapor · terakhir 10.42";
+ * tanpa laporan: "Belum ada laporan disetujui · 4 PT".
+ */
+export function sectionMeta(s: HierSub, dateKey: string): string {
+  const total = s.pts.length + s.silent.length
+  if (!s.pts.length) return total ? `Belum ada laporan disetujui · ${total} PT` : 'Belum ada laporan disetujui'
+  const when = approvedAt(s.lastAt, dateKey)
+  return [`${s.count} laporan`, `${s.pts.length} dari ${total} PT melapor`, when && `terakhir ${when}`].filter(Boolean).join(' · ')
 }
 
 /** "2 laporan · terakhir 16.02". */
