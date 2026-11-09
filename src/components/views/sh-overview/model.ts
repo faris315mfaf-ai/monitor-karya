@@ -252,7 +252,28 @@ export function ptCoverage(data: V2Data | null | undefined, f: Filter): Coverage
   return { reporting, silent, total: reporting.length + silent.length }
 }
 
-/* ---------- Penyaring tersimpan per perangkat ---------- */
+/* ---------- Pilihan tersimpan per perangkat ---------- */
+
+/** Tampilan rentang hari: 'gulir' = Semua terbuka (opsi 2, bawaan), 'ringkas' = akordeon (opsi 1). */
+export type DayView = 'gulir' | 'ringkas'
+
+const VIEW_KEY = 'mk:sh-overview:tampilan'
+
+export function loadDayView(): DayView {
+  try {
+    return typeof window !== 'undefined' && window.localStorage.getItem(VIEW_KEY) === 'ringkas' ? 'ringkas' : 'gulir'
+  } catch {
+    return 'gulir'
+  }
+}
+
+export function saveDayView(v: DayView): void {
+  try {
+    if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_KEY, v)
+  } catch {
+    /* penyimpanan diblokir: pilihan cukup berlaku selama sesi */
+  }
+}
 
 const KEY = 'mk:sh-overview:filter'
 

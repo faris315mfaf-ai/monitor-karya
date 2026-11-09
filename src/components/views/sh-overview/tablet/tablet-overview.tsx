@@ -2,8 +2,10 @@
 
 /**
  * Dashboard Manajemen & Superuser — tablet & desktop. Rentang Hari ini /
- * Kemarin: opsi B (TabletDay, day-view.tsx). Rentang 7 hari: TabletWeek di
- * bawah (KONTRAK-MANAJEMEN-MOBILE.md bagian D4; papan M-Tablet-7Hari).
+ * Kemarin: tampilan "Semua terbuka" (TabletDayFeed, day-feed.tsx) atau
+ * "Ringkas" (TabletDaySplit, day-split.tsx) menurut pilihan pengguna.
+ * Rentang 7 hari: TabletWeek di bawah (KONTRAK-MANAJEMEN-MOBILE.md bagian D4;
+ * papan M-Tablet-7Hari).
  *
  * TabletWeek — lebar kontainer (bukan viewport — shell punya sidebar)
  * ≥ 1000px: tiga panel subholding · PT · tabel; panel PT hanya saat subholding
@@ -18,14 +20,16 @@ import { cx } from '@/components/mk'
 import { displayName, subholdingLabel, toneOf } from '../logic'
 import type { OverviewScreenProps } from '../screen-types'
 import { WeekView } from './content'
-import { TabletDay } from './day-view'
+import { TabletDayFeed } from './day-feed'
+import { TabletDaySplit } from './day-split'
 import { allLine, contentKey, paneLayout, ptNameOf, subRows, weekRangeLabel } from './logic'
 import { FadeSwap } from './parts'
 import { PtList, SideHeader, SideSkeleton, SubNav, SubPicker } from './panes'
 import { PANE_VARS, useBox } from './use-box'
 
 export function TabletOverview(props: OverviewScreenProps) {
-  return props.range === 'week' ? <TabletWeek {...props} /> : <TabletDay {...props} />
+  if (props.range === 'week') return <TabletWeek {...props} />
+  return props.dayView === 'ringkas' ? <TabletDaySplit {...props} /> : <TabletDayFeed {...props} />
 }
 
 function TabletWeek({ roleName, range, onRange, data, week, loading, error, reload, filter, onFilter }: OverviewScreenProps) {

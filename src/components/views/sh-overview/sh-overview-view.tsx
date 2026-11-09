@@ -16,7 +16,9 @@ import { useResource } from '@/hooks/use-resource'
 import { useApp } from '@/components/app-provider'
 import { ROLE_LABELS } from '@/lib/constants'
 import { wibDateKey } from './logic'
-import { NO_FILTER, loadFilter, saveFilter, validFilter, type Filter, type V2Data, type WeekData } from './model'
+import {
+  NO_FILTER, loadDayView, loadFilter, saveDayView, saveFilter, validFilter, type DayView, type Filter, type V2Data, type WeekData,
+} from './model'
 import type { OverviewRange } from './screen-types'
 import { MobileOverview } from './mobile'
 import { TabletOverview } from './tablet'
@@ -48,6 +50,8 @@ export function ShOverviewView() {
   const [picked, setPicked] = useState<Filter | null>(null)
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false)
   const rawFilter = useMemo(() => picked ?? (hydrated ? loadFilter() : NO_FILTER), [picked, hydrated])
+  const [pickedView, setPickedView] = useState<DayView | null>(null)
+  const dayView: DayView = pickedView ?? (hydrated ? loadDayView() : 'gulir')
 
   const day = useResource<V2Data>(`/api/sh/overview?date=${dateKey}`)
   const filter = useMemo(() => (day.data ? validFilter(day.data, rawFilter) : rawFilter), [day.data, rawFilter])
@@ -59,6 +63,10 @@ export function ShOverviewView() {
   const onFilter = useCallback((f: Filter) => {
     setPicked(f)
     saveFilter(f)
+  }, [])
+  const onDayView = useCallback((v: DayView) => {
+    setPickedView(v)
+    saveDayView(v)
   }, [])
   const reload = useCallback(() => {
     day.reload()
@@ -77,6 +85,8 @@ export function ShOverviewView() {
     reload,
     filter,
     onFilter,
+    dayView,
+    onDayView,
   }
 
   return compact ? <MobileOverview {...props} /> : <TabletOverview {...props} />

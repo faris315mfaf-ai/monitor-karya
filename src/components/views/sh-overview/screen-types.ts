@@ -1,4 +1,4 @@
-import type { Filter, V2Data, WeekData } from './model'
+import type { DayView, Filter, V2Data, WeekData } from './model'
 
 export type OverviewRange = 'today' | 'yesterday' | 'week'
 
@@ -21,4 +21,7 @@ export type OverviewScreenProps = {
   filter: Filter
   /** Integrator menyimpan pilihan per perangkat (saveFilter). */
   onFilter: (f: Filter) => void
+  /** Tampilan rentang hari: Semua terbuka / Ringkas (tersimpan per perangkat). */
+  dayView: DayView
+  onDayView: (v: DayView) => void
 }

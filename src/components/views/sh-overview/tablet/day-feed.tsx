@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Dashboard Ketua Umum & Manajemen opsi 2 "tinggal gulir" — tablet & desktop,
+ * Dashboard Ketua Umum & Manajemen tampilan "Semua terbuka" (opsi 2, tinggal
+ * gulir) — tablet & desktop,
  * rentang Hari ini / Kemarin (canvas "Opsi dashboard Ketum", papan
  * "Opsi 2 · semua terbuka, gulir saja — Z Fold 7 terbuka").
  *
@@ -20,14 +21,15 @@ import { buildHierarchy, reportingStatus } from '../hierarchy'
 import { photosOf } from '../logic'
 import type { FlatV2 } from '../model'
 import { ReportDetail, type DetailReport } from '../report-detail'
-import { ReportFeed, ReportingStatusCard } from '../report-feed'
+import { ReportFeed } from '../report-feed'
+import { ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewRange, OverviewScreenProps } from '../screen-types'
 import { dayHeading, toDetail } from './logic'
 import { RangeControl } from './parts'
 
 const pdfOf = (r: DetailReport) => shPdfHref({ id: r.id })
 
-export function TabletDay({ roleName, range, onRange, dateKey, data, loading, error, reload }: OverviewScreenProps) {
+export function TabletDayFeed({ roleName, range, onRange, dateKey, data, loading, error, reload, dayView, onDayView }: OverviewScreenProps) {
   const [detail, setDetail] = useState<FlatV2 | null>(null)
   const [lightbox, setLightbox] = useState<LightboxState>(null)
 
@@ -77,7 +79,14 @@ export function TabletDay({ roleName, range, onRange, dateKey, data, loading, er
         ) : (
           <>
             <ReportingStatusCard status={status} />
-            <ReportFeed subs={subs} dateKey={data.date || dateKey} layout="wide" onOpen={setDetail} onPhoto={openPhoto} />
+            <ReportFeed
+              subs={subs}
+              dateKey={data.date || dateKey}
+              layout="wide"
+              bar={<ListBar view={dayView} onView={onDayView} />}
+              onOpen={setDetail}
+              onPhoto={openPhoto}
+            />
           </>
         )}
       </div>

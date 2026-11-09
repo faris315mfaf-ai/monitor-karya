@@ -3,11 +3,13 @@
 /**
  * Dashboard Ketua Umum, Manajemen & Superuser — ponsel < 600px.
  *
- * Rentang Hari ini / Kemarin: opsi 2 "tinggal gulir" (canvas "Opsi dashboard
- * Ketum", papan "Opsi 2 · ponsel") — kartu status, chip lompat ke subholding,
- * lalu semua laporan terbuka: subholding → PT → kartu laporan, terbaru di
- * atas. Ketuk kartu → rincian layar penuh yang didorong dari kanan (tombol
- * Lihat PDF di bawah); ketuk foto → lightbox.
+ * Rentang Hari ini / Kemarin (canvas "Opsi dashboard Ketum"): kartu status lalu
+ * subholding → PT → laporan, terbaru di atas, dalam salah satu dari dua
+ * tampilan pilihan pengguna (tersimpan per perangkat):
+ *  - "Semua terbuka" (opsi 2): chip lompat ke subholding, semua kartu laporan
+ *    terbuka, tinggal gulir; ketuk foto → lightbox.
+ *  - "Ringkas" (opsi 1): akordeon; yang terbuka = Filter (ikut ke 7 hari).
+ * Ketuk laporan → rincian layar penuh yang didorong dari kanan (Lihat PDF).
  *
  * Rentang 7 hari: pola melapor (KONTRAK-MANAJEMEN-MOBILE.md D3, papan
  * M-Ponsel-7Hari) dengan penyaring subholding → PT di lembar pemilih.
@@ -19,10 +21,12 @@ import { MotionConfig, motion } from 'framer-motion'
 import { EmptyNote, ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
 import { PullToRefresh } from '@/components/mk/pull-refresh'
 import { EvidenceLightbox, type LightboxState } from '../evidence'
-import { buildHierarchy, reportingStatus } from '../hierarchy'
+import { buildHierarchy, openState, reportingStatus } from '../hierarchy'
+import { HierarchyTree } from '../hierarchy-view'
 import { displayName, photosOf, toneOf, toneVars } from '../logic'
-import { NO_FILTER, type FlatV2 } from '../model'
-import { ReportFeed, ReportingStatusCard } from '../report-feed'
+import { NO_FILTER, type Filter, type FlatV2 } from '../model'
+import { ReportFeed } from '../report-feed'
+import { ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewRange, OverviewScreenProps } from '../screen-types'
 import {
   addDays, backLabel, dayHeading, findSub, monoOf, ptNameOf, ptSections, ptShort, ptTotal, screenHeading, subSections,
@@ -41,17 +45,20 @@ const RANGES: { value: OverviewRange; label: string }[] = [
 ]
 
 export function MobileOverview(props: OverviewScreenProps) {
-  const { roleName, range, onRange, dateKey, data, week, loading, error, reload, filter, onFilter } = props
+  const { roleName, range, onRange, dateKey, data, week, loading, error, reload, filter, onFilter, dayView, onDayView } = props
   const [detail, setDetail] = useState<FlatV2 | null>(null)
   const [lightbox, setLightbox] = useState<LightboxState>(null)
   const [sheet, setSheet] = useState<'sub' | 'pt' | null>(null)
   const [query, setQuery] = useState('')
+  // Tampilan Ringkas: pengguna sudah membuka/menutup akordeon sendiri → jangan buka subholding terbaru lagi.
+  const [touched, setTouched] = useState(false)
 
   const isWeek = range === 'week'
   const sub = findSub(data, filter.sub)
   const ptName = ptNameOf(sub, filter.pt)
   const subs = useMemo(() => buildHierarchy(data), [data])
   const status = useMemo(() => reportingStatus(data), [data])
+  const open = openState(subs, filter, touched)
   const heading = isWeek ? screenHeading(data, filter) : 'Laporan terbaru'
 
   const dateLine = isWeek ? weekRangeLabel(week?.start ?? addDays(dateKey, -6), week?.end ?? dateKey) : dayHeading(dateKey)
@@ -59,6 +66,10 @@ export function MobileOverview(props: OverviewScreenProps) {
   const openSheet = (k: 'sub' | 'pt') => {
     setQuery('')
     setSheet(k)
+  }
+  const pickOpen = (f: Filter) => {
+    setTouched(true)
+    onFilter(f)
   }
   const openPhoto = (r: FlatV2, index: number) => {
     const photos = photosOf(r.evidence)
@@ -134,7 +145,21 @@ export function MobileOverview(props: OverviewScreenProps) {
           ) : (
             <>
               <ReportingStatusCard status={status} />
-              <ReportFeed subs={subs} dateKey={data.date || dateKey} layout="phone" onOpen={setDetail} onPhoto={openPhoto} />
+              {dayView === 'ringkas' ? (
+                <div className="flex flex-col gap-2.5">
+                  <ListBar view={dayView} onView={onDayView} />
+                  <HierarchyTree subs={subs} open={open} onOpen={pickOpen} onReport={setDetail} dateKey={data.date || dateKey} />
+                </div>
+              ) : (
+                <ReportFeed
+                  subs={subs}
+                  dateKey={data.date || dateKey}
+                  layout="phone"
+                  bar={<ListBar view={dayView} onView={onDayView} />}
+                  onOpen={setDetail}
+                  onPhoto={openPhoto}
+                />
+              )}
             </>
           )}
         </div>

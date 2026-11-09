@@ -1,10 +1,10 @@
 'use client'
 
 /**
- * Dashboard Ketua Umum & Manajemen, opsi 2 "tinggal gulir" (logika:
- * hierarchy.ts): kartu status pelaporan, chip lompat ke subholding, lalu
- * semua laporan terbuka — subholding → PT → kartu laporan, terbaru di atas.
- * PT yang belum melapor tampil di akhir tiap subholding.
+ * Tampilan "Semua terbuka" (opsi 2, tinggal gulir) dashboard Ketua Umum &
+ * Manajemen (logika: hierarchy.ts): chip lompat ke subholding, lalu semua
+ * laporan terbuka — subholding → PT → kartu laporan, terbaru di atas. PT yang
+ * belum melapor tampil di akhir tiap subholding.
  *
  * `layout="phone"`: satu kolom, kartu dikelompokkan per PT. `layout="wide"`
  * (tablet & desktop): kartu dalam kisi, nama PT di tiap kartu, PT belum
@@ -14,12 +14,11 @@
  * rincian; foto membuka lightbox; tautan PDF laporan di kaki kartu.
  */
 
-import { useId } from 'react'
-import { motion } from 'framer-motion'
+import { useId, type ReactNode } from 'react'
 import { EmptyNote, Icon, cx } from '@/components/mk'
 import { shPdfHref } from '@/lib/subholding/pdf-href'
 import { EvidenceThumb } from './evidence'
-import { approvedAt, donePct, ptMeta, sectionMeta, type HierPt, type HierSub, type ReportingStatus } from './hierarchy'
+import { approvedAt, ptMeta, sectionMeta, type HierPt, type HierSub } from './hierarchy'
 import { displayName, photosOf, subholdingLabel, toneOf, toneVars } from './logic'
 import { lastReportLabel, type CoverageSilent, type FlatV2 } from './model'
 import { Mono, Star } from './tablet/parts'
@@ -31,75 +30,13 @@ const MAX_THUMBS = 4
 
 export type FeedLayout = 'phone' | 'wide'
 
-/* ---------- Kartu status ---------- */
-
-export function ReportingStatusCard({ status, className }: { status: ReportingStatus; className?: string }) {
-  const id = useId()
-  const belum = Math.max(0, status.total - status.done)
-  return (
-    <section aria-labelledby={id} className={cx('flex flex-col gap-3 p-4', CARD, className)}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-        <h2 id={id} className="m-0 min-w-0 t-headline font-bold text-ink">
-          {status.total ? `${status.done} dari ${status.total} PT sudah melapor` : 'Belum ada PT aktif'}
-        </h2>
-        <span className="flex-none t-footnote text-ink-2">{status.reports} laporan</span>
-      </div>
-      {status.total ? (
-        <>
-          <div
-            role="progressbar"
-            aria-label="PT yang sudah melapor"
-            aria-valuemin={0}
-            aria-valuemax={status.total}
-            aria-valuenow={status.done}
-            className="h-2 overflow-hidden rounded-full bg-fill-2"
-          >
-            <motion.div
-              className="h-full origin-left rounded-full bg-sukses"
-              initial={false}
-              animate={{ scaleX: donePct(status) / 100 }}
-              transition={{ type: 'spring', bounce: 0, duration: 0.6 }}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-sukses-soft px-3 t-footnote font-semibold text-sukses">
-              <Icon name="selesai" size={14} strokeWidth={2.6} />
-              Sudah {status.done}
-            </span>
-            <span
-              className={cx(
-                'inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 t-footnote font-semibold',
-                belum ? 'bg-waspada-soft text-waspada' : 'bg-fill-1 text-ink-2'
-              )}
-            >
-              <Icon name="peringatan" size={14} strokeWidth={2.4} />
-              Belum {belum}
-            </span>
-          </div>
-        </>
-      ) : null}
-    </section>
-  )
-}
-
-/** Keterangan urutan di atas daftar. */
-export function SortHint({ className }: { className?: string }) {
-  return (
-    <p className={cx('m-0 flex items-center gap-1.5 px-1 t-footnote text-ink-2', className)}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden className="flex-none">
-        <path d="M12 5v14M6 13l6 6 6-6" />
-      </svg>
-      Diurutkan dari laporan terbaru
-    </p>
-  )
-}
-
 /* ---------- Daftar ---------- */
 
 export function ReportFeed({
   subs,
   dateKey,
   layout,
+  bar,
   onOpen,
   onPhoto,
 }: {
@@ -107,6 +44,8 @@ export function ReportFeed({
   /** 'YYYY-MM-DD' data: jam disetujui di hari lain diberi tanggal. */
   dateKey: string
   layout: FeedLayout
+  /** Baris di bawah chip lompat (keterangan urutan + pemilih tampilan). */
+  bar: ReactNode
   onOpen: (r: FlatV2) => void
   onPhoto: (r: FlatV2, index: number) => void
 }) {
@@ -116,7 +55,7 @@ export function ReportFeed({
   return (
     <div className="flex flex-col gap-4">
       <SubJump subs={subs} targetOf={sectionId} wide={layout === 'wide'} />
-      <SortHint />
+      {bar}
       <div className="flex flex-col gap-8">
         {subs.map((s, i) => (
           <SubSection key={s.id} id={sectionId(i)} s={s} dateKey={dateKey} layout={layout} onOpen={onOpen} onPhoto={onPhoto} />

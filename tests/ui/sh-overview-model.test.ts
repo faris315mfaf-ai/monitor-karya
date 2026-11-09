@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  NO_FILTER, dayLabel, flatten, isWeekend, lastReportLabel, loadFilter,
-  matchesQuery, ptBuckets, ptCoverage, saveFilter, scoped, silentDays, silentStreak,
+  NO_FILTER, dayLabel, flatten, isWeekend, lastReportLabel, loadDayView, loadFilter,
+  matchesQuery, ptBuckets, ptCoverage, saveDayView, saveFilter, scoped, silentDays, silentStreak,
   validFilter, weekNote, type V2Data,
 } from '@/components/views/sh-overview/model'
 
@@ -91,6 +91,20 @@ describe('penyaring tersimpan', () => {
     vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } } })
     expect(loadFilter()).toEqual(NO_FILTER)
     expect(() => saveFilter({ sub: null, pt: null })).not.toThrow()
+  })
+
+  it('tampilan hari: bawaan Semua terbuka, Ringkas diingat, nilai asing atau storage diblokir → bawaan', () => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('window', { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) } })
+    expect(loadDayView()).toBe('gulir')
+    saveDayView('ringkas')
+    expect(store.get('mk:sh-overview:tampilan')).toBe('ringkas')
+    expect(loadDayView()).toBe('ringkas')
+    store.set('mk:sh-overview:tampilan', 'lain')
+    expect(loadDayView()).toBe('gulir')
+    vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } } })
+    expect(loadDayView()).toBe('gulir')
+    expect(() => saveDayView('gulir')).not.toThrow()
   })
 })
 

@@ -16,6 +16,10 @@
  * Radix Dialog menjaga fokus (terkunci, kembali ke pemicu), Esc, klik latar,
  * dan kunci gulir halaman. Animasi masuk lewat @starting-style, hanya bila
  * pengguna tidak meminta gerak dikurangi.
+ *
+ * ReportDetailPanel: isi yang sama tanpa dialog, untuk panel rincian di dalam
+ * halaman (dashboard tablet opsi B). Kolom foto dan info membungkus menurut
+ * lebar panel.
  */
 
 import { useId, useRef, useState, type RefObject } from 'react'
@@ -25,6 +29,10 @@ import { EvidenceThumb, useSignedUrl } from './evidence'
 import { docsOf, heroLabel, initialOf, photosOf, toneVars, type OverviewEvidence } from './logic'
 import { approvedLabel, buktiLabel, clampIndex, docActionLabel, photoAlt } from './detail-logic'
 import { PdfButton } from './pdf-link'
+
+const TITLE =
+  'm-0 break-words text-ink outline-none [font:var(--text-title-3)] tracking-[-0.01em] min-[600px]:[font:var(--text-title-2)] min-[600px]:tracking-[-0.02em]'
+const DESC = 'm-0 whitespace-pre-line break-words t-body-lg text-ink'
 
 export type DetailReport = {
   id: string
@@ -105,19 +113,45 @@ export function ReportDetail({
   )
 }
 
-/** Dipasang ulang per laporan (key = id), jadi pilihan foto kembali ke 0 saat laporan berganti. */
+/** Rincian laporan di dalam halaman (tanpa dialog, tanpa tombol Tutup). */
+export function ReportDetailPanel({
+  report,
+  onOpenPhoto,
+  pdfHref,
+  className,
+}: {
+  report: DetailReport
+  onOpenPhoto: (photoIndex: number) => void
+  pdfHref?: (report: DetailReport) => string
+  className?: string
+}) {
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const descId = useId()
+  return (
+    <article aria-label="Rincian laporan" className={cx('flex flex-wrap content-start', className)}>
+      <DetailBody key={report.id} inline report={report} titleRef={titleRef} descId={descId} onOpenPhoto={onOpenPhoto} pdfHref={pdfHref} />
+    </article>
+  )
+}
+
+/**
+ * Dipasang ulang per laporan (key = id), jadi pilihan foto kembali ke 0 saat laporan berganti.
+ * `inline`: di dalam halaman — judul/deskripsi elemen biasa, tanpa tombol Tutup.
+ */
 function DetailBody({
   report,
   titleRef,
   descId,
   onOpenPhoto,
   pdfHref,
+  inline = false,
 }: {
   report: DetailReport
   titleRef: RefObject<HTMLHeadingElement | null>
   descId: string
   onOpenPhoto: (photoIndex: number) => void
   pdfHref?: (report: DetailReport) => string
+  inline?: boolean
 }) {
   const photos = photosOf(report.evidence)
   const docs = docsOf(report.evidence)
@@ -185,18 +219,22 @@ function DetailBody({
             </span>
             <span className="min-w-0 truncate">{report.subholdingName}</span>
           </span>
-          <DialogPrimitive.Close asChild>
-            <IconButton icon="tutup" label="Tutup" variant="filled" className="-mr-2 shrink-0" />
-          </DialogPrimitive.Close>
+          {inline ? null : (
+            <DialogPrimitive.Close asChild>
+              <IconButton icon="tutup" label="Tutup" variant="filled" className="-mr-2 shrink-0" />
+            </DialogPrimitive.Close>
+          )}
         </div>
 
-        <DialogPrimitive.Title
-          ref={titleRef}
-          tabIndex={-1}
-          className="m-0 break-words text-ink outline-none [font:var(--text-title-3)] tracking-[-0.01em] min-[600px]:[font:var(--text-title-2)] min-[600px]:tracking-[-0.02em]"
-        >
-          {report.kegiatan}
-        </DialogPrimitive.Title>
+        {inline ? (
+          <h2 ref={titleRef} tabIndex={-1} className={TITLE}>
+            {report.kegiatan}
+          </h2>
+        ) : (
+          <DialogPrimitive.Title ref={titleRef} tabIndex={-1} className={TITLE}>
+            {report.kegiatan}
+          </DialogPrimitive.Title>
+        )}
 
         {pdfHref ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -220,11 +258,15 @@ function DetailBody({
           </dl>
         ) : null}
 
-        {report.deskripsi.trim() ? (
-          <DialogPrimitive.Description id={descId} className="m-0 whitespace-pre-line break-words t-body-lg text-ink">
+        {!report.deskripsi.trim() ? null : inline ? (
+          <p id={descId} className={DESC}>
+            {report.deskripsi}
+          </p>
+        ) : (
+          <DialogPrimitive.Description id={descId} className={DESC}>
             {report.deskripsi}
           </DialogPrimitive.Description>
-        ) : null}
+        )}
 
         {docs.length ? (
           <ul aria-label="Dokumen" className="m-0 flex list-none flex-col gap-2 p-0">
