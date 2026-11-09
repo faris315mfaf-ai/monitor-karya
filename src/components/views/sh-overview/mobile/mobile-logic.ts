@@ -1,17 +1,16 @@
 /**
  * Logika murni layar ponsel dashboard Manajemen & Superuser
  * (KONTRAK-MANAJEMEN-MOBILE.md D3, 16 Okt 2026): label tanggal WIB,
- * pengelompokan daftar laporan, isi lembar pemilih, baris pola 7 hari,
+ * judul layar, isi lembar pemilih, baris pola 7 hari,
  * serta fisika gestur (proyeksi momentum, ambang tutup). Tanpa React
  * supaya bisa diuji di Node.
  */
 
 import {
-  highlightFirst, isWeekend, matchesQuery, ptBuckets, scoped,
-  type Filter, type FlatV2, type V2Data, type V2Subholding, type WeekData,
+  isWeekend, matchesQuery, ptBuckets, scoped,
+  type Filter, type V2Data, type V2Subholding, type WeekData,
 } from '../model'
 import { displayName, subholdingLabel, toneOf, type Tone } from '../logic'
-import { timeLabel } from '../detail-logic'
 import type { OverviewRange } from '../screen-types'
 
 /* ---------- Fisika gestur (Designing Fluid Interfaces, WWDC 2018) ---------- */
@@ -153,29 +152,6 @@ export function monoOf(name: string): string {
   return (subholdingLabel(name).charAt(0) || 'S').toUpperCase()
 }
 
-/** Gabung nama gaya Indonesia: "A", "A dan B", "A, B, dan C". */
-export function joinNames(names: string[]): string {
-  const list = names.filter(Boolean)
-  if (list.length <= 1) return list[0] ?? ''
-  if (list.length === 2) return `${list[0]} dan ${list[1]}`
-  return `${list.slice(0, -1).join(', ')}, dan ${list[list.length - 1]}`
-}
-
-/** Kalimat peringatan kartu status; lebih dari tiga nama diringkas "n lainnya". */
-export function missingSentence(names: string[], range: OverviewRange): string {
-  const list = names.filter(Boolean)
-  if (list.length === 0) return ''
-  if (list.length === 1) return `${list[0]} belum melapor ${dayWord(range)}`
-  if (list.length <= 3) return `${joinNames(list)} belum melapor`
-  return `${list.slice(0, 2).join(', ')}, dan ${list.length - 2} lainnya belum melapor`
-}
-
-/** Persentase batang progres (0–100, bulat). */
-export function progressPct(done: number, total: number): number {
-  if (!Number.isFinite(total) || total <= 0) return 0
-  return Math.round(Math.min(Math.max(done / total, 0), 1) * 100)
-}
-
 /** Label tombol kembali rincian: judul layar asal bila cukup pendek. */
 export function backLabel(heading: string, max = 18): string {
   const h = (heading ?? '').trim()
@@ -209,96 +185,9 @@ export function screenHeading(data: V2Data | null | undefined, f: Filter): strin
   return ptNameOf(sub, f.pt) ?? displayName(sub.name)
 }
 
-/* ---------- Daftar laporan ---------- */
-
-/** Meta baris: "10.15 · Sentra Beton Perkasa" (tanpa penyaring) atau "10.15 · Hendra Wijaya". */
-export function rowMeta(r: FlatV2, level: 'sub' | 'pt' | 'one'): string {
-  const who = level === 'sub' ? ptShort(r.ptName) : r.reporterName?.trim()
-  return [timeLabel(r.decidedAt ?? null), who].filter(Boolean).join(' · ')
-}
-
-export type ListGroup = {
-  key: string
-  name: string
-  tone: Tone
-  /** Teks kanan kepala kelompok, mis. "3 laporan" atau "Belum melapor". */
-  countLabel: string
-  rows: FlatV2[]
-  /** Jumlah laporan yang tidak ditampilkan (batas per kelompok). */
-  more: number
-  moreLabel: string
-  /** Penyaring yang dipasang saat kepala kelompok/“Lihat semua” diketuk; null = tidak bisa ditelusuri. */
-  drill: Filter | null
-}
-
-/** Batas baris per subholding di tampilan "Semua". */
-export const GROUP_LIMIT = 3
+/* ---------- Lembar pemilih ---------- */
 
 const reportsLabel = (n: number) => `${n} laporan`
-
-/**
- * Kelompok daftar "Semua laporan" sesuai tingkat penyaring:
- * - tanpa penyaring: per subholding, maks `limit` baris (sorotan dulu) + "Lihat semua…",
- *   subholding tanpa laporan di akhir;
- * - subholding: per PT yang melapor (terbanyak dulu), semua baris;
- * - satu PT: satu kelompok tanpa telusur.
- */
-export function buildGroups(
-  data: V2Data | null | undefined,
-  f: Filter,
-  range: OverviewRange,
-  limit = GROUP_LIMIT,
-): { title: string; level: 'sub' | 'pt' | 'one'; groups: ListGroup[] } {
-  const subs = data?.subholdings ?? []
-  const sub = findSub(data, f.sub)
-  if (!sub) {
-    const all = scoped(data, { sub: null, pt: null })
-    const groups = subs.map<ListGroup>((s) => {
-      const rows = highlightFirst(all.filter((r) => r.subId === s.id))
-      const cap = Math.max(0, Math.floor(limit))
-      return {
-        key: s.id,
-        name: displayName(s.name),
-        tone: toneOf(s.id),
-        countLabel: rows.length ? reportsLabel(rows.length) : '',
-        rows: rows.slice(0, cap),
-        more: Math.max(0, rows.length - cap),
-        moreLabel: `Lihat semua ${rows.length} laporan ${subShort(s.name)}`,
-        drill: { sub: s.id, pt: null },
-      }
-    })
-    const filled = groups.filter((g) => g.rows.length > 0)
-    const empty = groups.filter((g) => g.rows.length === 0)
-    return { title: 'Semua laporan', level: 'sub', groups: [...filled, ...empty] }
-  }
-  const tone = toneOf(sub.id)
-  const inSub = scoped(data, { sub: sub.id, pt: null })
-  if (!f.pt) {
-    const groups = ptBuckets(sub).reporting.map<ListGroup>((p) => {
-      const rows = highlightFirst(inSub.filter((r) => r.ptId === p.id))
-      return {
-        key: p.id, name: displayName(p.name), tone, countLabel: reportsLabel(rows.length),
-        rows, more: 0, moreLabel: '', drill: { sub: sub.id, pt: p.id },
-      }
-    })
-    return { title: 'Laporan per PT', level: 'pt', groups }
-  }
-  const rows = highlightFirst(inSub.filter((r) => r.ptId === f.pt))
-  return {
-    title: `Laporan ${dayWord(range)}`,
-    level: 'one',
-    groups: [{ key: f.pt, name: displayName(sub.name), tone, countLabel: '', rows, more: 0, moreLabel: '', drill: null }],
-  }
-}
-
-/** Kartu sorotan dalam cakupan penyaring; `where` = asal laporan yang belum tersirat dari penyaring. */
-export function highlightCards(data: V2Data | null | undefined, f: Filter): (FlatV2 & { where: string })[] {
-  return scoped(data, f)
-    .filter((r) => r.highlight)
-    .map((r) => ({ ...r, where: f.sub ? displayName(r.ptName) : `${subholdingLabel(r.subName)} · ${ptShort(r.ptName)}` }))
-}
-
-/* ---------- Lembar pemilih ---------- */
 
 export type PickItem = {
   key: string

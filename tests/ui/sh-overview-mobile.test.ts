@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 /**
  * Layar ponsel dashboard Manajemen & Superuser (KONTRAK-MANAJEMEN-MOBILE.md D3):
  * fisika gestur (proyeksi momentum, ambang tutup lembar/geser-kembali), label
- * tanggal, pengelompokan daftar, isi lembar pemilih, pola 7 hari, dan galeri.
+ * tanggal, judul layar, isi lembar pemilih, pola 7 hari, dan galeri.
  */
 
 import {
-  DECELERATION, DISMISS_RATIO, GROUP_LIMIT, REVERSE_SPEED,
-  addDays, backLabel, buildGroups, cellAlpha, counterLabel, dayHeading, dayWord, highlightCards, joinNames,
-  missingSentence, monoOf, progressPct, project, ptSections, ptShort, rowMeta, screenHeading, shortDay, shortRange,
+  DECELERATION, DISMISS_RATIO, REVERSE_SPEED,
+  addDays, backLabel, cellAlpha, counterLabel, dayHeading, dayWord,
+  monoOf, project, ptSections, ptShort, screenHeading, shortDay, shortRange,
   shouldDismiss, slideIndex, subSections, subShort, weekAria, weekCell, weekHighlights, weekRangeLabel, weekRows,
 } from '@/components/views/sh-overview/mobile/mobile-logic'
 import type { V2Data, V2Report, WeekData } from '@/components/views/sh-overview/model'
@@ -125,21 +125,7 @@ describe('teks', () => {
     expect(monoOf('Sigma Internasional')).toBe('S')
   })
 
-  it('gabung nama dan kalimat belum melapor', () => {
-    expect(joinNames(['A'])).toBe('A')
-    expect(joinNames(['A', 'B'])).toBe('A dan B')
-    expect(joinNames(['A', 'B', 'C'])).toBe('A, B, dan C')
-    expect(missingSentence([], 'today')).toBe('')
-    expect(missingSentence(['Fahreza Bumi Mega'], 'today')).toBe('Fahreza Bumi Mega belum melapor hari ini')
-    expect(missingSentence(['Fahreza'], 'yesterday')).toBe('Fahreza belum melapor kemarin')
-    expect(missingSentence(['A', 'B'], 'today')).toBe('A dan B belum melapor')
-    expect(missingSentence(['A', 'B', 'C', 'D', 'E'], 'today')).toBe('A, B, dan 3 lainnya belum melapor')
-  })
-
-  it('persentase progres dan label kembali', () => {
-    expect(progressPct(9, 25)).toBe(36)
-    expect(progressPct(3, 0)).toBe(0)
-    expect(progressPct(5, 4)).toBe(100)
+  it('label kembali', () => {
     expect(backLabel('Ringkasan')).toBe('Ringkasan')
     expect(backLabel('Sentra Multikarya Infrastruktur')).toBe('Kembali')
     expect(backLabel('')).toBe('Kembali')
@@ -150,67 +136,6 @@ describe('teks', () => {
     expect(screenHeading(DATA, { sub: 'sentra', pt: null })).toBe('Sentra Multikarya Infrastruktur')
     expect(screenHeading(DATA, { sub: 'sigma', pt: 'p1' })).toBe('PT Lintas Indonesia Katulistiwa')
     expect(screenHeading(DATA, { sub: 'sigma', pt: 'p3' })).toBe('PT Sigma Bahari')
-  })
-
-  it('meta baris: jam WIB · PT (semua) atau · pelapor (tersaring)', () => {
-    const r = { ...rep('x'), subId: 'sigma', subName: 'Sigma', ptId: 'p2', ptName: 'PT Sigma Logistik Nusantara' }
-    expect(rowMeta(r, 'sub')).toBe('10.15 · Sigma Logistik Nusantara')
-    expect(rowMeta(r, 'pt')).toBe('10.15 · Hendra Wijaya')
-    expect(rowMeta({ ...r, decidedAt: null, reporterName: undefined }, 'one')).toBe('')
-  })
-})
-
-describe('daftar berkelompok', () => {
-  it('tanpa penyaring: per subholding, maks 3 baris, sorotan dulu, kosong di akhir', () => {
-    const { title, level, groups } = buildGroups(DATA, { sub: null, pt: null }, 'today')
-    expect(title).toBe('Semua laporan')
-    expect(level).toBe('sub')
-    expect(groups.map((g) => g.key)).toEqual(['sigma', 'sentra', 'tunas'])
-    const sigma = groups[0]
-    expect(GROUP_LIMIT).toBe(3)
-    expect(sigma.rows.map((r) => r.id)).toEqual(['a3', 'a1', 'a2'])
-    expect(sigma.more).toBe(1)
-    expect(sigma.moreLabel).toBe('Lihat semua 4 laporan Sigma')
-    expect(sigma.countLabel).toBe('4 laporan')
-    expect(sigma.drill).toEqual({ sub: 'sigma', pt: null })
-    expect(groups[2].rows).toEqual([])
-    expect(groups[2].countLabel).toBe('')
-  })
-
-  it('subholding kosong pindah ke akhir walau urutan API di depan', () => {
-    const data: V2Data = { ...DATA, subholdings: [DATA.subholdings[2], DATA.subholdings[0]] }
-    expect(buildGroups(data, { sub: null, pt: null }, 'today').groups.map((g) => g.key)).toEqual(['sigma', 'tunas'])
-  })
-
-  it('subholding dipilih: per PT yang melapor (terbanyak dulu), semua baris, telusur ke PT', () => {
-    const { title, level, groups } = buildGroups(DATA, { sub: 'sigma', pt: null }, 'today')
-    expect(title).toBe('Laporan per PT')
-    expect(level).toBe('pt')
-    expect(groups.map((g) => g.key)).toEqual(['p1', 'p2'])
-    expect(groups[0].rows).toHaveLength(3)
-    expect(groups[0].more).toBe(0)
-    expect(groups[0].drill).toEqual({ sub: 'sigma', pt: 'p1' })
-    expect(groups[0].name).toBe('PT Lintas Indonesia Katulistiwa')
-  })
-
-  it('satu PT: satu kelompok tanpa telusur; judul ikut rentang', () => {
-    const a = buildGroups(DATA, { sub: 'sigma', pt: 'p2' }, 'yesterday')
-    expect(a.title).toBe('Laporan kemarin')
-    expect(a.level).toBe('one')
-    expect(a.groups).toHaveLength(1)
-    expect(a.groups[0].drill).toBeNull()
-    expect(a.groups[0].rows.map((r) => r.id)).toEqual(['a4'])
-    const b = buildGroups(DATA, { sub: 'sigma', pt: 'p3' }, 'today')
-    expect(b.groups[0].rows).toEqual([])
-  })
-
-  it('sorotan dalam cakupan penyaring dengan asal laporan', () => {
-    expect(highlightCards(DATA, { sub: null, pt: null }).map((r) => [r.id, r.where])).toEqual([
-      ['a3', 'Sigma Internasional Indonesia · Lintas Indonesia Katulistiwa'],
-    ])
-    expect(highlightCards(DATA, { sub: 'sigma', pt: null })[0].where).toBe('PT Lintas Indonesia Katulistiwa')
-    expect(highlightCards(DATA, { sub: 'sentra', pt: null })).toEqual([])
-    expect(highlightCards(null, { sub: null, pt: null })).toEqual([])
   })
 })
 

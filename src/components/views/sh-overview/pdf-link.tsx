@@ -39,24 +39,3 @@ export function PdfButton({
     </a>
   )
 }
-
-/** Tautan ikon PDF (target sentuh 44px) di ujung baris daftar. */
-export function PdfIconLink({ href, label, className }: { href: string; label: string; className?: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`${label} (tab baru)`}
-      title={label}
-      className={cx(
-        'inline-flex h-11 w-11 flex-none items-center justify-center rounded-full bg-fill-1 text-ink-2 no-underline hover:bg-fill-2 hover:text-ink',
-        'motion-safe:transition-colors motion-safe:duration-[var(--dur-base)]',
-        FOCUS,
-        className,
-      )}
-    >
-      <Icon name="dokumen" size={18} strokeWidth={2} />
-    </a>
-  )
-}

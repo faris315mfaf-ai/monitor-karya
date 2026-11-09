@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * Panel kiri layar tablet & desktop (D4): kepala ringkasan + rentang, kartu
- * status, navigasi subholding, daftar PT (cari + Melapor/Belum melapor +
+ * Panel kiri layar tablet & desktop (D4): kepala ringkasan + rentang,
+ * navigasi subholding, daftar PT (cari + Melapor/Belum melapor +
  * lencana jumlah), dan pemilih subholding popover untuk tata letak dua panel.
  */
 
@@ -20,10 +20,12 @@ import { ActiveBg, FOCUS_RING, FadeSwap, Mono, RangeControl, Star } from './part
 
 export function SideHeader({
   context,
+  title,
   range,
   onRange,
 }: {
   context: string
+  title: string
   range: OverviewRange
   onRange: (r: OverviewRange) => void
 }) {
@@ -31,23 +33,11 @@ export function SideHeader({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-0.5 px-2">
         <span className="t-footnote font-semibold text-ink-2">{context}</span>
-        <h1 className="m-0 t-title-2 tracking-[-0.025em] text-ink">Ringkasan</h1>
+        <h1 className="m-0 t-title-2 tracking-[-0.025em] text-ink">{title}</h1>
       </div>
       <div className="px-1">
         <RangeControl value={range} onChange={onRange} />
       </div>
-    </div>
-  )
-}
-
-export function StatusCard({ line, sub, tone }: { line: string; sub: string; tone: 'ok' | 'warn' }) {
-  return (
-    <div className="mx-1 flex flex-col gap-1 rounded-[var(--radius-md)] bg-surface px-3.5 py-3 shadow-[var(--shadow-card)]">
-      <span className="t-body-strong font-bold text-ink">{line}</span>
-      <span className={cx('inline-flex items-start gap-1 t-caption font-normal', tone === 'ok' ? 'text-sukses' : 'text-waspada')}>
-        <Icon name={tone === 'ok' ? 'selesai' : 'peringatan'} size={13} strokeWidth={2.2} className="mt-px shrink-0" />
-        <span>{sub}</span>
-      </span>
     </div>
   )
 }

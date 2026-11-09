@@ -11,11 +11,10 @@
  * akar juga mematikan animasi transform/layout).
  */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { AnimatePresence, motion, useIsPresent, useReducedMotion, type Transition } from 'framer-motion'
-import { Icon, Skeleton, cx } from '@/components/mk'
-import { useSignedUrl } from '../evidence'
-import { initialOf, toneVars, type OverviewEvidence, type Tone } from '../logic'
+import { cx } from '@/components/mk'
+import { initialOf, toneVars, type Tone } from '../logic'
 import type { OverviewRange } from '../screen-types'
 
 /** Pegas navigasi: kritis, ~0,35 dtk. */
@@ -139,57 +138,6 @@ export function ActiveBg({ layoutId, className }: { layoutId: string; className?
       aria-hidden
       className={cx('absolute inset-0 bg-fill-2', className)}
     />
-  )
-}
-
-/**
- * Kotak foto asli (URL bertanda tangan): kerangka saat dimuat, ikon bila gagal,
- * lencana jumlah bila lebih dari satu foto. Dekoratif — label ada di tombol pembungkus.
- */
-export function PhotoBox({
-  photo,
-  size,
-  radius = 12,
-  count = 1,
-}: {
-  photo: OverviewEvidence
-  size: number
-  radius?: number
-  count?: number
-}) {
-  const { url, failed, loading } = useSignedUrl(photo.id, true, 'thumb')
-  const [broken, setBroken] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-  const show = Boolean(url) && !failed && !broken
-  return (
-    <span
-      aria-hidden
-      className="relative flex shrink-0 items-center justify-center overflow-hidden bg-fill-1 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]"
-      style={{ width: size, height: size, borderRadius: radius }}
-    >
-      {show ? (
-        <img
-          src={url ?? undefined}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onLoad={() => setLoaded(true)}
-          onError={() => setBroken(true)}
-          className={cx(
-            'absolute inset-0 h-full w-full object-cover',
-            loaded ? 'opacity-100' : 'opacity-0',
-            'motion-safe:transition-opacity motion-safe:duration-[var(--dur-base)] motion-safe:ease-[var(--ease-standard)]'
-          )}
-        />
-      ) : null}
-      {loading || (show && !loaded) ? <Skeleton h="100%" r={0} className="absolute inset-0" /> : null}
-      {!loading && !show ? <Icon name="dokumen" size={size >= 56 ? 22 : 18} /> : null}
-      {count > 1 ? (
-        <span className="absolute right-1 bottom-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--ink)] px-[5px] t-caption font-bold leading-none tabular-nums text-[var(--surface)]">
-          {count}
-        </span>
-      ) : null}
-    </span>
   )
 }
 

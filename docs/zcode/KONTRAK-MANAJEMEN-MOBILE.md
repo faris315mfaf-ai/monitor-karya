@@ -1,5 +1,22 @@
 # Kontrak dashboard Manajemen & Superuser — tablet & ponsel (16 Okt 2026)
 
+> **Pembaruan 9 Nov 2026 — opsi B (pilihan pemilik).** Rentang **Hari ini / Kemarin** di ponsel dan
+> tablet kini satu tampilan hierarki: kartu status (PT sudah/belum melapor + jumlah laporan) lalu
+> akordeon **subholding → PT → laporan**, semua **terbaru di atas** (waktu disetujui menurun; laporan
+> yang disetujui di hari lain diberi tanggal, mis. "16 Okt 12.44"). PT yang belum melapor tampil di
+> bawah subholdingnya. Akordeon terbuka = `Filter` tersimpan (ikut ke rentang 7 hari).
+> - Logika: `sh-overview/hierarchy.ts` (tes `tests/ui/sh-overview-hierarchy.test.ts`);
+>   tampilan: `hierarchy-view.tsx`.
+> - Ponsel: ketuk laporan → `ReportScreen` (tombol Lihat PDF). PT dengan >1 laporan punya baris
+>   "PDF semua laporan PT".
+> - Tablet (`tablet/day-view.tsx`): kontainer ≥ 760px dua panel — daftar 340–460px + rincian
+>   (`ReportDetailPanel`, bawaan laporan terbaru di PT/subholding terbuka); lebih sempit satu kolom +
+>   pop-up `ReportDetail`. Kanvas: "Opsi dashboard Ketum", papan B (ponsel & Z Fold 7 terbuka).
+> - Rentang **7 hari** tidak berubah (D3 ponsel, D4 `TabletWeek`).
+> - Dihapus: kartu sorotan/semua laporan hari (AllView, ScopeView), kategori Sudah/Belum
+>   (`coverage.tsx`), lingkaran status subholding ponsel. Bagian D3/D4 di bawah tentang tampilan hari
+>   hanya catatan sejarah.
+
 Mockup pemilik (kanvas https://claude.ai/artifact/2vej4mKj3RD8v5QcFGXU9e):
 - halaman **"Manajemen — tablet & ponsel"**: papan `M-Ponsel-*`, `M-Tablet-*`, `F-Ponsel*`, `F-Tablet*`
 - halaman **"Manajemen — 3 lapis"**: papan `Lapis-Supervisor-Ponsel` (sakelar sorotan supervisor)

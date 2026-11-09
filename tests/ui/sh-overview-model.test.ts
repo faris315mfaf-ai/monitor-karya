@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  NO_FILTER, coverageCounts, dayLabel, flatten, groupBySub, highlightFirst, isWeekend, lastReportLabel, loadFilter,
-  matchesQuery, ptBuckets, ptCoverage, saveFilter, scoped, silentDays, silentLabel, silentStreak, statusSummary,
+  NO_FILTER, dayLabel, flatten, isWeekend, lastReportLabel, loadFilter,
+  matchesQuery, ptBuckets, ptCoverage, saveFilter, scoped, silentDays, silentStreak,
   validFilter, weekNote, type V2Data,
 } from '@/components/views/sh-overview/model'
 
@@ -43,17 +43,6 @@ describe('model dashboard manajemen', () => {
   it('scoped menyaring per subholding dan PT', () => {
     expect(scoped(data, NO_FILTER)).toHaveLength(3)
     expect(scoped(data, { sub: 'sentra', pt: 'pt-j' }).map((r) => r.id)).toEqual(['j1'])
-  })
-
-  it('highlightFirst stabil dan sorotan di atas', () => {
-    expect(highlightFirst([rep('1'), rep('2', true), rep('3'), rep('4', true)]).map((r) => r.id)).toEqual(['2', '4', '1', '3'])
-  })
-
-  it('statusSummary tiga tingkat', () => {
-    expect(statusSummary(data, NO_FILTER)).toEqual({ level: 'sub', done: 1, total: 2, reports: 3, missing: ['Fahreza'] })
-    expect(statusSummary(data, { sub: 'sentra', pt: null })).toEqual({ level: 'pt', done: 2, total: 4, reports: 3, missing: ['PT Aspal', 'PT Zona'] })
-    expect(statusSummary(data, { sub: 'sentra', pt: 'pt-z' })).toEqual({ level: 'one', done: 0, total: 1, reports: 0, missing: ['PT Zona'] })
-    expect(statusSummary(data, { sub: 'sentra', pt: 'pt-b' })).toMatchObject({ level: 'one', done: 1, reports: 2 })
   })
 
   it('ptBuckets: melapor urut jumlah, belum melapor urut nama', () => {
@@ -147,12 +136,7 @@ describe('kategori PT sudah / belum melapor', () => {
     expect(silentDays('rusak', '2026-10-09')).toBeNull()
   })
 
-  it('silentLabel dan lastReportLabel', () => {
-    expect(silentLabel(1, 'today')).toBe('Hari ini')
-    expect(silentLabel(1, 'yesterday')).toBe('Kemarin')
-    expect(silentLabel(4, 'today')).toBe('4 hari kerja')
-    expect(silentLabel(null, 'today')).toBe('Lebih dari 90 hari')
-    expect(silentLabel(0, 'today')).toBe('Akhir pekan')
+  it('lastReportLabel', () => {
     expect(lastReportLabel('2026-10-22')).toBe('terakhir melapor Kam 22 Okt')
     expect(lastReportLabel('2026-10-14')).toBe('terakhir melapor Rab 14 Okt')
     expect(lastReportLabel(null)).toBe('belum ada laporan dalam 90 hari')
@@ -195,12 +179,5 @@ describe('kategori PT sudah / belum melapor', () => {
     const c = ptCoverage(old, NO_FILTER)
     expect(c.silent).toEqual([])
     expect(c.reporting.map((p) => p.id)).toEqual(['p'])
-  })
-
-  it('coverageCounts dan groupBySub', () => {
-    const c = ptCoverage(cov, NO_FILTER)
-    expect(coverageCounts(c)).toEqual({ semua: 8, sudah: 3, belum: 5 })
-    const g = groupBySub(c.reporting)
-    expect(g.map((x) => [x.subId, x.rows.map((r) => r.id)])).toEqual([['energi', ['e1', 'e2']], ['logistik', ['l1']]])
   })
 })

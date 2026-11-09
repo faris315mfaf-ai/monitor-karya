@@ -78,50 +78,6 @@ export function scoped(data: V2Data | null | undefined, f: Filter): FlatV2[] {
   return flatten(data).filter((r) => (!f.sub || r.subId === f.sub) && (!f.pt || r.ptId === f.pt))
 }
 
-/** Sorotan lebih dulu, lalu urutan asal (API: waktu setuju). Stabil. */
-export function highlightFirst<T extends { highlight?: boolean }>(list: T[]): T[] {
-  return list
-    .map((x, i) => ({ x, i }))
-    .sort((a, b) => Number(!!b.x.highlight) - Number(!!a.x.highlight) || a.i - b.i)
-    .map((e) => e.x)
-}
-
-export type StatusSummary = {
-  /** 'sub' = tingkat subholding, 'pt' = tingkat PT di subholding terpilih, 'one' = satu PT. */
-  level: 'sub' | 'pt' | 'one'
-  done: number
-  total: number
-  reports: number
-  /** Nama yang belum melapor (subholding atau PT, sesuai tingkat). */
-  missing: string[]
-}
-
-export function statusSummary(data: V2Data | null | undefined, f: Filter): StatusSummary {
-  const subs = data?.subholdings ?? []
-  if (!f.sub) {
-    const done = subs.filter((s) => (s.pts ?? []).some((p) => p.reports.length > 0))
-    return {
-      level: 'sub', done: done.length, total: subs.length,
-      reports: flatten(data).length,
-      missing: subs.filter((s) => !done.includes(s)).map((s) => s.name),
-    }
-  }
-  const sub = subs.find((s) => s.id === f.sub)
-  if (!sub) return { level: 'sub', done: 0, total: 0, reports: 0, missing: [] }
-  const withIds = new Set(sub.pts.filter((p) => p.reports.length > 0).map((p) => p.id))
-  const all = sub.allPts ?? sub.pts.map((p) => ({ id: p.id, name: p.name }))
-  if (!f.pt) {
-    return {
-      level: 'pt', done: withIds.size, total: all.length,
-      reports: sub.pts.reduce((n, p) => n + p.reports.length, 0),
-      missing: all.filter((p) => !withIds.has(p.id)).map((p) => p.name),
-    }
-  }
-  const pt = sub.pts.find((p) => p.id === f.pt)
-  const n = pt?.reports.length ?? 0
-  return { level: 'one', done: n > 0 ? 1 : 0, total: 1, reports: n, missing: n > 0 ? [] : [all.find((p) => p.id === f.pt)?.name ?? ''] }
-}
-
 /** PT subholding dibagi: melapor (urut jumlah laporan menurun, lalu nama) dan belum. */
 export function ptBuckets(sub: V2Subholding | null | undefined): {
   reporting: { id: string; name: string; count: number; highlights: number }[]
@@ -245,14 +201,6 @@ export function silentDays(dateKey: string, lastReportDate: string | null | unde
   return n
 }
 
-/** Lama diam untuk lencana: 'Hari ini' / 'Kemarin' (1), 'n hari kerja' (≥2), 'Lebih dari 90 hari' (null). */
-export function silentLabel(days: number | null, range: 'today' | 'yesterday' | 'week' = 'today'): string {
-  if (days === null) return `Lebih dari ${LAST_REPORT_WINDOW_DAYS} hari`
-  if (days <= 0) return 'Akhir pekan'
-  if (days === 1) return range === 'yesterday' ? 'Kemarin' : 'Hari ini'
-  return `${days} hari kerja`
-}
-
 /** 'terakhir melapor Rab 22 Okt' atau 'belum ada laporan dalam 90 hari'. */
 export function lastReportLabel(lastReportDate: string | null | undefined): string {
   if (!lastReportDate) return `belum ada laporan dalam ${LAST_REPORT_WINDOW_DAYS} hari`
@@ -302,24 +250,6 @@ export function ptCoverage(data: V2Data | null | undefined, f: Filter): Coverage
     return ra === rb ? byNameId(a, b) : ra > rb ? -1 : 1
   })
   return { reporting, silent, total: reporting.length + silent.length }
-}
-
-export type CoverageTab = 'semua' | 'sudah' | 'belum'
-
-/** Hitungan tab Semua / Sudah / Belum. */
-export function coverageCounts(c: Coverage): Record<CoverageTab, number> {
-  return { semua: c.total, sudah: c.reporting.length, belum: c.silent.length }
-}
-
-/** Kelompokkan baris per subholding (urut nama subholding; urutan baris dipertahankan). */
-export function groupBySub<T extends { subId: string; subName: string }>(rows: T[]): { subId: string; subName: string; rows: T[] }[] {
-  const map = new Map<string, { subId: string; subName: string; rows: T[] }>()
-  for (const r of rows) {
-    const g = map.get(r.subId) ?? { subId: r.subId, subName: r.subName, rows: [] }
-    g.rows.push(r)
-    map.set(r.subId, g)
-  }
-  return [...map.values()].sort((a, b) => a.subName.localeCompare(b.subName, 'id'))
 }
 
 /* ---------- Penyaring tersimpan per perangkat ---------- */

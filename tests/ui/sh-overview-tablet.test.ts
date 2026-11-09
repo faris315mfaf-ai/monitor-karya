@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { flatten, scoped, statusSummary, NO_FILTER, type V2Data, type WeekData } from '@/components/views/sh-overview/model'
+import { NO_FILTER, flatten, type V2Data, type WeekData } from '@/components/views/sh-overview/model'
 import {
-  THREE_PANE_MIN, allLine, contentKey, dayHeading, dayWord, fillHeight, heatCells, heatPct, joinNames, paneLayout,
-  ptBlocks, ptNameOf, ptPanel, ptShort, reportMeta, scopeMeta, shortDay, statusCard, subCards, subRows, toDetail,
-  weekHighlights, weekRangeLabel, weekRows,
+  DAY_SPLIT_MIN, THREE_PANE_MIN, allLine, contentKey, dayHeading, dayLayout, dayWord, fillHeight, heatCells, heatPct,
+  paneLayout, ptNameOf, ptPanel, ptShort, shortDay, subRows, toDetail, weekHighlights, weekRangeLabel, weekRows,
 } from '@/components/views/sh-overview/tablet/logic'
 
 const rep = (id: string, extra: Partial<{ highlight: boolean; highlightNote: string; decidedAt: string; reporterName: string; reporterTitle: string }> = {}) => ({
@@ -60,6 +59,20 @@ describe('paneLayout', () => {
   })
 })
 
+describe('dayLayout (opsi B)', () => {
+  it('dua panel mulai 760px kontainer: daftar ±42%, dijepit 340–460', () => {
+    expect(DAY_SPLIT_MIN).toBe(760)
+    expect(dayLayout(968)).toEqual({ split: true, listW: 407 })
+    expect(dayLayout(760)).toEqual({ split: true, listW: 340 })
+    expect(dayLayout(1400)).toEqual({ split: true, listW: 460 })
+  })
+  it('lebih sempit satu kolom; lebar tidak sah → 0', () => {
+    expect(dayLayout(759)).toEqual({ split: false, listW: 759 })
+    expect(dayLayout(Number.NaN)).toEqual({ split: false, listW: 0 })
+    expect(dayLayout(-5)).toEqual({ split: false, listW: 0 })
+  })
+})
+
 describe('fillHeight', () => {
   it('sisa layar di bawah kontainer dikurangi padding bawah, tidak kurang dari batas', () => {
     expect(fillHeight(900, 92, 48)).toBe(760)
@@ -96,10 +109,6 @@ describe('nama', () => {
     expect(ptShort('PT. Jaya')).toBe('Jaya')
     expect(ptShort('PT')).toBe('PT')
   })
-  it('gabung nama dengan "dan n lainnya"', () => {
-    expect(joinNames(['A', 'B'])).toBe('A, B')
-    expect(joinNames(['A', 'B', 'C', 'D', 'E'])).toBe('A, B, C dan 2 lainnya')
-  })
 })
 
 describe('subRows & allLine', () => {
@@ -119,18 +128,6 @@ describe('subRows & allLine', () => {
   it('tanpa data hari memakai daftar subholding 7 hari', () => {
     expect(subRows(null, week, 'week').map((r) => r.id)).toEqual(['sentra', 'tunas'])
     expect(subRows(null, null, 'today')).toEqual([])
-  })
-})
-
-describe('statusCard', () => {
-  it('ringkasan melapor dan siapa yang belum', () => {
-    expect(statusCard(statusSummary(data, NO_FILTER))).toEqual({ line: '1 dari 2 melapor', sub: 'Tunas Baru belum melapor', tone: 'warn' })
-    expect(statusCard({ level: 'sub', done: 2, total: 2, reports: 3, missing: [] })).toEqual({
-      line: '2 dari 2 melapor', sub: 'Semua subholding sudah melapor', tone: 'ok',
-    })
-    expect(statusCard({ level: 'pt', done: 0, total: 4, reports: 0, missing: ['PT A', 'PT B', 'PT C', 'PT D'] }).sub).toBe(
-      'A, B, C dan 1 lainnya belum melapor'
-    )
   })
 })
 
@@ -166,31 +163,7 @@ describe('ptPanel', () => {
   })
 })
 
-describe('konten', () => {
-  it('kartu ringkas: 3 teratas dengan sorotan dulu, kosong di akhir', () => {
-    const cards = subCards({ ...data, subholdings: [data.subholdings[1], data.subholdings[0]] }, flatten(data))
-    expect(cards.map((c) => c.id)).toEqual(['sentra', 'tunas'])
-    expect(cards[0].count).toBe(6)
-    expect(cards[0].top.map((r) => r.id)).toEqual(['b2', 'b1', 'j1'])
-    expect(cards[1]).toMatchObject({ empty: true, top: [] })
-  })
-  it('blok per PT: terbanyak dulu, sorotan dulu di dalam PT', () => {
-    const blocks = ptBlocks(scoped(data, { sub: 'sentra', pt: null }))
-    expect(blocks.map((b) => b.ptId)).toEqual(['pt-k', 'pt-b', 'pt-j'])
-    expect(blocks[1].reports.map((r) => r.id)).toEqual(['b2', 'b1'])
-  })
-  it('meta kepala subholding dan PT', () => {
-    expect(scopeMeta({ reports: 6, highlights: 1, ptDone: 3, ptTotal: 5, range: 'today' })).toBe('6 laporan · 3 dari 5 PT melapor · 1 sorotan')
-    expect(scopeMeta({ reports: 0, highlights: 0, ptDone: 0, ptTotal: 25, range: 'today' })).toBe('25 PT · belum melapor hari ini')
-    expect(scopeMeta({ reports: 2, highlights: 0, range: 'yesterday' })).toBe('2 laporan kemarin')
-    expect(scopeMeta({ reports: 0, highlights: 0, range: 'today' })).toBe('Belum melapor hari ini')
-  })
-  it('meta baris laporan: jam WIB · pelapor, jabatan', () => {
-    expect(reportMeta({ decidedAt: '2026-10-15T03:15:00.000Z', reporterName: 'Hendra', reporterTitle: 'Manajer Proyek' })).toBe(
-      '10.15 · Hendra, Manajer Proyek'
-    )
-    expect(reportMeta({ reporterName: ' ' })).toBe('')
-  })
+describe('rincian', () => {
   it('laporan → rincian membawa catatan sorotan', () => {
     const r = flatten(data).find((x) => x.id === 'b2')!
     const d = toDetail(r)

@@ -1,16 +1,16 @@
 /**
  * Logika murni layar tablet & desktop dashboard Manajemen/Superuser
  * (KONTRAK-MANAJEMEN-MOBILE.md bagian D4). Tanpa React supaya bisa diuji di
- * Node: tata letak panel menurut lebar kontainer, baris panel subholding dan
- * PT, isi konten (sorotan, kartu ringkas, blok per PT), dan tabel 7 hari.
+ * Node: tata letak panel menurut lebar kontainer (tiga/dua panel 7 hari,
+ * daftar + rincian opsi B), baris panel subholding dan PT, rincian laporan,
+ * dan tabel 7 hari.
  */
 
 import type { DetailReport } from '../report-detail'
-import { timeLabel } from '../detail-logic'
 import { displayName, subholdingLabel, toneOf, type Tone } from '../logic'
 import {
-  dayLabel, highlightFirst, isWeekend, matchesQuery, ptBuckets, silentStreak, weekNote,
-  type Filter, type FlatV2, type StatusSummary, type V2Data, type V2Subholding, type WeekData,
+  dayLabel, isWeekend, matchesQuery, ptBuckets, silentStreak, weekNote,
+  type Filter, type FlatV2, type V2Data, type V2Subholding, type WeekData,
 } from '../model'
 import type { OverviewRange } from '../screen-types'
 
@@ -32,6 +32,19 @@ export function paneLayout(width: number, hasSub: boolean): { mode: PaneMode; si
   if (w >= THREE_PANE_MIN) return { mode: 'three', sideW: hasSub ? 250 : 300, ptW: 290 }
   const narrow = w < 760
   return { mode: 'two', sideW: hasSub ? (narrow ? 264 : 300) : narrow ? 248 : 268, ptW: 0 }
+}
+
+/** Lebar kontainer minimum untuk daftar + rincian berdampingan (opsi B, rentang hari). */
+export const DAY_SPLIT_MIN = 760
+
+/**
+ * Tata letak opsi B: ≥ DAY_SPLIT_MIN dua panel — daftar ±42% (340–460px),
+ * sisanya rincian. Lebih sempit satu kolom; rincian dibuka di pop-up.
+ */
+export function dayLayout(width: number): { split: boolean; listW: number } {
+  const w = Number.isFinite(width) ? Math.max(0, width) : 0
+  if (w < DAY_SPLIT_MIN) return { split: false, listW: w }
+  return { split: true, listW: Math.min(460, Math.max(340, Math.round(w * 0.42))) }
 }
 
 /** Tinggi area panel: sisa layar di bawah posisi atas kontainer dikurangi padding bawah konten shell. */
@@ -93,13 +106,6 @@ export function ptShort(name: string): string {
   return full.replace(/^PT\.?\s+/i, '').trim() || full
 }
 
-/** Gabung nama: maks `max` nama, sisanya "dan n lainnya". */
-export function joinNames(names: string[], max = 3): string {
-  const list = names.filter(Boolean)
-  if (list.length <= max) return list.join(', ')
-  return `${list.slice(0, max).join(', ')} dan ${list.length - max} lainnya`
-}
-
 /* ---------- Panel subholding ---------- */
 
 export type SubRow = {
@@ -157,16 +163,6 @@ export function allLine(data: V2Data | null | undefined, week: WeekData | null |
   return `${n} laporan`
 }
 
-/** Kartu status di panel subholding: "3 dari 5 melapor" + siapa yang belum. */
-export function statusCard(sum: StatusSummary): { line: string; sub: string; tone: 'ok' | 'warn' } {
-  const line = `${sum.done} dari ${sum.total} melapor`
-  if (sum.missing.length === 0) {
-    return { line, sub: sum.level === 'sub' ? 'Semua subholding sudah melapor' : 'Semua PT sudah melapor', tone: 'ok' }
-  }
-  const names = sum.level === 'sub' ? sum.missing.map(subholdingLabel) : sum.missing.map(ptShort)
-  return { line, sub: `${joinNames(names)} belum melapor`, tone: 'warn' }
-}
-
 /* ---------- Panel PT ---------- */
 
 export type PtItem = { id: string; name: string; count: number; highlights: number }
@@ -205,54 +201,9 @@ export function ptNameOf(sub: V2Subholding | null | undefined, ptId: string | nu
   return (sub.pts.find((p) => p.id === ptId) ?? sub.allPts?.find((p) => p.id === ptId))?.name ?? ''
 }
 
-/* ---------- Konten ---------- */
+/* ---------- Rincian ---------- */
 
-export type SubCard = { id: string; name: string; tone: Tone; count: number; top: FlatV2[]; empty: boolean }
-
-/** Kartu ringkas per subholding (konten "Semua"): 3 laporan teratas (sorotan dulu); yang kosong di akhir. */
-export function subCards(data: V2Data | null | undefined, list: FlatV2[], top = 3): SubCard[] {
-  const cards = (data?.subholdings ?? []).map((s) => {
-    const mine = list.filter((r) => r.subId === s.id)
-    return { id: s.id, name: subholdingLabel(s.name), tone: toneOf(s.id), count: mine.length, top: highlightFirst(mine).slice(0, top), empty: mine.length === 0 }
-  })
-  return [...cards.filter((c) => !c.empty), ...cards.filter((c) => c.empty)]
-}
-
-export type PtBlock = { ptId: string; ptName: string; reports: FlatV2[] }
-
-/** Laporan per PT: PT dengan laporan terbanyak dulu (lalu nama), laporan sorotan dulu di dalamnya. */
-export function ptBlocks(list: FlatV2[]): PtBlock[] {
-  const map = new Map<string, PtBlock>()
-  for (const r of list) {
-    const key = r.ptId || r.ptName
-    let b = map.get(key)
-    if (!b) {
-      b = { ptId: r.ptId, ptName: r.ptName, reports: [] }
-      map.set(key, b)
-    }
-    b.reports.push(r)
-  }
-  return [...map.values()]
-    .sort((a, b) => b.reports.length - a.reports.length || a.ptName.localeCompare(b.ptName, 'id'))
-    .map((b) => ({ ...b, reports: highlightFirst(b.reports) }))
-}
-
-/** Keterangan kepala konten subholding/PT. */
-export function scopeMeta(opts: { reports: number; highlights: number; ptDone?: number; ptTotal?: number; range: OverviewRange }): string {
-  const { reports, highlights, ptDone, ptTotal: total, range } = opts
-  const hi = highlights > 0 ? ` · ${highlights} sorotan` : ''
-  if (total === undefined) return reports > 0 ? `${reports} laporan ${dayWord(range)}${hi}` : `Belum melapor ${dayWord(range)}`
-  if (reports === 0) return total > 0 ? `${total} PT · belum melapor ${dayWord(range)}` : `Belum melapor ${dayWord(range)}`
-  return `${reports} laporan · ${ptDone ?? 0} dari ${total} PT melapor${hi}`
-}
-
-/** Meta baris laporan: "10.15 · Hendra Wijaya, Manajer Proyek"; bagian kosong dibuang. */
-export function reportMeta(r: { decidedAt?: string | null; reporterName?: string; reporterTitle?: string }): string {
-  const who = [r.reporterName?.trim(), r.reporterTitle?.trim()].filter(Boolean).join(', ')
-  return [timeLabel(r.decidedAt ?? null), who].filter(Boolean).join(' · ')
-}
-
-/** Laporan datar → isi pop-up rincian (termasuk catatan sorotan). */
+/** Laporan datar → isi rincian (pop-up atau panel; termasuk catatan sorotan). */
 export function toDetail(r: FlatV2): DetailReport {
   return {
     id: r.id,

@@ -11,27 +11,7 @@ import { useState } from 'react'
 import { Icon, Skeleton, cx } from '@/components/mk'
 import { useSignedUrl } from '../evidence'
 import { docActionLabel, photoAlt } from '../detail-logic'
-import { docsOf, photosOf, type OverviewEvidence } from '../logic'
-
-/** Miniatur foto pertama laporan; dokumen saja → ikon; tanpa bukti → tidak dirender. */
-export function PhotoTile({ evidence, className }: { evidence: OverviewEvidence[] | undefined; className: string }) {
-  const photo = photosOf(evidence)[0] ?? null
-  const hasDoc = docsOf(evidence).length > 0
-  const { url, failed, loading } = useSignedUrl(photo?.id ?? null, Boolean(photo), 'thumb')
-  const [broken, setBroken] = useState(false)
-  if (!photo && !hasDoc) return null
-  return (
-    <span aria-hidden className={cx('relative flex flex-none items-center justify-center overflow-hidden bg-fill-1 text-ink-2', className)}>
-      {photo && url && !failed && !broken ? (
-        <img src={url} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setBroken(true)} />
-      ) : photo && loading ? (
-        <Skeleton h="100%" r={0} className="absolute inset-0" />
-      ) : (
-        <Icon name="dokumen" size={18} />
-      )}
-    </span>
-  )
-}
+import type { OverviewEvidence } from '../logic'
 
 /** Satu slide galeri rincian (lebar penuh, 4:3). Ketuk → lightbox. */
 export function GallerySlide({

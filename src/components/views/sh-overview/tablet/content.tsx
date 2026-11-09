@@ -1,297 +1,22 @@
 'use client'
 
 /**
- * Isi panel konten layar tablet & desktop (D4):
- * - Semua: Sorotan (grid kartu) + kartu ringkas per subholding (3 teratas, klik → pilih).
- * - Subholding/PT: kepala (inisial, nama, meta), sorotan, laporan per PT
- *   (foto asli + lencana jumlah, judul, 2 baris deskripsi, jam · pelapor).
- * - 7 hari: tabel subholding×hari (atau PT×hari) + sorotan 7 hari.
+ * Isi panel konten layar tablet & desktop rentang 7 hari (D4): tabel
+ * subholding×hari (atau PT×hari) + sorotan 7 hari. Rentang hari memakai
+ * opsi B (day-view.tsx).
  */
 
 import { useId, useLayoutEffect, useRef } from 'react'
-import { ErrorNote, Icon, Skeleton, cx } from '@/components/mk'
-import { CoverageSection } from '../coverage'
-import { timeLabel } from '../detail-logic'
-import { displayName, photosOf, subholdingLabel, toneOf, toneVars, type Tone } from '../logic'
-import { dayLabel, type Coverage, type CoverageTab, type Filter, type FlatV2, type V2Data, type WeekData } from '../model'
-import type { OverviewRange } from '../screen-types'
-import {
-  heatCells, ptBlocks, ptShort, reportMeta, scopeMeta, subCards, weekHighlights, weekRangeLabel, weekRows,
-  type PaneMode, type SubCard,
-} from './logic'
-import { FOCUS_RING, Mono, PRESS, PhotoBox, SectionHead, Star } from './parts'
+import { ErrorNote, Skeleton, cx } from '@/components/mk'
+import { toneOf, toneVars, type Tone } from '../logic'
+import { dayLabel, type Filter, type WeekData } from '../model'
+import { heatCells, ptShort, weekHighlights, weekRangeLabel, weekRows, type PaneMode } from './logic'
+import { Mono, SectionHead, Star } from './parts'
 
-const GRID = 'grid items-start gap-3.5 grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))]'
 const CARD = 'rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-card)]'
-
-export type ContentActions = {
-  /** Ganti penyaring dari dalam isi (fokus pindah ke kepala isi baru). */
-  pick: (f: Filter) => void
-  open: (r: FlatV2) => void
-  photo: (r: FlatV2, index: number) => void
-}
-
-/** Kategori PT sudah / belum melapor: status tab dipegang TabletOverview (ubin di panel kiri mengendalikannya). */
-export type CoverageProps = {
-  coverage: Coverage
-  tab: CoverageTab
-  onTab: (t: CoverageTab) => void
-  dateKey: string
-  range: OverviewRange
-}
 
 function pad(mode: PaneMode) {
   return mode === 'three' ? 'px-7 pt-7 pb-10' : 'px-6 pt-6 pb-10'
-}
-
-/* ---------- Semua subholding (hari) ---------- */
-
-export function AllView({
-  mode,
-  data,
-  list,
-  act,
-  cov,
-}: {
-  mode: PaneMode
-  data: V2Data
-  list: FlatV2[]
-  act: ContentActions
-  cov: CoverageProps
-}) {
-  const uid = useId()
-  const hi = list.filter((r) => r.highlight)
-  const cards = subCards(data, list)
-  return (
-    <div className={cx('flex flex-col gap-[26px]', pad(mode))}>
-      <section aria-labelledby={`${uid}-so`} className="flex flex-col gap-3">
-        <div data-pane-focus tabIndex={-1} className="outline-none">
-          <SectionHead id={`${uid}-so`} title="Sorotan" aside={hi.length ? `${hi.length} perlu perhatian` : undefined} />
-        </div>
-        {hi.length ? (
-          <div className={GRID}>
-            {hi.map((r) => (
-              <HighlightCard key={r.id} r={r} onOpen={() => act.open(r)} />
-            ))}
-          </div>
-        ) : (
-          <p className={cx(CARD, 'm-0 px-4 py-3.5 t-callout font-normal text-ink-2')}>Tidak ada sorotan untuk tanggal ini.</p>
-        )}
-      </section>
-
-      <CoverageSection {...cov} wide title="Pelaporan PT" onOpenPt={(sub, pt) => act.pick({ sub, pt })} />
-
-      <section aria-labelledby={`${uid}-all`} className="flex flex-col gap-3">
-        <SectionHead id={`${uid}-all`} title="Semua laporan" aside={`${list.length} laporan disetujui`} />
-        <div className={GRID}>
-          {cards.map((c) => (
-            <SubCardButton key={c.id} c={c} onPick={() => act.pick({ sub: c.id, pt: null })} />
-          ))}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function HighlightCard({ r, onOpen }: { r: FlatV2; onOpen: () => void }) {
-  const photos = photosOf(r.evidence)
-  const jam = timeLabel(r.decidedAt ?? null)
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cx(CARD, 'flex cursor-pointer flex-col gap-2.5 p-4 text-left', PRESS, FOCUS_RING)}
-    >
-      <span className="flex w-full items-center gap-2">
-        <Mono name={subholdingLabel(r.subName)} tone={toneOf(r.subId)} size={22} />
-        <span className="min-w-0 flex-1 truncate t-caption text-ink-2">{subholdingLabel(r.subName)}</span>
-        <Star size={14} label="Sorotan" />
-      </span>
-      <span className="flex w-full items-start gap-3">
-        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="t-headline leading-[1.3] text-ink">{r.kegiatan}</span>
-          <span className="t-caption font-normal text-ink-2">{[ptShort(r.ptName), jam].filter(Boolean).join(' · ')}</span>
-        </span>
-        {photos[0] ? <PhotoBox photo={photos[0]} size={56} count={photos.length} /> : null}
-      </span>
-      {r.highlightNote?.trim() ? <Note>{r.highlightNote}</Note> : null}
-    </button>
-  )
-}
-
-function SubCardButton({ c, onPick }: { c: SubCard; onPick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      className={cx(CARD, 'flex cursor-pointer flex-col px-4 pt-3.5 pb-1.5 text-left', PRESS, FOCUS_RING)}
-    >
-      <span className="flex w-full items-center gap-2.5 pb-2">
-        <Mono name={c.name} tone={c.tone} size={26} />
-        <span className="min-w-0 flex-1 truncate t-body-strong text-ink">{c.name}</span>
-        {c.count ? <span className="t-caption font-normal text-ink-2">{c.count} laporan</span> : null}
-        <Icon name="kanan" size={14} strokeWidth={2.2} className="shrink-0 text-ink-3" />
-      </span>
-      {c.top.map((r) => (
-        <span key={r.id} className="flex w-full items-center gap-1.5 border-t border-line py-2 t-callout font-normal text-ink">
-          {r.highlight ? <Star size={11} label="Sorotan" /> : null}
-          <span className="min-w-0 flex-1 truncate">{r.kegiatan}</span>
-          <span className="shrink-0 t-caption font-normal text-ink-2">{timeLabel(r.decidedAt ?? null)}</span>
-        </span>
-      ))}
-      {c.empty ? (
-        <span className="border-t border-line pt-2 pb-2.5 t-callout font-normal text-waspada">Belum ada laporan disetujui</span>
-      ) : null}
-    </button>
-  )
-}
-
-/* ---------- Subholding / PT terpilih (hari) ---------- */
-
-export function ScopeView({
-  mode,
-  range,
-  crumb,
-  title,
-  tone,
-  list,
-  ptDone,
-  ptTotal,
-  ptSelected,
-  act,
-  cov,
-}: {
-  mode: PaneMode
-  range: OverviewRange
-  crumb: string
-  title: string
-  tone: Tone
-  list: FlatV2[]
-  ptDone?: number
-  ptTotal?: number
-  ptSelected: boolean
-  act: ContentActions
-  cov: CoverageProps
-}) {
-  const hi = list.filter((r) => r.highlight)
-  const blocks = ptBlocks(list)
-  const meta = scopeMeta({ reports: list.length, highlights: hi.length, ptDone, ptTotal: ptSelected ? undefined : ptTotal, range })
-  const subId = list[0]?.subId
-  return (
-    <div className={cx('flex flex-col gap-5', pad(mode))}>
-      <ScopeHead crumb={crumb} title={title} tone={tone} meta={meta} />
-
-      {hi.length ? (
-        <section aria-label="Sorotan" className="flex flex-col gap-2.5">
-          {hi.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => act.open(r)}
-              className={cx(CARD, 'flex cursor-pointer flex-col gap-2 px-4 py-3.5 text-left', PRESS, FOCUS_RING)}
-            >
-              <span className="flex items-center gap-1.5 t-caption font-bold text-waspada">
-                <Star size={12} />
-                Sorotan
-                <span className="min-w-0 truncate font-medium text-ink-2">· {displayName(r.ptName)}</span>
-              </span>
-              <span className="t-headline text-ink">{r.kegiatan}</span>
-              {r.highlightNote?.trim() ? <Note>{r.highlightNote}</Note> : null}
-            </button>
-          ))}
-        </section>
-      ) : null}
-
-      <CoverageSection {...cov} wide title="Pelaporan PT" onOpenPt={(sub, pt) => act.pick({ sub, pt })} />
-
-      {blocks.map((b) => (
-        <section key={b.ptId || b.ptName} aria-label={displayName(b.ptName)} className="flex flex-col gap-2">
-          {!ptSelected && subId ? (
-            <button
-              type="button"
-              onClick={() => act.pick({ sub: subId, pt: b.ptId })}
-              className={cx(
-                '-my-2.5 inline-flex min-h-11 cursor-pointer items-center gap-1.5 self-start rounded-[var(--radius-xs)] t-footnote font-semibold text-ink-2 hover:text-ink',
-                FOCUS_RING
-              )}
-            >
-              {displayName(b.ptName)}
-              <Icon name="kanan" size={12} strokeWidth={2.2} />
-            </button>
-          ) : null}
-          <ul className={cx(CARD, 'm-0 list-none overflow-hidden p-0')}>
-            {b.reports.map((r, i) => (
-              <ReportRow key={r.id} r={r} first={i === 0} size={mode === 'three' ? 64 : 56} act={act} />
-            ))}
-          </ul>
-        </section>
-      ))}
-
-      {list.length === 0 ? (
-        <p className={cx(CARD, 'm-0 p-[18px] t-body text-waspada')}>
-          {ptSelected
-            ? `PT ini belum memiliki laporan disetujui ${range === 'yesterday' ? 'kemarin' : 'hari ini'}.`
-            : `Subholding ini belum memiliki laporan disetujui ${range === 'yesterday' ? 'kemarin' : 'hari ini'}.`}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
-function ScopeHead({ crumb, title, tone, meta }: { crumb: string; title: string; tone: Tone; meta: string }) {
-  return (
-    <header className="flex items-center gap-4">
-      <Mono name={title} tone={tone} size={52} />
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate t-footnote text-ink-2">{crumb}</span>
-        <h2 data-pane-focus tabIndex={-1} className="m-0 t-title-2 tracking-[-0.02em] break-words text-ink outline-none">
-          {title}
-        </h2>
-        <span className="t-callout font-normal text-ink-2">{meta}</span>
-      </div>
-    </header>
-  )
-}
-
-function ReportRow({ r, first, size, act }: { r: FlatV2; first: boolean; size: number; act: ContentActions }) {
-  const photos = photosOf(r.evidence)
-  const meta = reportMeta(r)
-  return (
-    <li className={cx('flex items-start gap-3.5 px-4 py-3.5', !first && 'border-t border-line')}>
-      {photos[0] ? (
-        <button
-          type="button"
-          onClick={() => act.photo(r, 0)}
-          aria-label={`Perbesar foto ${r.kegiatan}, ${photos.length} foto`}
-          className={cx(
-            'shrink-0 cursor-zoom-in rounded-[12px] hover:opacity-90',
-            'motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.96]',
-            FOCUS_RING
-          )}
-        >
-          <PhotoBox photo={photos[0]} size={size} count={photos.length} />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => act.open(r)}
-        className={cx(
-          'group flex min-h-11 min-w-0 flex-1 cursor-pointer flex-col items-start gap-1 rounded-[var(--radius-xs)] text-left',
-          'motion-safe:transition-opacity motion-safe:duration-[var(--dur-fast)] active:opacity-70',
-          FOCUS_RING
-        )}
-      >
-        <span className="flex max-w-full items-start gap-1.5 t-headline text-ink">
-          {r.highlight ? <Star size={12} label="Sorotan" className="mt-[0.4em] shrink-0" /> : null}
-          <span className="min-w-0 underline-offset-4 group-hover:underline">{r.kegiatan}</span>
-        </span>
-        {r.deskripsi?.trim() ? (
-          <span className="line-clamp-2 t-callout font-normal leading-[1.45] text-ink-2">{r.deskripsi}</span>
-        ) : null}
-        {meta ? <span className="t-caption font-normal text-ink-2">{meta}</span> : null}
-      </button>
-    </li>
-  )
 }
 
 /* ---------- 7 hari ---------- */
@@ -467,30 +192,17 @@ export function WeekView({
   )
 }
 
-/* ---------- Bantu ---------- */
-
-function Note({ children }: { children: string | null | undefined }) {
+function ScopeHead({ crumb, title, tone, meta }: { crumb: string; title: string; tone: Tone; meta: string }) {
   return (
-    <span className="block w-full rounded-[12px] bg-waspada-soft px-3 py-2.5 t-footnote leading-[1.45] text-ink">{children}</span>
-  )
-}
-
-/** Kerangka isi saat data pertama dimuat. */
-export function ContentSkeleton({ mode }: { mode: PaneMode }) {
-  return (
-    <div className={cx('flex flex-col gap-5', pad(mode))} aria-busy="true" aria-label="Memuat laporan">
-      <Skeleton h={28} w={160} r={8} />
-      <div className={GRID}>
-        {[180, 150, 170].map((h, i) => (
-          <Skeleton key={i} h={h} r={22} />
-        ))}
+    <header className="flex items-center gap-4">
+      <Mono name={title} tone={tone} size={52} />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate t-footnote text-ink-2">{crumb}</span>
+        <h2 data-pane-focus tabIndex={-1} className="m-0 t-title-2 tracking-[-0.02em] break-words text-ink outline-none">
+          {title}
+        </h2>
+        <span className="t-callout font-normal text-ink-2">{meta}</span>
       </div>
-      <Skeleton h={28} w={200} r={8} />
-      <div className={GRID}>
-        {[160, 160].map((h, i) => (
-          <Skeleton key={i} h={h} r={22} />
-        ))}
-      </div>
-    </div>
+    </header>
   )
 }
