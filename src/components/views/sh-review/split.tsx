@@ -29,6 +29,7 @@ import { useBox } from '../sh-overview/tablet/use-box'
 import { ActiveBg, FadeSwap, Mono } from '../sh-overview/tablet/parts'
 import { SubPicker } from '../sh-overview/tablet/panes'
 import type { SubRow } from '../sh-overview/tablet/logic'
+import { PdfDownloadButton, PdfDownloadSheet, SubPdfButton } from './pdf-download'
 import { PdfLink } from './pdf-link'
 import { Description, DecidedNote, EvidenceStrip, Facts, HighlightNote, SubMono, Thread, evidenceOf } from './body'
 import {
@@ -71,6 +72,7 @@ export function ReviewSplit() {
   const s = useReview()
   const { ref, box } = useBox()
   const [lightbox, setLightbox] = useState<LightboxState>(null)
+  const [pdf, setPdf] = useState(false)
   const [now] = useState(() => new Date())
   const three = (box?.w ?? 0) >= THREE_MIN
   // Pilihan tersimpan baru dibaca setelah hidrasi (localStorage tidak ada di server).
@@ -127,15 +129,17 @@ export function ReviewSplit() {
                     <Icon name={small ? 'kanan' : 'kiri'} size={18} strokeWidth={2.4} />
                   </button>
                 </div>
+                <PdfDownloadButton compact={small} onClick={() => setPdf(true)} className={small ? 'self-center' : 'mx-1'} />
                 <SubNav s={s} now={now} small={small} />
               </aside>
             ) : null}
-            <QueuePane s={s} three={three} now={now} />
+            <QueuePane s={s} three={three} now={now} onPdf={() => setPdf(true)} />
             <DetailPane s={s} now={now} onPhoto={openPhoto} />
           </>
         ) : null}
       </div>
       <EvidenceLightbox state={lightbox} onChange={setLightbox} />
+      <PdfDownloadSheet open={pdf} onOpenChange={setPdf} />
     </MotionConfig>
   )
 }
@@ -168,18 +172,29 @@ function SubNav({ s, now, small }: { s: ReviewState; now: Date; small: boolean }
     <LayoutGroup id="sv-sub">
       <nav aria-label="Pilih subholding" className="flex flex-col gap-0.5">
         <SubButton name="Semua subholding" mono="∑" id={null} line={all} count={s.totalWaiting} current={s.sub === null} small={small} onClick={() => s.pickSub(null)} />
-        {subs.map((x) => (
-          <SubButton
-            key={x.id}
-            name={subholdingLabel(x.name)}
-            id={x.id}
-            line={subLine(x, now)}
-            count={x.waiting}
-            current={s.sub === x.id}
-            small={small}
-            onClick={() => s.pickSub(x.id)}
-          />
-        ))}
+        {subs.map((x) => {
+          const button = (
+            <SubButton
+              key={x.id}
+              name={subholdingLabel(x.name)}
+              id={x.id}
+              line={subLine(x, now)}
+              count={x.waiting}
+              current={s.sub === x.id}
+              small={small}
+              onClick={() => s.pickSub(x.id)}
+            />
+          )
+          // Lajur lebar: tombol unduh cepat PDF hari ini di samping baris (tidak bersarang di tombol).
+          return small ? (
+            button
+          ) : (
+            <div key={x.id} className="flex items-center gap-0.5">
+              <div className="min-w-0 flex-1">{button}</div>
+              <SubPdfButton id={x.id} name={subholdingLabel(x.name)} />
+            </div>
+          )
+        })}
       </nav>
     </LayoutGroup>
   )
@@ -279,7 +294,7 @@ function pickerRows(subs: ReviewSubholding[], now: Date): SubRow[] {
   })
 }
 
-function QueuePane({ s, three, now }: { s: ReviewState; three: boolean; now: Date }) {
+function QueuePane({ s, three, now, onPdf }: { s: ReviewState; three: boolean; now: Date; onPdf: () => void }) {
   const listRef = useRef<HTMLUListElement>(null)
   const rows = useMemo(() => pickerRows(s.subholdings, now), [s.subholdings, now])
   const curRow = rows.find((r) => r.id === s.sub) ?? null
@@ -303,7 +318,10 @@ function QueuePane({ s, three, now }: { s: ReviewState; three: boolean; now: Dat
       <div className="flex flex-none flex-col gap-2.5 px-3.5 pt-[22px] pb-2.5">
         {!three ? (
           <>
-            <Heading total={s.totalWaiting} ready={Boolean(s.data)} />
+            <div className="flex items-start justify-between gap-2">
+              <Heading total={s.totalWaiting} ready={Boolean(s.data)} />
+              <PdfDownloadButton compact onClick={onPdf} />
+            </div>
             <SubPicker rows={rows} all={{ line: allLine }} current={curRow} onPick={s.pickSub} />
           </>
         ) : null}

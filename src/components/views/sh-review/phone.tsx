@@ -28,6 +28,7 @@ import { subholdingLabel, toneOf } from '../sh-overview/logic'
 import { EDGE_WIDTH, FADE, NAV_SPRING, dayHeading, monoOf, shouldDismiss, type PickSection } from '../sh-overview/mobile/mobile-logic'
 import { PickerSheet } from '../sh-overview/mobile/picker-sheet'
 import { wibDateKey } from '../sh-overview/logic'
+import { PdfDownloadButton, PdfDownloadSheet } from './pdf-download'
 import { PdfLink } from './pdf-link'
 import { Description, DecidedNote, EvidenceGallery, Facts, HighlightNote, SubMono, Thread, evidenceOf } from './body'
 import { ApproveButton, CommentField, DecisionHint, HighlightCard, ReviseButton, useDecision } from './decision'
@@ -49,6 +50,7 @@ export function ReviewPhone() {
   const [sheet, setSheet] = useState(false)
   const [query, setQuery] = useState('')
   const [lightbox, setLightbox] = useState<LightboxState>(null)
+  const [pdf, setPdf] = useState(false)
 
   const sub = s.subholdings.find((x) => x.id === s.sub) ?? null
   const groups = queueGroups(s.items, s.tab, now)
@@ -87,11 +89,14 @@ export function ReviewPhone() {
       <PullToRefresh onRefresh={s.reload} loading={s.loading}>
         <div className="-mx-1 flex flex-col gap-4 pb-4">
           <header className="flex flex-col gap-3 px-1">
-            <div className="flex flex-col gap-0.5">
-              <span className="t-footnote font-semibold text-ink-2">
-                {s.data ? `${waitingHeadline(s.totalWaiting)} · ${dayHeading(wibDateKey(now))}` : dayHeading(wibDateKey(now))}
-              </span>
-              <h1 className="m-0 t-title-1 text-ink">Persetujuan</h1>
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="t-footnote font-semibold text-ink-2">
+                  {s.data ? `${waitingHeadline(s.totalWaiting)} · ${dayHeading(wibDateKey(now))}` : dayHeading(wibDateKey(now))}
+                </span>
+                <h1 className="m-0 t-title-1 text-ink">Persetujuan</h1>
+              </div>
+              <PdfDownloadButton compact onClick={() => setPdf(true)} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -229,6 +234,7 @@ export function ReviewPhone() {
       ) : null}
 
       <EvidenceLightbox state={lightbox} onChange={setLightbox} />
+      <PdfDownloadSheet open={pdf} onOpenChange={setPdf} />
     </MotionConfig>
   )
 }

@@ -6,6 +6,7 @@ import { formatFileSize } from '@/lib/format'
 import { safeEvidenceUrl } from '@/lib/security'
 import { signedEvidenceUrl, storageConfigured } from '@/lib/storage'
 import { Flow, PAGE_W, PdfDocument, PdfPage, textWidth, type PdfImage } from '@/lib/pdf/writer'
+import { fileSlug } from '@/lib/subholding/pdf-bundle'
 import type { ShReport } from '@/lib/subholding/report'
 
 /**
@@ -20,7 +21,7 @@ const PHOTO_QUALITY = 72
 const FETCH_TIMEOUT_MS = 8000
 const FETCH_CONCURRENCY = 4
 const MAX_PHOTO_BYTES = 20 * 1024 * 1024
-const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic'])
+export const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic'])
 
 const RED = '#d11a2a'
 const INK = '#1d1d1f'
@@ -63,8 +64,10 @@ export type ShPdfInput = {
   scopeTitle: string
   /** 'YYYY-MM-DD' bila seluruh laporan satu tanggal, selain itu null. */
   dateKey: string | null
-  /** Pembaca punya `shreport:review`: komentar dan sorotan ikut dicetak. */
-  includeReview: boolean
+  /** Komentar laporan ikut dicetak. */
+  includeComments: boolean
+  /** Sorotan supervisor ikut dicetak (kolomnya hanya ada di data peninjau). */
+  includeHighlights: boolean
   generatedAt: Date
   /** Sumber foto: id bukti → JPEG siap sisip (null = tidak tersedia). */
   photos: Map<string, PdfPhoto | null>
@@ -98,15 +101,15 @@ async function fetchPhoto(storageKey: string): Promise<PdfPhoto | null> {
 }
 
 /**
- * Ambil foto bukti untuk laporan-laporan ini (maksimum MAX_PHOTOS, urut
+ * Ambil foto bukti untuk laporan-laporan ini (maksimum `limit`, urut
  * laporan lalu waktu unggah). Foto yang gagal diambil bernilai null.
  */
-export async function loadReportPhotos(reports: ShReport[]): Promise<Map<string, PdfPhoto | null>> {
+export async function loadReportPhotos(reports: ShReport[], limit = MAX_PHOTOS): Promise<Map<string, PdfPhoto | null>> {
   const out = new Map<string, PdfPhoto | null>()
   const wanted = reports
     .flatMap((r) => r.evidence)
     .filter((e) => !e.url && IMAGE_MIMES.has(e.mime))
-    .slice(0, MAX_PHOTOS)
+    .slice(0, limit)
   if (!wanted.length || !storageConfigured()) return out
   const rows = await db.evidence.findMany({
     where: { id: { in: wanted.map((e) => e.id) } },
@@ -149,7 +152,9 @@ function fileLabel(name: string, mime: string, size: number): string {
   return `${name} (${kind}, ${formatFileSize(size)})`
 }
 
-function writeReport(flow: Flow, doc: PdfDocument, r: ShReport, n: number, total: number, input: ShPdfInput, showPt: boolean): void {
+type PrintOptions = Pick<ShPdfInput, 'includeComments' | 'includeHighlights' | 'photos'>
+
+function writeReport(flow: Flow, doc: PdfDocument, r: ShReport, n: number, total: number, input: PrintOptions, showPt: boolean): void {
   flow.ensure(110)
   flow.paragraph(`Laporan ${n} dari ${total}${showPt ? ` · ${r.ptName}` : ''}`, { size: 8.5, color: INK2, after: 1 })
   flow.paragraph(r.kegiatan, { size: 12.5, bold: true, color: INK, leading: 16, after: 4 })
@@ -157,7 +162,7 @@ function writeReport(flow: Flow, doc: PdfDocument, r: ShReport, n: number, total
     ['Pelapor', `${r.reporterName}${r.reporterTitle ? ` · ${r.reporterTitle}` : ''}`],
     ['Diajukan', stamp(r.submittedAt)],
     ['Status', statusLine(r)],
-    ...(input.includeReview && r.highlight ? ([['Sorotan', r.highlightNote ? `Ya · ${r.highlightNote}` : 'Ya, ditandai supervisor untuk manajemen']] as [string, string][]) : []),
+    ...(input.includeHighlights && r.highlight ? ([['Sorotan', r.highlightNote ? `Ya · ${r.highlightNote}` : 'Ya, ditandai supervisor untuk manajemen']] as [string, string][]) : []),
   ])
   flow.gap(6)
   flow.paragraph('URAIAN', { size: 7.5, bold: true, color: INK2, after: 1 })
@@ -182,7 +187,7 @@ function writeReport(flow: Flow, doc: PdfDocument, r: ShReport, n: number, total
     flow.gap(4)
   }
 
-  if (input.includeReview && r.comments.length) {
+  if (input.includeComments && r.comments.length) {
     flow.paragraph('KOMENTAR', { size: 7.5, bold: true, color: INK2, after: 2 })
     for (const c of r.comments) {
       const role = ROLE_LABEL[c.authorRole] ?? c.authorRole
@@ -257,11 +262,166 @@ export function buildShReportsPdf(input: ShPdfInput): Buffer {
 
 /** Nama berkas aman untuk header Content-Disposition. */
 export function pdfFileName(scopeTitle: string, dateKey: string | null): string {
-  const base = scopeTitle
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .slice(0, 60)
+  const base = fileSlug(scopeTitle)
   return `Laporan-${base || 'subholding'}${dateKey ? `-${dateKey}` : ''}.pdf`
+}
+
+/* ---------- unduhan gabungan Supervisor (GET /api/sh/pdf/berkas) ---------- */
+
+export type ShBundleSection = {
+  id: string
+  name: string
+  /** PT aktif subholding ini (urut nama): dasar "PT melapor" dan daftar belum melapor. */
+  pts: { id: string; name: string }[]
+  /** Laporan subholding ini dalam periode, urut tanggal terbaru lalu waktu setuju. */
+  reports: ShReport[]
+}
+
+export type ShBundlePdfInput = PrintOptions & {
+  sections: ShBundleSection[]
+  /** 'YYYY-MM-DD', inklusif. */
+  from: string
+  to: string
+  generatedAt: Date
+}
+
+/** "Senin, 9 November 2026" atau "Senin, 2 November 2026 – Senin, 9 November 2026". */
+export function periodText(from: string, to: string): string {
+  return from === to ? longDate(from) : `${longDate(from)} – ${longDate(to)}`
+}
+
+/** PT yang melapor (punya laporan di berkas ini) dari daftar PT aktif. */
+function reportingPts(s: ShBundleSection): number {
+  const seen = new Set(s.reports.map((r) => r.ptId))
+  return s.pts.filter((p) => seen.has(p.id)).length
+}
+
+function fitText(text: string, width: number, size: number, bold = false): string {
+  if (textWidth(text, size, bold) <= width) return text
+  let t = text
+  while (t.length > 1 && textWidth(`${t}…`, size, bold) > width) t = t.slice(0, -1)
+  return `${t.trimEnd()}…`
+}
+
+/** Tabel ringkasan sampul: subholding · PT melapor · disetujui (· menunggu). */
+function summaryTable(flow: Flow, sections: ShBundleSection[], withPending: boolean): void {
+  const size = 9.5
+  const rowH = 20
+  const right = flow.marginX + flow.contentWidth
+  const cols = withPending ? [right - 150, right - 75, right] : [right - 90, right]
+  const heads = withPending ? ['PT melapor', 'Disetujui', 'Menunggu'] : ['PT melapor', 'Laporan']
+  const nameW = cols[0] - 70 - flow.marginX
+  const row = (cells: string[], opts: { bold?: boolean; color?: string; line?: string; width?: number }) => {
+    flow.ensure(rowH)
+    const base = flow.y + 13
+    flow.page.text(flow.marginX, base, fitText(cells[0], nameW, size, opts.bold), size, { bold: opts.bold, color: opts.color ?? INK })
+    cells.slice(1).forEach((c, i) => {
+      flow.page.text(cols[i] - textWidth(c, size, opts.bold), base, c, size, { bold: opts.bold, color: opts.color ?? INK })
+    })
+    flow.y += rowH
+    if (opts.line) flow.page.line(flow.marginX, flow.y - 2, right, flow.y - 2, opts.line, opts.width ?? 0.6)
+  }
+
+  row(['Subholding', ...heads], { color: INK2, line: INK, width: 1.2 })
+  let done = 0
+  let pts = 0
+  let approved = 0
+  let pending = 0
+  for (const s of sections) {
+    const a = s.reports.filter((r) => r.status === 'DISETUJUI').length
+    const p = s.reports.length - a
+    const d = reportingPts(s)
+    done += d
+    pts += s.pts.length
+    approved += a
+    pending += p
+    const counts = withPending ? [String(a), String(p)] : [String(s.reports.length)]
+    row([s.name, `${d} dari ${s.pts.length}`, ...counts], { line: '#e3e3e8' })
+  }
+  if (sections.length > 1) {
+    const counts = withPending ? [String(approved), String(pending)] : [String(approved + pending)]
+    row(['Jumlah', `${done} dari ${pts}`, ...counts], { bold: true })
+  }
+}
+
+/**
+ * PDF gabungan beberapa subholding untuk satu periode: sampul + ringkasan +
+ * daftar PT belum melapor, lalu satu bagian per subholding (halaman baru),
+ * dikelompokkan per tanggal (terbaru dulu) lalu per PT.
+ */
+export function buildShBundlePdf(input: ShBundlePdfInput): Buffer {
+  const all = input.sections.flatMap((s) => s.reports)
+  const draft = all.some((r) => r.status !== 'DISETUJUI')
+  const single = input.from === input.to
+  const title = single ? 'Laporan harian subholding' : 'Laporan subholding'
+  const period = periodText(input.from, input.to)
+  const shortPeriod = single ? input.from : `${input.from} s.d. ${input.to}`
+  const doc = new PdfDocument()
+  const flow = new Flow(doc, {
+    watermark: draft ? 'DRAF' : undefined,
+    footer: `Dibuat otomatis oleh Monitor Karya · ${stamp(input.generatedAt.toISOString())}`,
+    header: (page, no) => {
+      if (no === 1) return letterhead(page, 48, `${title}${draft ? ' · DRAF, memuat laporan belum disetujui' : ''}`)
+      page.text(48, 40, `Monitor Karya · ${title} · ${shortPeriod}`, 8.5, { color: INK2 })
+      page.line(48, 48, PAGE_W - 48, 48, '#e3e3e8', 0.6)
+      return 64
+    },
+  })
+
+  flow.paragraph(title, { size: 20, bold: true, color: INK, leading: 24, after: 2 })
+  flow.paragraph(period, { size: 11, color: INK, after: 8 })
+  const approved = all.filter((r) => r.status === 'DISETUJUI').length
+  flow.keyValue([
+    ['Cakupan', input.sections.length === 1 ? input.sections[0].name : `${input.sections.length} subholding`],
+    ['Laporan', draft ? `${approved} disetujui · ${all.length - approved} menunggu tinjauan` : `${all.length} laporan disetujui`],
+  ])
+  flow.gap(12)
+  flow.paragraph('RINGKASAN', { size: 7.5, bold: true, color: INK2, after: 2 })
+  summaryTable(flow, input.sections, draft)
+
+  const silent = input.sections
+    .map((s) => {
+      const seen = new Set(s.reports.map((r) => r.ptId))
+      return { name: s.name, pts: s.pts.filter((p) => !seen.has(p.id)).map((p) => p.name) }
+    })
+    .filter((s) => s.pts.length)
+  if (silent.length) {
+    flow.gap(14)
+    flow.paragraph(single ? 'BELUM MELAPOR' : 'TANPA LAPORAN PADA PERIODE INI', { size: 7.5, bold: true, color: INK2, after: 3 })
+    for (const s of silent) {
+      flow.paragraph(`${s.name}: ${s.pts.join(', ')}`, { size: 9.5, color: INK, leading: 14, after: 3 })
+    }
+  }
+
+  for (const s of input.sections) {
+    if (!s.reports.length) continue
+    flow.newPage()
+    flow.paragraph(s.name, { size: 18, bold: true, color: INK, leading: 22, after: 2 })
+    flow.paragraph(`${s.reports.length} laporan · ${reportingPts(s)} dari ${s.pts.length} PT melapor · ${period}`, { size: 9, color: INK2, after: 6 })
+    flow.rule(RED)
+
+    const days = new Map<string, ShReport[]>()
+    for (const r of s.reports) days.set(r.reportDate, [...(days.get(r.reportDate) ?? []), r])
+    const dayKeys = [...days.keys()].sort((a, b) => b.localeCompare(a))
+    for (const day of dayKeys) {
+      if (!single) {
+        flow.ensure(60)
+        flow.paragraph(longDate(day).toUpperCase(), { size: 9, bold: true, color: INK2, after: 4 })
+      }
+      const groups = new Map<string, ShReport[]>()
+      for (const r of days.get(day)!) groups.set(r.ptId, [...(groups.get(r.ptId) ?? []), r])
+      const ordered = [...groups.values()].sort((a, b) => a[0].ptName.localeCompare(b[0].ptName, 'id'))
+      for (const list of ordered) {
+        flow.ensure(50)
+        flow.paragraph(list[0].ptName, { size: 13, bold: true, color: RED, leading: 17, after: 4 })
+        list.forEach((r, i) => {
+          writeReport(flow, doc, r, i + 1, list.length, input, false)
+          if (i < list.length - 1) flow.rule()
+        })
+        flow.gap(10)
+      }
+    }
+  }
+  flow.finish()
+  return doc.build({ title: `${title} ${shortPeriod}`, author: 'Monitor Karya', subject: 'Laporan subholding' })
 }

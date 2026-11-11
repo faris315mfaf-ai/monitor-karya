@@ -92,7 +92,8 @@ export async function GET(req: NextRequest) {
       scopeTitle,
       dateKey,
       // Komentar: peninjau dan Admin subholding pemilik; sorotan hanya ada di data peninjau.
-      includeReview: can(user.role, 'shreport:review') || can(user.role, 'shreport:write'),
+      includeComments: can(user.role, 'shreport:review') || can(user.role, 'shreport:write'),
+      includeHighlights: can(user.role, 'shreport:review'),
       generatedAt: new Date(),
       photos,
     })
