@@ -192,7 +192,9 @@ export const ROLE_TABS: Record<string, NavTabId[]> = {
   MANAJEMEN: ['sh-overview'],
   AUDITOR: ['dashboard', 'pesan', 'projects', 'divisions', 'entities', 'audit'],
   ADMIN_SUBHOLDING: ['sh-dashboard', 'sh-inbox', 'sh-history'],
-  SUPERVISOR: ['sh-review'],
+  // 11 Nov 2026: Supervisor juga mendapat dashboard laporan disetujui (tampilan
+  // Ketua Umum). Persetujuan tetap tab pertama = layar pembuka.
+  SUPERVISOR: ['sh-review', 'sh-overview'],
   SUPERUSER: ['sh-overview'],
 }
 

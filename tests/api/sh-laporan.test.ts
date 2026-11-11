@@ -160,7 +160,8 @@ afterEach(() => {
 describe('peran, tab, kapabilitas', () => {
   it('tab dan label sesuai kontrak; Manajemen hanya sh-overview', () => {
     expect(tabsForRole('ADMIN_SUBHOLDING')).toEqual(['sh-dashboard', 'sh-inbox', 'sh-history'])
-    expect(tabsForRole('SUPERVISOR')).toEqual(['sh-review'])
+    expect(tabsForRole('SUPERVISOR')).toEqual(['sh-review', 'sh-overview'])
+    expect(defaultTabForRole('SUPERVISOR')).toBe('sh-review')
     expect(tabsForRole('SUPERUSER')).toEqual(['sh-overview'])
     expect(tabsForRole('MANAJEMEN')).toEqual(['sh-overview'])
     expect(defaultTabForRole('MANAJEMEN')).toBe('sh-overview')

@@ -43,7 +43,7 @@ kind `KOMENTAR|PERBAIKAN|SETUJU|BALASAN`, body, readAt).
 | Peran | ROLE_TABS |
 |---|---|
 | ADMIN_SUBHOLDING | `sh-dashboard`, `sh-inbox`, `sh-history` |
-| SUPERVISOR | `sh-review` |
+| SUPERVISOR | `sh-review`, `sh-overview` (11 Nov 2026: dashboard laporan disetujui seperti Ketua Umum; Persetujuan tetap layar pembuka) |
 | SUPERUSER | `sh-overview` |
 | MANAJEMEN | `sh-overview` (menggantikan tab lamanya) |
 | SUPERADMIN | tab lama tetap (Perusahaan & akun dipakai untuk subholding/PT/akun) |
