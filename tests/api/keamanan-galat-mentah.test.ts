@@ -111,6 +111,11 @@ class FixtureRouteModule {
     }
   }
   async getIncrementalCache() { return undefined }
+  // Next 16.4: template memanggil keduanya sebelum handleRequest (tracing instrumentation.ts).
+  async ensureInstrumentation() { return { instrumentation: undefined } }
+  async traceRequest(_req: unknown, _opts: unknown, fn: (span: undefined, root: undefined) => Promise<unknown>) {
+    return fn(undefined, undefined)
+  }
   async handle() {
     if (!activeHandler) throw new Error('Handler fixture belum dipasang')
     return activeHandler()
