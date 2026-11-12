@@ -1,19 +1,21 @@
-import type { DayView, Filter, V2Data, WeekData } from './model'
-
-export type OverviewRange = 'today' | 'yesterday' | 'week'
+import type { DayView, Filter, V2Data } from './model'
 
 /** Props bersama layar ponsel (MobileOverview) dan tablet/desktop (TabletOverview). */
 export type OverviewScreenProps = {
   /** Label peran, mis. "Superuser" atau "Manajemen". */
   roleName: string
-  range: OverviewRange
-  onRange: (r: OverviewRange) => void
-  /** 'YYYY-MM-DD' WIB untuk hari ini/kemarin; saat 7 hari = hari terakhir rentang. */
+  /** Tanggal laporan yang ditampilkan, 'YYYY-MM-DD' WIB. */
   dateKey: string
-  /** GET /api/sh/overview?date=dateKey (juga dimuat saat 7 hari, untuk hari ini). */
+  /** Hari ini WIB — batas akhir pemilih tanggal. */
+  todayKey: string
+  onDate: (key: string) => void
+  /**
+   * Kartu status melapor ("13 dari 18 PT sudah melapor"): hanya untuk peninjau
+   * (Supervisor); Ketua Umum & Manajemen langsung ke daftar laporan.
+   */
+  showStatus: boolean
+  /** GET /api/sh/overview?date=dateKey. */
   data: V2Data | null
-  /** GET /api/sh/overview/week — hanya saat range === 'week'. */
-  week: WeekData | null
   loading: boolean
   error: string | null
   reload: () => void
@@ -21,7 +23,7 @@ export type OverviewScreenProps = {
   filter: Filter
   /** Integrator menyimpan pilihan per perangkat (saveFilter). */
   onFilter: (f: Filter) => void
-  /** Tampilan rentang hari: Semua terbuka / Ringkas (tersimpan per perangkat). */
+  /** Tampilan daftar: Semua terbuka / Ringkas (tersimpan per perangkat). */
   dayView: DayView
   onDayView: (v: DayView) => void
 }

@@ -1,13 +1,7 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { fillHeight } from './logic'
-
-/** Warna panel: campuran token permukaan & latar (sisi lebih terang dari tengah di tema terang). */
-export const PANE_VARS = {
-  '--tab-side': 'color-mix(in srgb, var(--surface) 60%, var(--bg))',
-  '--tab-mid': 'color-mix(in srgb, var(--surface) 30%, var(--bg))',
-} as CSSProperties
 
 export type Box = {
   w: number

@@ -1,16 +1,16 @@
 'use client'
 
 /**
- * Dashboard Ketua Umum & Manajemen tampilan "Ringkas" (opsi 1) — tablet &
- * desktop, rentang Hari ini / Kemarin (canvas "Opsi dashboard Ketum", papan
+ * Dashboard laporan disetujui tampilan "Ringkas" (opsi 1) — tablet &
+ * desktop (canvas "Opsi dashboard Ketum", papan
  * "Opsi 1 · akordeon + rincian — Z Fold 7 terbuka").
  *
- * Halaman penuh seperti tampilan Semua terbuka: kepala + rentang, kartu
- * status, lalu kontainer ≥ 760px dua kolom — kiri akordeon subholding → PT →
+ * Halaman penuh seperti tampilan Semua terbuka: kepala + kontrol tanggal, kartu
+ * status (hanya peninjau), lalu kontainer ≥ 760px dua kolom — kiri akordeon subholding → PT →
  * laporan (ikut gulir halaman), kanan panel rincian yang menempel di layar
  * (sticky) dan bergulir sendiri; bawaan laporan terbaru di PT/subholding yang
  * terbuka, dengan Lihat PDF. Lebih sempit: satu kolom, rincian di pop-up.
- * Akordeon yang terbuka = Filter dashboard (ikut ke rentang 7 hari).
+ * Akordeon yang terbuka = Filter dashboard (tersimpan per perangkat).
  */
 
 import { useMemo, useState } from 'react'
@@ -24,7 +24,7 @@ import { photosOf } from '../logic'
 import type { Filter, FlatV2 } from '../model'
 import { ReportDetail, ReportDetailPanel, type DetailReport } from '../report-detail'
 import { ListBar, ReportingStatusCard } from '../reporting-status'
-import type { OverviewRange, OverviewScreenProps } from '../screen-types'
+import type { OverviewScreenProps } from '../screen-types'
 import { dayHeading, dayLayout, dayWord, toDetail } from './logic'
 import { FadeSwap } from './parts'
 import { PageHeader } from './panes'
@@ -39,7 +39,7 @@ const pdfOf = (r: DetailReport) => shPdfHref({ id: r.id })
 const STICKY = 'sticky top-[88px] h-[calc(100dvh-196px)] lg:top-6 lg:h-[calc(100dvh-72px)] min-h-[420px]'
 
 export function TabletDaySplit({
-  roleName, range, onRange, dateKey, data, loading, error, reload, filter, onFilter, dayView, onDayView,
+  roleName, dateKey, todayKey, onDate, showStatus, data, loading, error, reload, filter, onFilter, dayView, onDayView,
 }: OverviewScreenProps) {
   const { ref, box } = useBox()
   // Pengguna sudah membuka/menutup akordeon sendiri: jangan buka subholding terbaru lagi.
@@ -62,10 +62,11 @@ export function TabletDaySplit({
     setPicked(null)
     onFilter(f)
   }
-  const pickRange = (r: OverviewRange) => {
+  const pickDate = (key: string) => {
     setDialog(null)
     setLightbox(null)
-    onRange(r)
+    setPicked(null)
+    onDate(key)
   }
   const openReport = (r: FlatV2) => {
     if (L.split) setPicked(r.id)
@@ -87,11 +88,11 @@ export function TabletDaySplit({
           busy && 'opacity-60'
         )}
       >
-        <PageHeader context={context} range={range} onRange={pickRange} />
+        <PageHeader context={context} dateKey={dateKey} todayKey={todayKey} onDate={pickDate} />
 
         {!data ? (
           loading || !error ? (
-            <Loading />
+            <Loading status={showStatus} />
           ) : (
             <div className="rounded-[var(--radius-lg)] bg-surface p-4 shadow-[var(--shadow-card)]">
               <ErrorNote message={error ?? 'Laporan belum termuat.'} onRetry={reload} />
@@ -99,7 +100,7 @@ export function TabletDaySplit({
           )
         ) : (
           <>
-            <ReportingStatusCard status={status} />
+            {showStatus ? <ReportingStatusCard status={status} /> : null}
             <ListBar view={dayView} onView={onDayView} />
             <div className="flex items-start gap-4">
               <section
@@ -126,7 +127,7 @@ export function TabletDaySplit({
                     {current ? (
                       <ReportDetailPanel report={toDetail(current)} onOpenPhoto={(i) => openPhoto(current, i)} pdfHref={pdfOf} />
                     ) : (
-                      <NoReport range={range} />
+                      <NoReport when={dayWord(dateKey, todayKey)} />
                     )}
                   </FadeSwap>
                 </section>
@@ -150,23 +151,23 @@ export function TabletDaySplit({
   )
 }
 
-function NoReport({ range }: { range: OverviewRange }) {
+function NoReport({ when }: { when: string }) {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-3 p-10 text-center">
       <span aria-hidden className="flex h-14 w-14 items-center justify-center rounded-full bg-fill-1 text-ink-2">
         <Icon name="dokumen" size={26} />
       </span>
       <p className="m-0 max-w-[320px] t-callout font-normal text-ink-2">
-        Belum ada laporan disetujui {dayWord(range)}. Laporan yang disetujui supervisor tampil di sini.
+        Belum ada laporan disetujui {when}. Laporan yang disetujui supervisor tampil di sini.
       </p>
     </div>
   )
 }
 
-function Loading() {
+function Loading({ status }: { status: boolean }) {
   return (
     <div className="flex flex-col gap-4" aria-busy="true" aria-label="Memuat laporan">
-      <Skeleton h={128} r={22} />
+      {status ? <Skeleton h={128} r={22} /> : null}
       <div className="flex items-start gap-4">
         <div className="flex w-[40%] flex-none flex-col gap-2.5">
           {[0, 1, 2, 3].map((i) => (

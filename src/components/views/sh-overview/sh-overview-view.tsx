@@ -1,28 +1,31 @@
 'use client'
 
 /**
- * Dashboard Manajemen & Superuser (KONTRAK-MANAJEMEN-MOBILE.md, 16 Okt 2026).
- * Pengalih: memuat data lalu merender layar ponsel (< 600px) atau layar
- * tablet/desktop (split view). Tiga lapis informasi: status melapor →
- * sorotan supervisor → semua laporan; penyaring subholding → PT diingat
- * per perangkat.
+ * Dashboard laporan disetujui — Ketua Umum (Superuser), Manajemen, dan
+ * Supervisor (KONTRAK-MANAJEMEN-MOBILE.md, 16 Okt 2026). Pengalih: memuat data
+ * lalu merender layar ponsel (< 600px) atau layar tablet/desktop. Tanggal:
+ * hari ini (bawaan, ikut berganti saat lewat tengah malam WIB) atau tanggal
+ * pilihan pengguna. Subholding/PT yang terbuka diingat per perangkat.
  *
- * Data: GET /api/sh/overview?date=YYYY-MM-DD dan, untuk 7 hari,
- * GET /api/sh/overview/week?end=…[&subholdingId=…]. Diperbarui sendiri di
- * belakang tiap 30 detik selama tab terlihat dan saat tab kembali terlihat,
- * jadi laporan yang baru disetujui supervisor muncul tanpa memuat ulang
- * (tanpa redup/kerangka; gagal sesaat tetap menampilkan data terakhir).
+ * Kartu status melapor hanya untuk peninjau (Supervisor); Ketua Umum &
+ * Manajemen langsung ke daftar laporan (keputusan pemilik 12 Nov 2026).
+ *
+ * Data: GET /api/sh/overview?date=YYYY-MM-DD. Diperbarui sendiri di belakang
+ * tiap 30 detik selama tab terlihat dan saat tab kembali terlihat, jadi
+ * laporan yang baru disetujui supervisor muncul tanpa memuat ulang (tanpa
+ * redup/kerangka; gagal sesaat tetap menampilkan data terakhir).
  */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useResource } from '@/hooks/use-resource'
 import { useApp } from '@/components/app-provider'
 import { ROLE_LABELS } from '@/lib/constants'
+import { can } from '@/lib/rbac'
 import { wibDateKey } from './logic'
 import {
-  NO_FILTER, loadDayView, loadFilter, saveDayView, saveFilter, validFilter, type DayView, type Filter, type V2Data, type WeekData,
+  NO_FILTER, loadDayView, loadFilter, saveDayView, saveFilter, validFilter, type DayView, type Filter, type V2Data,
 } from './model'
-import type { OverviewRange } from './screen-types'
+import type { OverviewScreenProps } from './screen-types'
 import { MobileOverview } from './mobile'
 import { TabletOverview } from './tablet'
 
@@ -46,9 +49,10 @@ function useCompact(): boolean {
 export function ShOverviewView() {
   const { user } = useApp()
   const compact = useCompact()
-  const [range, setRange] = useState<OverviewRange>('today')
-  // Kunci tanggal dihitung sekali per pilihan, supaya tidak bergeser saat render ulang.
-  const dateKey = useMemo(() => wibDateKey(new Date(), range === 'yesterday' ? 1 : 0), [range])
+  const [todayKey, setTodayKey] = useState(() => wibDateKey())
+  // null = hari ini (mengikuti jam); selain itu tanggal lampau pilihan pengguna.
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
+  const dateKey = pickedDate && pickedDate < todayKey ? pickedDate : todayKey
 
   // null = belum memilih di sesi ini → pakai pilihan tersimpan. Pilihan tersimpan
   // hanya dibaca setelah hidrasi (localStorage tidak ada di server).
@@ -60,10 +64,6 @@ export function ShOverviewView() {
 
   const day = useResource<V2Data>(`/api/sh/overview?date=${dateKey}`, { keepStale: true })
   const filter = useMemo(() => (day.data ? validFilter(day.data, rawFilter) : rawFilter), [day.data, rawFilter])
-  const weekUrl = range === 'week'
-    ? `/api/sh/overview/week?end=${dateKey}${filter.sub ? `&subholdingId=${encodeURIComponent(filter.sub)}` : ''}`
-    : null
-  const week = useResource<WeekData>(weekUrl, { keepStale: true })
   // Penyegaran latar tidak meredupkan layar; muat ulang oleh pengguna tetap menampilkan status memuat.
   const [quiet, setQuiet] = useState(false)
 
@@ -75,24 +75,24 @@ export function ShOverviewView() {
     setPickedView(v)
     saveDayView(v)
   }, [])
-  const pickRange = useCallback((r: OverviewRange) => {
+  const onDate = useCallback((key: string) => {
     setQuiet(false)
-    setRange(r)
+    const today = wibDateKey()
+    setTodayKey(today)
+    setPickedDate(key < today ? key : null)
   }, [])
   const { reload: reloadDay } = day
-  const { reload: reloadWeek } = week
   const reload = useCallback(() => {
     setQuiet(false)
     reloadDay()
-    if (weekUrl) reloadWeek()
-  }, [reloadDay, reloadWeek, weekUrl])
+  }, [reloadDay])
 
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== 'visible') return
       setQuiet(true)
+      setTodayKey(wibDateKey())
       reloadDay()
-      if (weekUrl) reloadWeek()
     }
     const t = window.setInterval(refresh, POLL_MS)
     document.addEventListener('visibilitychange', refresh)
@@ -100,17 +100,17 @@ export function ShOverviewView() {
       window.clearInterval(t)
       document.removeEventListener('visibilitychange', refresh)
     }
-  }, [reloadDay, reloadWeek, weekUrl])
+  }, [reloadDay])
 
-  const props = {
+  const props: OverviewScreenProps = {
     roleName: ROLE_LABELS[user.role] ?? 'Manajemen',
-    range,
-    onRange: pickRange,
     dateKey,
+    todayKey,
+    onDate,
+    showStatus: can(user.role, 'shreport:review'),
     data: day.data ?? null,
-    week: range === 'week' ? (week.data ?? null) : null,
-    loading: !quiet && (day.loading || (range === 'week' && week.loading)),
-    error: day.error ?? (range === 'week' ? week.error : null) ?? null,
+    loading: !quiet && day.loading,
+    error: day.error ?? null,
     reload,
     filter,
     onFilter,

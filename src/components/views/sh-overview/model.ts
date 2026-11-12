@@ -1,8 +1,8 @@
 /**
- * Model bersama dashboard Manajemen & Superuser versi tablet/ponsel
+ * Model bersama dashboard laporan disetujui versi tablet/ponsel
  * (KONTRAK-MANAJEMEN-MOBILE.md, 16 Okt 2026). Logika murni tanpa React:
- * penyaring subholding → PT, status melapor, sorotan, pengelompokan, dan
- * pola 7 hari. Layar ponsel (mobile/) dan tablet (tablet/) memakai modul ini.
+ * penyaring subholding → PT, status melapor, sorotan, dan pengelompokan.
+ * Layar ponsel (mobile/) dan tablet (tablet/) memakai modul ini.
  */
 
 import type { OverviewEvidence } from './logic'
@@ -38,15 +38,6 @@ export type V2AllPt = { id: string; name: string; lastReportDate?: string | null
 
 export type V2Data = { date: string; subholdings: V2Subholding[] }
 
-export type WeekData = {
-  start: string
-  end: string
-  /** Tujuh kunci tanggal WIB 'YYYY-MM-DD', urut naik; terakhir = `end`. */
-  days: string[]
-  subholdings: { id: string; name: string; counts: number[]; pts?: { id: string; name: string; counts: number[] }[] }[]
-  highlights: { id: string; date: string; kegiatan: string; subholdingId: string; subholdingName: string; ptName: string; highlightNote: string | null }[]
-}
-
 export type Filter = { sub: string | null; pt: string | null }
 export const NO_FILTER: Filter = { sub: null, pt: null }
 
@@ -73,73 +64,9 @@ export function validFilter(data: V2Data | null | undefined, f: Filter): Filter 
   return { sub: sub.id, pt: known ? f.pt : null }
 }
 
-/** Laporan dalam cakupan penyaring. */
-export function scoped(data: V2Data | null | undefined, f: Filter): FlatV2[] {
-  return flatten(data).filter((r) => (!f.sub || r.subId === f.sub) && (!f.pt || r.ptId === f.pt))
-}
-
-/** PT subholding dibagi: melapor (urut jumlah laporan menurun, lalu nama) dan belum. */
-export function ptBuckets(sub: V2Subholding | null | undefined): {
-  reporting: { id: string; name: string; count: number; highlights: number }[]
-  silent: { id: string; name: string }[]
-} {
-  if (!sub) return { reporting: [], silent: [] }
-  const reporting = sub.pts
-    .filter((p) => p.reports.length > 0)
-    .map((p) => ({ id: p.id, name: p.name, count: p.reports.length, highlights: p.reports.filter((r) => r.highlight).length }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'id'))
-  const ids = new Set(reporting.map((p) => p.id))
-  const silent = (sub.allPts ?? []).filter((p) => !ids.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'id'))
-  return { reporting, silent }
-}
-
-/** Cocok pencarian (tanpa beda huruf besar/kecil, mengabaikan awalan "PT "). */
-export function matchesQuery(name: string, q: string): boolean {
-  const n = q.trim().toLowerCase()
-  if (!n) return true
-  const s = name.toLowerCase()
-  return s.includes(n) || s.replace(/^pt\.?\s+/, '').includes(n)
-}
-
-/** Hari Sabtu/Minggu untuk kunci 'YYYY-MM-DD' (kalender, tanpa zona). */
-export function isWeekend(key: string): boolean {
-  const [y, m, d] = key.split('-').map(Number)
-  const day = new Date(Date.UTC(y, (m || 1) - 1, d || 1)).getUTCDay()
-  return day === 0 || day === 6
-}
-
-const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
-const HURUF = ['M', 'S', 'S', 'R', 'K', 'J', 'S']
-
-/** Label kolom hari: { short: 'Kam 15', letter: 'K' }. */
-export function dayLabel(key: string): { short: string; letter: string } {
-  const [y, m, d] = key.split('-').map(Number)
-  const day = new Date(Date.UTC(y, (m || 1) - 1, d || 1)).getUTCDay()
-  return { short: `${HARI[day]} ${d}`, letter: HURUF[day] }
-}
-
-/** Hari kerja berturut-turut tanpa laporan, dihitung mundur dari hari terakhir (akhir pekan dilewati). */
-export function silentStreak(days: string[], counts: number[]): number {
-  let n = 0
-  for (let i = days.length - 1; i >= 0; i--) {
-    if (isWeekend(days[i])) continue
-    if ((counts[i] ?? 0) > 0) break
-    n++
-  }
-  return n
-}
-
-/** Catatan baris pola 7 hari. */
-export function weekNote(days: string[], counts: number[]): { text: string; tone: 'warn' | 'strong-warn' | 'muted' } {
-  const streak = silentStreak(days, counts)
-  if (streak >= 2) return { text: `${streak} hari kerja berturut-turut belum melapor`, tone: 'strong-warn' }
-  if (streak === 1) return { text: 'Belum melapor hari ini', tone: 'warn' }
-  const total = counts.reduce((a, b) => a + b, 0)
-  return { text: `${total} laporan dalam 7 hari`, tone: 'muted' }
-}
-
 /* ---------- Kategori PT: sudah / belum melapor (lintas subholding) ---------- */
 
+const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
 /** Jendela pencarian "terakhir melapor" di server (hari). */

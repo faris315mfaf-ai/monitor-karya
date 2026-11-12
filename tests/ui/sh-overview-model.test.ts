@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  NO_FILTER, dayLabel, flatten, isWeekend, lastReportLabel, loadDayView, loadFilter,
-  matchesQuery, ptBuckets, ptCoverage, saveDayView, saveFilter, scoped, silentDays, silentStreak,
-  validFilter, weekNote, type V2Data,
+  NO_FILTER, flatten, lastReportLabel, loadDayView, loadFilter, ptCoverage, saveDayView, saveFilter, silentDays,
+  validFilter, type V2Data,
 } from '@/components/views/sh-overview/model'
 
 const rep = (id: string, highlight = false) => ({ id, kegiatan: `K ${id}`, deskripsi: '', highlight, evidence: [] })
@@ -38,43 +37,6 @@ describe('model dashboard manajemen', () => {
     expect(validFilter(data, { sub: 'sentra', pt: 'pt-x' })).toEqual({ sub: 'sentra', pt: null })
     expect(validFilter(data, { sub: 'sentra', pt: 'pt-z' })).toEqual({ sub: 'sentra', pt: 'pt-z' })
     expect(validFilter(null, { sub: 'sentra', pt: null })).toEqual(NO_FILTER)
-  })
-
-  it('scoped menyaring per subholding dan PT', () => {
-    expect(scoped(data, NO_FILTER)).toHaveLength(3)
-    expect(scoped(data, { sub: 'sentra', pt: 'pt-j' }).map((r) => r.id)).toEqual(['j1'])
-  })
-
-  it('ptBuckets: melapor urut jumlah, belum melapor urut nama', () => {
-    const b = ptBuckets(data.subholdings[0])
-    expect(b.reporting.map((p) => [p.id, p.count, p.highlights])).toEqual([['pt-b', 2, 1], ['pt-j', 1, 0]])
-    expect(b.silent.map((p) => p.id)).toEqual(['pt-a', 'pt-z'])
-    expect(ptBuckets(null)).toEqual({ reporting: [], silent: [] })
-  })
-
-  it('matchesQuery mengabaikan huruf besar dan awalan PT', () => {
-    expect(matchesQuery('PT Karya Jembatan Utama', 'jembatan')).toBe(true)
-    expect(matchesQuery('PT. Karya Jembatan', 'karya j')).toBe(true)
-    expect(matchesQuery('PT Beton', 'aspal')).toBe(false)
-    expect(matchesQuery('PT Beton', '  ')).toBe(true)
-  })
-
-  it('hari & akhir pekan dari kunci tanggal', () => {
-    expect(isWeekend('2026-10-17')).toBe(true) // Sabtu
-    expect(isWeekend('2026-10-18')).toBe(true) // Minggu
-    expect(isWeekend('2026-10-15')).toBe(false)
-    expect(dayLabel('2026-10-15')).toEqual({ short: 'Kam 15', letter: 'K' })
-  })
-
-  it('silentStreak melewati akhir pekan; weekNote memilih nada', () => {
-    const days = ['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15']
-    expect(silentStreak(days, [2, 0, 0, 1, 0, 0, 0])).toBe(3)
-    // Jumat 9 ada laporan; Sabtu–Minggu dilewati; Senin–Kamis kosong = 4.
-    expect(silentStreak(days, [2, 0, 0, 0, 0, 0, 0])).toBe(4)
-    expect(silentStreak(days, [0, 0, 0, 0, 0, 0, 0])).toBe(5)
-    expect(weekNote(days, [2, 0, 0, 1, 0, 0, 0])).toEqual({ text: '3 hari kerja berturut-turut belum melapor', tone: 'strong-warn' })
-    expect(weekNote(days, [1, 0, 0, 1, 1, 1, 0])).toEqual({ text: 'Belum melapor hari ini', tone: 'warn' })
-    expect(weekNote(days, [1, 0, 0, 1, 1, 1, 2])).toEqual({ text: '6 laporan dalam 7 hari', tone: 'muted' })
   })
 })
 

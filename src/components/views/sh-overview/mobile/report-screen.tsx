@@ -244,7 +244,7 @@ function Gallery({ report, onOpen }: { report: FlatV2; onOpen: (index: number) =
 }
 
 /** Bintang sorotan (isi warna peringatan). Dekoratif — kata "Sorotan" menyertainya. */
-export function Star({ size = 12, className }: { size?: number; className?: string }) {
+function Star({ size = 12, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={cx('flex-none', className)} fill="currentColor">
       <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.5 1.3 6.6L12 17.2 6.1 20.5l1.3-6.6L2.5 9.4l6.6-.8z" />

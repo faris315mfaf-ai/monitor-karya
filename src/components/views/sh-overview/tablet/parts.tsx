@@ -2,8 +2,8 @@
 
 /**
  * Bagian visual bersama layar tablet & desktop (D4): bintang sorotan, inisial
- * bernada, kontrol rentang dengan jempol bergeser, kotak foto asli, dan
- * wadah panel yang berganti isi dengan crossfade + geser 8px.
+ * bernada, latar baris aktif, dan wadah panel yang berganti isi dengan
+ * crossfade + geser 8px.
  *
  * Gerak: pegas kritis (bounce 0) — tanpa pantul, bisa disela kapan saja karena
  * framer-motion selalu mulai dari nilai yang sedang tampil. Pengguna yang
@@ -11,11 +11,10 @@
  * akar juga mematikan animasi transform/layout).
  */
 
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { AnimatePresence, motion, useIsPresent, useReducedMotion, type Transition } from 'framer-motion'
 import { cx } from '@/components/mk'
 import { initialOf, toneVars, type Tone } from '../logic'
-import type { OverviewRange } from '../screen-types'
 
 /** Pegas navigasi: kritis, ~0,35 dtk. */
 export const SPRING: Transition = { type: 'spring', bounce: 0, duration: 0.35 }
@@ -88,47 +87,6 @@ export function Mono({
   )
 }
 
-const RANGES: { value: OverviewRange; label: string }[] = [
-  { value: 'today', label: 'Hari ini' },
-  { value: 'yesterday', label: 'Kemarin' },
-  { value: 'week', label: '7 hari' },
-]
-
-/** Kontrol rentang Hari ini / Kemarin / 7 hari; jempol terpilih bergeser halus (layoutId). */
-export function RangeControl({ value, onChange }: { value: OverviewRange; onChange: (r: OverviewRange) => void }) {
-  const uid = useId()
-  return (
-    <div role="group" aria-label="Rentang waktu" className="flex rounded-[var(--radius-sm)] bg-fill-2 p-0.5">
-      {RANGES.map((o) => {
-        const on = o.value === value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(o.value)}
-            className={cx(
-              'relative min-h-11 flex-1 cursor-pointer rounded-[8px] px-2 t-footnote font-semibold text-ink',
-              'motion-safe:transition-transform motion-safe:duration-[var(--dur-fast)] motion-safe:active:scale-[0.96]',
-              FOCUS_RING
-            )}
-          >
-            {on ? (
-              <motion.span
-                layoutId={`${uid}-jempol`}
-                transition={SPRING_SNAP}
-                aria-hidden
-                className="absolute inset-0 rounded-[8px] bg-surface shadow-[var(--shadow-control)] dark:bg-[var(--line-strong)]"
-              />
-            ) : null}
-            <span className="relative">{o.label}</span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 /** Latar baris aktif yang berpindah halus antarbaris dalam satu daftar. */
 export function ActiveBg({ layoutId, className }: { layoutId: string; className?: string }) {
   return (
@@ -138,18 +96,6 @@ export function ActiveBg({ layoutId, className }: { layoutId: string; className?
       aria-hidden
       className={cx('absolute inset-0 bg-fill-2', className)}
     />
-  )
-}
-
-/** Kepala bagian: judul besar + keterangan di kanan. */
-export function SectionHead({ id, title, aside }: { id: string; title: string; aside?: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <h2 id={id} className="m-0 t-title-3 font-bold tracking-[-0.015em] text-ink">
-        {title}
-      </h2>
-      {aside ? <span className="t-footnote text-ink-2">{aside}</span> : null}
-    </div>
   )
 }
 

@@ -1,46 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * Layar ponsel dashboard Manajemen & Superuser (KONTRAK-MANAJEMEN-MOBILE.md D3):
+ * Layar ponsel dashboard laporan disetujui (KONTRAK-MANAJEMEN-MOBILE.md D3):
  * fisika gestur (proyeksi momentum, ambang tutup lembar/geser-kembali), label
- * tanggal, judul layar, isi lembar pemilih, pola 7 hari, dan galeri.
+ * tanggal, nama pendek, dan galeri.
  */
 
 import {
   DECELERATION, DISMISS_RATIO, REVERSE_SPEED,
-  addDays, backLabel, cellAlpha, counterLabel, dayHeading, dayWord,
-  monoOf, project, ptSections, ptShort, screenHeading, shortDay, shortRange,
-  shouldDismiss, slideIndex, subSections, subShort, weekAria, weekCell, weekHighlights, weekRangeLabel, weekRows,
+  backLabel, counterLabel, dayHeading, monoOf, project, shouldDismiss, slideIndex,
 } from '@/components/views/sh-overview/mobile/mobile-logic'
-import type { V2Data, V2Report, WeekData } from '@/components/views/sh-overview/model'
-
-const rep = (id: string, extra: Partial<V2Report> = {}): V2Report => ({
-  id, kegiatan: `Kegiatan ${id}`, deskripsi: '', evidence: [], decidedAt: '2026-10-15T03:15:00.000Z', reporterName: 'Hendra Wijaya', ...extra,
-})
-
-const DATA: V2Data = {
-  date: '2026-10-15',
-  subholdings: [
-    {
-      id: 'sigma', name: 'Sigma Internasional Indonesia', count: 4, ptCount: 2,
-      pts: [
-        { id: 'p1', name: 'PT LINTAS INDONESIA KATULISTIWA', reports: [rep('a1'), rep('a2'), rep('a3', { highlight: true, highlightNote: 'Perlu keputusan jalur darat.' })] },
-        { id: 'p2', name: 'PT Sigma Logistik Nusantara', reports: [rep('a4')] },
-      ],
-      allPts: [
-        { id: 'p1', name: 'PT LINTAS INDONESIA KATULISTIWA' },
-        { id: 'p2', name: 'PT Sigma Logistik Nusantara' },
-        { id: 'p3', name: 'PT Sigma Bahari' },
-      ],
-    },
-    {
-      id: 'sentra', name: 'Sentra Multikarya Infrastruktur', count: 1, ptCount: 1,
-      pts: [{ id: 'q1', name: 'PT Sentra Beton Perkasa', reports: [rep('b1')] }],
-      allPts: [{ id: 'q1', name: 'PT Sentra Beton Perkasa' }, { id: 'q2', name: 'PT Karya Jembatan Utama' }],
-    },
-    { id: 'tunas', name: 'Tunas Baru Group', count: 0, ptCount: 0, pts: [], allPts: [{ id: 't1', name: 'PT Tunas Agro Sejahtera' }] },
-  ],
-}
 
 describe('proyeksi momentum', () => {
   it('memakai rumus (v/1000)·d/(1−d) dengan d = 0,998', () => {
@@ -91,37 +60,14 @@ describe('ambang tutup lembar & geser-kembali', () => {
 })
 
 describe('tanggal', () => {
-  it('kepala hari dan hari pendek', () => {
+  it('kepala hari', () => {
     expect(dayHeading('2026-10-15')).toBe('Kamis, 15 Oktober')
-    expect(shortDay('2026-10-12')).toBe('Sen 12 Okt')
     expect(dayHeading('bukan-tanggal')).toBe('')
-  })
-
-  it('geser hari melintasi bulan dan tahun', () => {
-    expect(addDays('2026-10-15', -6)).toBe('2026-10-09')
-    expect(addDays('2026-10-02', -6)).toBe('2026-09-26')
-    expect(addDays('2026-12-30', 3)).toBe('2027-01-02')
-  })
-
-  it('rentang 7 hari panjang dan ringkas', () => {
-    expect(weekRangeLabel('2026-10-09', '2026-10-15')).toBe('9–15 Oktober 2026')
-    expect(weekRangeLabel('2026-09-28', '2026-10-04')).toBe('28 September – 4 Oktober 2026')
-    expect(weekRangeLabel('2026-12-29', '2027-01-04')).toBe('29 Desember 2026 – 4 Januari 2027')
-    expect(shortRange('2026-10-09', '2026-10-15')).toBe('9–15 Okt')
-    expect(shortRange('2026-09-28', '2026-10-04')).toBe('28 Sep – 4 Okt')
-  })
-
-  it('kata hari', () => {
-    expect(dayWord('today')).toBe('hari ini')
-    expect(dayWord('yesterday')).toBe('kemarin')
   })
 })
 
 describe('teks', () => {
-  it('nama ringkas', () => {
-    expect(ptShort('PT LINTAS INDONESIA KATULISTIWA')).toBe('Lintas Indonesia Katulistiwa')
-    expect(ptShort('PT. Sigma Bahari')).toBe('Sigma Bahari')
-    expect(subShort('Subholding Sentra Multikarya')).toBe('Sentra')
+  it('inisial subholding', () => {
     expect(monoOf('Sigma Internasional')).toBe('S')
   })
 
@@ -129,114 +75,6 @@ describe('teks', () => {
     expect(backLabel('Ringkasan')).toBe('Ringkasan')
     expect(backLabel('Sentra Multikarya Infrastruktur')).toBe('Kembali')
     expect(backLabel('')).toBe('Kembali')
-  })
-
-  it('judul layar mengikuti penyaring', () => {
-    expect(screenHeading(DATA, { sub: null, pt: null })).toBe('Ringkasan')
-    expect(screenHeading(DATA, { sub: 'sentra', pt: null })).toBe('Sentra Multikarya Infrastruktur')
-    expect(screenHeading(DATA, { sub: 'sigma', pt: 'p1' })).toBe('PT Lintas Indonesia Katulistiwa')
-    expect(screenHeading(DATA, { sub: 'sigma', pt: 'p3' })).toBe('PT Sigma Bahari')
-  })
-})
-
-describe('lembar pemilih', () => {
-  it('subholding: "Semua subholding" di atas, detail PT & laporan, centang pada pilihan', () => {
-    const [sec] = subSections(DATA, { sub: 'sentra', pt: null }, '')
-    expect(sec.items.map((i) => i.key)).toEqual(['semua', 'sigma', 'sentra', 'tunas'])
-    expect(sec.items[0].detail).toBe('5 laporan')
-    expect(sec.items[1].detail).toBe('3 PT · 4 laporan')
-    expect(sec.items[3]).toMatchObject({ detail: '1 PT · belum melapor', warn: true })
-    expect(sec.items.filter((i) => i.selected).map((i) => i.key)).toEqual(['sentra'])
-    expect(sec.items[0].mono).toBeNull()
-    expect(sec.items[1].mono?.letter).toBe('S')
-  })
-
-  it('subholding: cari tanpa beda huruf besar/kecil', () => {
-    const [sec] = subSections(DATA, { sub: null, pt: null }, 'TUNAS')
-    expect(sec.items.map((i) => i.key)).toEqual(['tunas'])
-    expect(subSections(DATA, { sub: null, pt: null }, 'zzz')[0].items).toEqual([])
-  })
-
-  it('PT: bagian Melapor (dengan Semua PT) dan Belum melapor', () => {
-    const sub = DATA.subholdings[0]
-    const [lapor, diam] = ptSections(sub, { sub: 'sigma', pt: null }, '', 'today')
-    expect(lapor.title).toBe('Melapor hari ini · 2')
-    expect(lapor.items.map((i) => i.key)).toEqual(['semua', 'p1', 'p2'])
-    expect(lapor.items[0]).toMatchObject({ detail: '3 PT', selected: true })
-    expect(lapor.items[1].detail).toBe('3 laporan hari ini')
-    expect(diam).toMatchObject({ title: 'Belum melapor · 1', warn: true })
-    expect(diam.items[0]).toMatchObject({ key: 'p3', detail: 'Belum ada laporan', warn: true, filter: { sub: 'sigma', pt: 'p3' } })
-  })
-
-  it('PT: cari mengabaikan awalan "PT" dan menyembunyikan "Semua PT" bila tak cocok', () => {
-    const sub = DATA.subholdings[0]
-    const [lapor, diam] = ptSections(sub, { sub: 'sigma', pt: 'p2' }, 'bahari', 'yesterday')
-    expect(lapor.title).toBe('Melapor kemarin · 0')
-    expect(lapor.items).toEqual([])
-    expect(diam.items.map((i) => i.key)).toEqual(['p3'])
-    expect(ptSections(null, { sub: null, pt: null }, '', 'today')).toEqual([])
-  })
-})
-
-const WEEK: WeekData = {
-  start: '2026-10-09',
-  end: '2026-10-15',
-  days: ['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'],
-  subholdings: [
-    { id: 'sigma', name: 'Sigma Internasional Indonesia', counts: [3, 0, 0, 4, 3, 2, 3], pts: [
-      { id: 'p1', name: 'PT Lintas Indonesia Katulistiwa', counts: [2, 0, 0, 3, 2, 1, 2] },
-      { id: 'p2', name: 'PT Sigma Logistik Nusantara', counts: [1, 0, 0, 1, 1, 1, 1] },
-    ] },
-    { id: 'fahreza', name: 'Fahreza Bumi Mega', counts: [2, 0, 0, 1, 0, 0, 0] },
-  ],
-  highlights: [
-    { id: 'h1', date: '2026-10-15', kegiatan: 'Kapal tertunda', subholdingId: 'sigma', subholdingName: 'Sigma Internasional Indonesia', ptName: 'PT Lintas Indonesia Katulistiwa', highlightNote: 'Catatan' },
-    { id: 'h2', date: '2026-10-14', kegiatan: 'Retak rambut', subholdingId: 'sentra', subholdingName: 'Sentra', ptName: 'PT Sentra Beton Perkasa', highlightNote: null },
-  ],
-}
-
-describe('pola 7 hari', () => {
-  it('intensitas kotak naik 0,15 per laporan dari 0,2, maks 0,85', () => {
-    expect(cellAlpha(0)).toBe(0)
-    expect(cellAlpha(1)).toBeCloseTo(0.35)
-    expect(cellAlpha(3)).toBeCloseTo(0.65)
-    expect(cellAlpha(10)).toBe(0.85)
-  })
-
-  it('kotak: terisi, akhir pekan kosong pudar, hari kerja kosong bergaris', () => {
-    expect(weekCell(3, '2026-10-15')).toEqual({ kind: 'filled', count: 3, alpha: 0.65, strong: true })
-    expect(weekCell(1, '2026-10-15').strong).toBe(false)
-    expect(weekCell(0, '2026-10-10').kind).toBe('rest')
-    expect(weekCell(0, '2026-10-14').kind).toBe('gap')
-    expect(weekCell(-2, '2026-10-14').kind).toBe('gap')
-  })
-
-  it('baris: subholding tanpa penyaring, PT bila subholding dipilih', () => {
-    expect(weekRows(WEEK, { sub: null, pt: null }).map((r) => r.id)).toEqual(['sigma', 'fahreza'])
-    expect(weekRows(WEEK, { sub: 'sigma', pt: null }).map((r) => r.id)).toEqual(['p1', 'p2'])
-    expect(weekRows(WEEK, { sub: 'sigma', pt: 'p2' }).map((r) => r.id)).toEqual(['p2'])
-    // Tanpa rincian PT dari API → satu baris subholding.
-    expect(weekRows(WEEK, { sub: 'fahreza', pt: null }).map((r) => r.id)).toEqual(['fahreza'])
-    expect(weekRows(WEEK, { sub: 'hilang', pt: null })).toEqual([])
-    expect(weekRows(null, { sub: null, pt: null })).toEqual([])
-  })
-
-  it('jumlah dirapikan sepanjang hari (kurang → 0, negatif → 0)', () => {
-    const w: WeekData = { ...WEEK, subholdings: [{ id: 'x', name: 'X', counts: [1, -1] }] }
-    expect(weekRows(w, { sub: null, pt: null })[0].counts).toEqual([1, 0, 0, 0, 0, 0, 0])
-  })
-
-  it('label pembaca layar menyebut total dan per hari', () => {
-    expect(weekAria('Fahreza', WEEK.days, [2, 0, 0, 1, 0, 0, 0])).toBe(
-      'Fahreza: 3 laporan dalam 7 hari. Jum 9 Okt 2, Sab 10 Okt 0, Min 11 Okt 0, Sen 12 Okt 1, Sel 13 Okt 0, Rab 14 Okt 0, Kam 15 Okt 0',
-    )
-  })
-
-  it('sorotan 7 hari mengikuti subholding dan nama PT', () => {
-    expect(weekHighlights(WEEK, { sub: null, pt: null }, null).map((h) => h.id)).toEqual(['h1', 'h2'])
-    expect(weekHighlights(WEEK, { sub: 'sigma', pt: null }, null).map((h) => h.id)).toEqual(['h1'])
-    expect(weekHighlights(WEEK, { sub: 'sigma', pt: 'p1' }, 'PT LINTAS INDONESIA KATULISTIWA').map((h) => h.id)).toEqual(['h1'])
-    expect(weekHighlights(WEEK, { sub: 'sigma', pt: 'p2' }, 'PT Sigma Logistik Nusantara')).toEqual([])
   })
 })
 

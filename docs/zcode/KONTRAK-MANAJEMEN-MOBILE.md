@@ -1,5 +1,15 @@
 # Kontrak dashboard Manajemen & Superuser — tablet & ponsel (16 Okt 2026)
 
+> **Pembaruan 12 Nov 2026 — tanggal, bukan rentang (keputusan pemilik).** Segmen Hari ini / Kemarin /
+> 7 hari diganti kontrol tanggal `date-control.tsx`: **Hari ini** + **Pilih tanggal** (paling akhir hari
+> ini WIB; hari ini mengikuti jam). Tampilan **7 hari dihapus dari web** (`TabletWeek`, `WeekView`,
+> `week-pattern.tsx`, logika pola/heat/sorotan 7 hari, penyaring subholding → PT di ponsel);
+> `GET /api/sh/overview/week` tetap ada untuk klien lain (Android). Semua catatan "7 hari" di bawah
+> hanya riwayat. **Kartu status** ("13 dari 18 PT sudah melapor") hanya tampil untuk peninjau
+> (`shreport:review`: Supervisor); Ketua Umum & Manajemen langsung ke daftar laporan — kategori
+> "Belum melapor" di dalam tiap subholding tetap ada. Supervisor mendapat tab Dashboard ini sejak
+> 11 Nov 2026 (`ROLE_TABS.SUPERVISOR = ['sh-review', 'sh-overview']`).
+
 > **Pembaruan 9 Nov 2026 — dua tampilan rentang hari (pilihan pemilik).** Rentang **Hari ini /
 > Kemarin** di ponsel dan tablet: kartu status (PT sudah/belum melapor + jumlah laporan) lalu
 > subholding → PT → laporan, **terbaru di atas** (waktu disetujui menurun; disetujui di hari lain diberi

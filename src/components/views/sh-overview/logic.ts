@@ -43,6 +43,23 @@ export function wibDateKey(now: Date = new Date(), daysBack = 0): string {
   return shifted.toISOString().slice(0, 10)
 }
 
+const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+
+/**
+ * Label tanggal terpilih di kontrol tanggal dashboard: "Sel, 10 Nov"; tahun
+ * ikut ditulis bila berbeda dari tahun `todayKey` ("Rab, 31 Des 2025").
+ * Kunci tidak sah → string kosong.
+ */
+export function pickedDateLabel(key: string, todayKey: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key ?? '')
+  if (!m) return ''
+  const t = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  if (Number.isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== key) return ''
+  const year = key.slice(0, 4) === (todayKey ?? '').slice(0, 4) ? '' : ` ${m[1]}`
+  return `${HARI_PENDEK[t.getUTCDay()]}, ${t.getUTCDate()} ${BULAN_PENDEK[t.getUTCMonth()]}${year}`
+}
+
 /** 'YYYY-MM-DD' → Date pada tengah hari WIB (aman untuk pemformat tanggal WIB). */
 export function dateFromKey(key: string): Date {
   return new Date(`${key}T05:00:00.000Z`)

@@ -9,7 +9,7 @@
  * belum melapor ikut di subholdingnya (urutan ptCoverage: paling lama diam dulu).
  *
  * Tampilan Ringkas: akordeon yang terbuka = Filter dashboard (tersimpan per
- * perangkat), jadi pilihan subholding/PT juga berlaku di rentang 7 hari.
+ * perangkat).
  */
 
 import { timeLabel } from './detail-logic'

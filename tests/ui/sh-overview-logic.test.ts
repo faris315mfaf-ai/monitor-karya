@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   anchorId, cardMeta, displayName, docsOf, groupByPt, heroLabel, initialOf, isImageMime, keyDelta, normalizePts, photosOf,
-  positionLabel, splitSubholdings, stepIndex, subholdingLabel, thumbStack, toneOf, toneVars, wibDateKey,
+  pickedDateLabel, positionLabel, splitSubholdings, stepIndex, subholdingLabel, thumbStack, toneOf, toneVars, wibDateKey,
   type FlatReport, type OverviewEvidence, type OverviewSubholding,
 } from '@/components/views/sh-overview/logic'
 
@@ -262,6 +262,19 @@ describe('tanggal WIB', () => {
   })
   it('melewati batas bulan', () => {
     expect(wibDateKey(new Date('2026-11-01T03:00:00Z'), 1)).toBe('2026-10-31')
+  })
+})
+
+describe('label tanggal terpilih', () => {
+  it('hari pendek, tanggal, bulan pendek; tahun hanya bila beda dari tahun hari ini', () => {
+    expect(pickedDateLabel('2026-11-10', '2026-11-12')).toBe('Sel, 10 Nov')
+    expect(pickedDateLabel('2026-01-01', '2026-11-12')).toBe('Kam, 1 Jan')
+    expect(pickedDateLabel('2025-12-31', '2026-11-12')).toBe('Rab, 31 Des 2025')
+  })
+  it('kunci tidak sah → kosong', () => {
+    expect(pickedDateLabel('', '2026-11-12')).toBe('')
+    expect(pickedDateLabel('2026-02-30', '2026-11-12')).toBe('')
+    expect(pickedDateLabel('10-11-2026', '2026-11-12')).toBe('')
   })
 })
 
