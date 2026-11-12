@@ -15,7 +15,8 @@
 import { useEffect, useRef, useState } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Button, Icon, IconButton, Skeleton, cx } from '@/components/mk'
-import { isImageMime, keyDelta, positionLabel, stepIndex, type OverviewEvidence } from './logic'
+import { isImageMime, keyDelta, positionLabel, stepIndex, viewerKind, type OverviewEvidence } from './logic'
+import { DocViewer } from './doc-viewer'
 import { createSignedFetcher, type SignedSize } from './detail-logic'
 
 /* ---------- URL bertanda tangan ---------- */
@@ -121,7 +122,8 @@ export function EvidenceThumb({
 export type LightboxState = { items: OverviewEvidence[]; index: number; title: string } | null
 
 /**
- * Lightbox bukti. Radix Dialog menjaga fokus (terkunci di dalam, kembali ke
+ * Lightbox bukti. PDF & Word .docx tampil langsung lewat penampil dokumen;
+ * dokumen lain memakai tombol buka berkas. Radix Dialog menjaga fokus (terkunci di dalam, kembali ke
  * thumbnail pemicu saat ditutup) dan Esc. Panah kiri/kanan berpindah foto
  * hanya saat fokus di dalam lightbox — bukan pendengar global.
  */
@@ -155,6 +157,8 @@ export function EvidenceLightbox({ state, onChange }: { state: LightboxState; on
             }
           }}
           onKeyDown={(e) => {
+            // Panah di dalam isi dokumen menggulir halaman, bukan berpindah bukti.
+            if (e.target instanceof Element && e.target.closest('[data-doc-scroll]')) return
             const d = keyDelta(e.key)
             if (d) {
               e.preventDefault()
@@ -176,15 +180,21 @@ export function EvidenceLightbox({ state, onChange }: { state: LightboxState; on
                 <IconButton icon="tutup" label="Tutup" variant="filled" />
               </DialogPrimitive.Close>
             </div>
-            {item ? <LightboxStage key={item.id} item={item} /> : null}
+            {item ? (
+              viewerKind(item) ? (
+                <DocViewer key={item.id} item={item} kind={viewerKind(item)!} className="h-[min(70vh,900px)]" />
+              ) : (
+                <LightboxStage key={item.id} item={item} />
+              )
+            ) : null}
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button icon="kiri" onClick={() => go(-1)} disabled={items.length < 2} aria-label="Foto sebelumnya">
+              <Button icon="kiri" onClick={() => go(-1)} disabled={items.length < 2} aria-label="Bukti sebelumnya">
                 Sebelumnya
               </Button>
               <span className="t-callout text-ink-2 min-w-[72px] text-center" aria-live="polite">
                 {positionLabel(index, items.length)}
               </span>
-              <Button iconAfter="kanan" onClick={() => go(1)} disabled={items.length < 2} aria-label="Foto berikutnya">
+              <Button iconAfter="kanan" onClick={() => go(1)} disabled={items.length < 2} aria-label="Bukti berikutnya">
                 Berikutnya
               </Button>
             </div>

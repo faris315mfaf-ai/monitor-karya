@@ -5,7 +5,9 @@
  */
 
 /** Bukti laporan. `kind` dari API: 'file' (berkas di penyimpanan) atau 'link' (tautan lama). */
-export type OverviewEvidence = { id: string; fileName: string; mime: string | null; kind?: 'file' | 'link' }
+import { evidenceDocKind, type EvidenceDocKind } from '@/lib/evidence-doc'
+
+export type OverviewEvidence ={ id: string; fileName: string; mime: string | null; kind?: 'file' | 'link' }
 
 export type OverviewReport = {
   id: string
@@ -142,6 +144,43 @@ function isPhoto(e: OverviewEvidence): boolean {
 /** Bukti bergambar saja (urutan dipertahankan) — isi lightbox & tumpukan foto. */
 export function photosOf(evidence: OverviewEvidence[] | null | undefined): OverviewEvidence[] {
   return (evidence ?? []).filter(isPhoto)
+}
+
+/**
+ * Penampil di aplikasi untuk satu bukti: 'pdf' / 'docx', atau null bila harus
+ * diunduh/dibuka di tab baru (gambar punya lightbox sendiri; tautan lama,
+ * .doc, Excel, teks tidak punya penampil).
+ */
+export function viewerKind(e: OverviewEvidence): EvidenceDocKind | null {
+  return e.kind === 'link' ? null : evidenceDocKind(e.mime, e.fileName)
+}
+
+/** Alamat isi dokumen untuk penampil (dialirkan server, origin sendiri). */
+export function docContentHref(id: string): string {
+  return `/api/evidence/${encodeURIComponent(id)}/isi`
+}
+
+/** Tingkat perbesaran penampil dokumen; 1 = muat selebar wadah. */
+export const DOC_ZOOMS = [1, 1.5, 2, 3] as const
+
+/** Langkah perbesaran berikutnya (+1) atau sebelumnya (-1), dijepit di ujung. */
+export function stepZoom(current: number, delta: -1 | 1): number {
+  const i = DOC_ZOOMS.findIndex((z) => z >= current - 1e-6)
+  const at = i < 0 ? DOC_ZOOMS.length - 1 : i
+  return DOC_ZOOMS[Math.min(DOC_ZOOMS.length - 1, Math.max(0, at + delta))]
+}
+
+/**
+ * Skala render satu halaman PDF: lebar CSS × rasio piksel, diturunkan bila
+ * kanvas melewati `maxPixels` (batas memori kanvas peramban HP).
+ */
+export function pdfRenderScale(cssWidth: number, pageWidth: number, pageHeight: number, dpr: number, maxPixels = 12_000_000): { css: number; output: number } {
+  if (!(cssWidth > 0 && pageWidth > 0 && pageHeight > 0)) return { css: 1, output: 1 }
+  const css = cssWidth / pageWidth
+  const ratio = Math.max(1, Math.min(dpr || 1, 2))
+  const pixels = pageWidth * css * ratio * pageHeight * css * ratio
+  const output = pixels > maxPixels ? ratio * Math.sqrt(maxPixels / pixels) : ratio
+  return { css, output: Math.max(0.25, output) }
 }
 
 /** Bukti bukan gambar (PDF, dokumen, tautan) — ditampilkan sebagai baris dokumen. */

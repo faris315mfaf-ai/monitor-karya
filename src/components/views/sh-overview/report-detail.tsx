@@ -26,7 +26,9 @@ import { useId, useRef, useState, type RefObject } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Icon, IconButton, Skeleton, cx } from '@/components/mk'
 import { EvidenceThumb, useSignedUrl } from './evidence'
-import { docsOf, heroLabel, initialOf, photosOf, toneVars, type OverviewEvidence } from './logic'
+import { docsOf, heroLabel, initialOf, photosOf, toneVars, viewerKind, type OverviewEvidence } from './logic'
+import { DocViewerDialog } from './doc-viewer'
+import { docKindLabel, type EvidenceDocKind } from '@/lib/evidence-doc'
 import { approvedLabel, buktiLabel, clampIndex, docActionLabel, photoAlt } from './detail-logic'
 import { PdfButton } from './pdf-link'
 
@@ -363,11 +365,44 @@ function HeroPhoto({
   )
 }
 
-/** Baris dokumen: membuka URL bertanda tangan di tab baru (tautan disiapkan saat pop-up dibuka). */
+/**
+ * Baris dokumen. PDF & Word .docx dibuka di pop-up penampil dalam aplikasi;
+ * dokumen lain dan tautan lama membuka URL bertanda tangan di tab baru.
+ */
 function DocRow({ item }: { item: OverviewEvidence }) {
+  const viewer = viewerKind(item)
+  return viewer ? <ViewableDocRow item={item} kind={viewer} /> : <LinkDocRow item={item} />
+}
+
+const DOC_ROW = 'flex min-h-12 items-center gap-3 rounded-[var(--radius-md)] bg-fill-1 px-3.5 py-2 t-callout'
+
+function ViewableDocRow({ item, kind }: { item: OverviewEvidence; kind: EvidenceDocKind }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label={`Lihat ${docKindLabel(kind)}: ${item.fileName}`}
+        className={cx(
+          DOC_ROW,
+          'w-full cursor-pointer text-left text-ink hover:bg-fill-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]'
+        )}
+      >
+        <Icon name="dokumen" size={18} className="shrink-0 text-ink-2" />
+        <span className="min-w-0 flex-1 truncate">{item.fileName}</span>
+        <span className="shrink-0 t-footnote text-accent">Lihat</span>
+      </button>
+      <DocViewerDialog item={item} kind={kind} open={open} onOpenChange={setOpen} />
+    </li>
+  )
+}
+
+function LinkDocRow({ item }: { item: OverviewEvidence }) {
   const { url, kind, failed, loading } = useSignedUrl(item.id)
   const k = item.kind ?? kind
-  const row = 'flex min-h-12 items-center gap-3 rounded-[var(--radius-md)] bg-fill-1 px-3.5 py-2 t-callout'
+  const row = DOC_ROW
   const icon = <Icon name="dokumen" size={18} className="shrink-0 text-ink-2" />
 
   return (
