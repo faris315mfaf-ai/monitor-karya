@@ -25,7 +25,7 @@ import { HierarchyTree } from '../hierarchy-view'
 import { photosOf } from '../logic'
 import type { Filter, FlatV2 } from '../model'
 import { ReportFeed } from '../report-feed'
-import { ListBar, ReportingStatusCard } from '../reporting-status'
+import { ApprovedEmpty, ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewScreenProps } from '../screen-types'
 import { backLabel, dayHeading } from './mobile-logic'
 import { ReportScreen } from './report-screen'
@@ -39,7 +39,7 @@ export function MobileOverview(props: OverviewScreenProps) {
   // Tampilan Ringkas: pengguna sudah membuka/menutup akordeon sendiri → jangan buka subholding terbaru lagi.
   const [touched, setTouched] = useState(false)
 
-  const subs = useMemo(() => buildHierarchy(data), [data])
+  const subs = useMemo(() => buildHierarchy(data, !showStatus), [data, showStatus])
   const status = useMemo(() => reportingStatus(data), [data])
   const open = openState(subs, filter, touched)
 
@@ -71,6 +71,8 @@ export function MobileOverview(props: OverviewScreenProps) {
             <LoadingBlocks status={showStatus} />
           ) : data.subholdings.length === 0 ? (
             <EmptyNote icon="gedung">Belum ada subholding dalam cakupan Anda.</EmptyNote>
+          ) : !showStatus && !subs.length ? (
+            <ApprovedEmpty />
           ) : (
             <>
               {showStatus ? <ReportingStatusCard status={status} /> : null}

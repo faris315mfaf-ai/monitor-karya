@@ -21,7 +21,7 @@ import { photosOf } from '../logic'
 import type { FlatV2 } from '../model'
 import { ReportDetail, type DetailReport } from '../report-detail'
 import { ReportFeed } from '../report-feed'
-import { ListBar, ReportingStatusCard } from '../reporting-status'
+import { ApprovedEmpty, ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewScreenProps } from '../screen-types'
 import { dayHeading, toDetail } from './logic'
 import { PageHeader } from './panes'
@@ -34,7 +34,7 @@ export function TabletDayFeed({
   const [detail, setDetail] = useState<FlatV2 | null>(null)
   const [lightbox, setLightbox] = useState<LightboxState>(null)
 
-  const subs = useMemo(() => buildHierarchy(data), [data])
+  const subs = useMemo(() => buildHierarchy(data, !showStatus), [data, showStatus])
   const status = useMemo(() => reportingStatus(data), [data])
   const context = [roleName, dayHeading(dateKey)].filter(Boolean).join(' · ')
   const busy = loading && Boolean(data)
@@ -72,14 +72,18 @@ export function TabletDayFeed({
         ) : (
           <>
             {showStatus ? <ReportingStatusCard status={status} /> : null}
-            <ReportFeed
-              subs={subs}
-              dateKey={data.date || dateKey}
-              layout="wide"
-              bar={<ListBar view={dayView} onView={onDayView} />}
-              onOpen={setDetail}
-              onPhoto={openPhoto}
-            />
+            {!showStatus && !subs.length ? (
+              <ApprovedEmpty />
+            ) : (
+              <ReportFeed
+                subs={subs}
+                dateKey={data.date || dateKey}
+                layout="wide"
+                bar={<ListBar view={dayView} onView={onDayView} />}
+                onOpen={setDetail}
+                onPhoto={openPhoto}
+              />
+            )}
           </>
         )}
       </div>

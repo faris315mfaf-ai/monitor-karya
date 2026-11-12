@@ -9,7 +9,7 @@
 
 import { useId } from 'react'
 import { motion } from 'framer-motion'
-import { Icon, cx } from '@/components/mk'
+import { EmptyNote, Icon, cx } from '@/components/mk'
 import { donePct, type ReportingStatus } from './hierarchy'
 import type { DayView } from './model'
 
@@ -70,6 +70,14 @@ export function ReportingStatusCard({ status, className }: { status: ReportingSt
       ) : null}
     </section>
   )
+}
+
+/**
+ * Tampilan hanya-disetujui (Ketua Umum & Manajemen) tanpa satu pun laporan
+ * disetujui pada tanggal itu: satu baris netral, tanpa status "belum".
+ */
+export function ApprovedEmpty() {
+  return <EmptyNote icon="dokumen">Laporan yang disetujui supervisor tampil di sini.</EmptyNote>
 }
 
 /** Keterangan urutan di atas daftar. */

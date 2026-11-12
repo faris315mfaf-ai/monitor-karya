@@ -112,6 +112,32 @@ describe('kartu status', () => {
   })
 })
 
+describe('buildHierarchy hanya-disetujui (Ketua Umum & Manajemen)', () => {
+  const subs = buildHierarchy(DATA, true)
+
+  it('subholding tanpa laporan disetujui tidak tampil; PT belum melapor dibuang', () => {
+    expect(subs.map((s) => s.id)).toEqual(['logistik', 'energi'])
+    expect(subs.every((s) => s.silent.length === 0 && s.total === null)).toBe(true)
+    expect(subs[0].pts.map((p) => p.id)).toEqual(['armada', 'jalur'])
+  })
+
+  it('belum ada yang disetujui → daftar kosong', () => {
+    expect(buildHierarchy({ date: '2026-11-09', subholdings: DATA.subholdings.slice(2) }, true)).toEqual([])
+    expect(buildHierarchy(null, true)).toEqual([])
+  })
+
+  it('teks kepala tidak menyebut PT lain atau "belum"', () => {
+    expect(subMeta(subs[0])).toBe('2 PT')
+    expect(sectionMeta(subs[0], '2026-11-09')).toBe('3 laporan · 2 PT · terakhir 16.02')
+  })
+
+  it('filter tersimpan ke subholding yang tidak tampil diabaikan', () => {
+    expect(openState(subs, { sub: 'agro', pt: null }, false)).toEqual({ sub: 'logistik', pt: 'armada' })
+    expect(openState(subs, { sub: 'agro', pt: null }, true)).toEqual(NO_FILTER)
+    expect(openState(subs, { sub: 'energi', pt: 'nusa' }, false)).toEqual({ sub: 'energi', pt: 'nusa' })
+  })
+})
+
 describe('akordeon', () => {
   const subs = buildHierarchy(DATA)
 

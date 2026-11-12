@@ -8,6 +8,11 @@
  * laporan terbarunya. Subholding/PT tanpa laporan di bawah, urut nama. PT yang
  * belum melapor ikut di subholdingnya (urutan ptCoverage: paling lama diam dulu).
  *
+ * Hanya-disetujui (keputusan pemilik 12 Nov 2026): Ketua Umum & Manajemen
+ * hanya melihat yang sudah disetujui supervisor — subholding dan PT tanpa
+ * laporan disetujui tidak tampil sama sekali, tanpa keterangan "belum".
+ * Peninjau (Supervisor) tetap melihat semuanya.
+ *
  * Tampilan Ringkas: akordeon yang terbuka = Filter dashboard (tersimpan per
  * perangkat).
  */
@@ -35,8 +40,10 @@ export type HierSub = {
   lastAt: string | null
   /** PT yang melapor, terbaru dulu. */
   pts: HierPt[]
-  /** PT aktif tanpa laporan pada tanggal itu. */
+  /** PT aktif tanpa laporan pada tanggal itu (kosong di tampilan hanya-disetujui). */
   silent: CoverageSilent[]
+  /** Seluruh PT aktif; null = tidak ditampilkan (tampilan hanya-disetujui). */
+  total: number | null
 }
 
 export type ReportingStatus = {
@@ -75,8 +82,8 @@ export function newestFirst<T extends { decidedAt?: string | null }>(list: reado
 const byLatest = (a: { lastAt: string | null; name: string }, b: { lastAt: string | null; name: string }) =>
   byTimeDesc(a.lastAt, b.lastAt, a.name.localeCompare(b.name, 'id'))
 
-export function buildHierarchy(data: V2Data | null | undefined): HierSub[] {
-  const silent = ptCoverage(data, NO_FILTER).silent
+export function buildHierarchy(data: V2Data | null | undefined, approvedOnly = false): HierSub[] {
+  const silent = approvedOnly ? [] : ptCoverage(data, NO_FILTER).silent
   const subs = (data?.subholdings ?? []).map((s): HierSub => {
     const pts = (s.pts ?? [])
       .filter((p) => p.reports?.length)
@@ -93,16 +100,18 @@ export function buildHierarchy(data: V2Data | null | undefined): HierSub[] {
         }
       })
       .sort(byLatest)
+    const mine = silent.filter((p) => p.subId === s.id)
     return {
       id: s.id,
       name: s.name,
       count: pts.reduce((n, p) => n + p.reports.length, 0),
       lastAt: pts[0]?.lastAt ?? null,
       pts,
-      silent: silent.filter((p) => p.subId === s.id),
+      silent: mine,
+      total: approvedOnly ? null : pts.length + mine.length,
     }
   })
-  return subs.sort(byLatest)
+  return (approvedOnly ? subs.filter((s) => s.pts.length > 0) : subs).sort(byLatest)
 }
 
 /** Kartu status: PT sudah melapor dari seluruh PT aktif + jumlah laporan. */
@@ -123,11 +132,12 @@ export function defaultOpen(subs: readonly HierSub[]): Filter {
 }
 
 /**
- * Akordeon yang terbuka. Filter tersimpan menang; tanpa filter, subholding
- * terbaru dibuka sampai pengguna menutupnya sendiri (`touched`).
+ * Akordeon yang terbuka. Filter tersimpan menang selama subholdingnya tampil
+ * (di tampilan hanya-disetujui subholding tanpa laporan tidak ada); selain
+ * itu subholding terbaru dibuka sampai pengguna menutupnya sendiri (`touched`).
  */
 export function openState(subs: readonly HierSub[], filter: Filter, touched: boolean): Filter {
-  if (filter.sub) return filter
+  if (filter.sub && subs.some((s) => s.id === filter.sub)) return filter
   return touched ? NO_FILTER : defaultOpen(subs)
 }
 
@@ -160,8 +170,9 @@ export function selectedReport(subs: readonly HierSub[], open: Filter, picked: s
   return pt?.reports[0] ?? sub?.pts[0]?.reports[0] ?? subs.find((s) => s.pts.length)?.pts[0]?.reports[0] ?? null
 }
 
-/** "3 PT melapor · 2 belum" / "Belum ada laporan disetujui · 4 PT". */
+/** "3 PT melapor · 2 belum" / "Belum ada laporan disetujui · 4 PT"; hanya-disetujui: "3 PT". */
 export function subMeta(s: HierSub): string {
+  if (s.total === null) return `${s.pts.length} PT`
   if (!s.pts.length) return s.silent.length ? `Belum ada laporan disetujui · ${s.silent.length} PT` : 'Belum ada laporan disetujui'
   return s.silent.length ? `${s.pts.length} PT melapor · ${s.silent.length} belum` : `${s.pts.length} PT melapor`
 }
@@ -183,13 +194,15 @@ export function approvedAt(iso: string | null | undefined, dateKey: string): str
 
 /**
  * Keterangan kepala subholding: "4 laporan · 3 dari 5 PT melapor · terakhir 10.42";
- * tanpa laporan: "Belum ada laporan disetujui · 4 PT".
+ * tanpa laporan: "Belum ada laporan disetujui · 4 PT". Tampilan hanya-disetujui
+ * (total null) tidak menyebut PT lain: "4 laporan · 3 PT · terakhir 10.42".
  */
 export function sectionMeta(s: HierSub, dateKey: string): string {
-  const total = s.pts.length + s.silent.length
+  const total = s.total ?? 0
   if (!s.pts.length) return total ? `Belum ada laporan disetujui · ${total} PT` : 'Belum ada laporan disetujui'
   const when = approvedAt(s.lastAt, dateKey)
-  return [`${s.count} laporan`, `${s.pts.length} dari ${total} PT melapor`, when && `terakhir ${when}`].filter(Boolean).join(' · ')
+  const pts = s.total === null ? `${s.pts.length} PT` : `${s.pts.length} dari ${total} PT melapor`
+  return [`${s.count} laporan`, pts, when && `terakhir ${when}`].filter(Boolean).join(' · ')
 }
 
 /** "2 laporan · terakhir 16.02". */

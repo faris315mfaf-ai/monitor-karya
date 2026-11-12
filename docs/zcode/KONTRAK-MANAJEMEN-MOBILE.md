@@ -6,9 +6,16 @@
 > `week-pattern.tsx`, logika pola/heat/sorotan 7 hari, penyaring subholding → PT di ponsel);
 > `GET /api/sh/overview/week` tetap ada untuk klien lain (Android). Semua catatan "7 hari" di bawah
 > hanya riwayat. **Kartu status** ("13 dari 18 PT sudah melapor") hanya tampil untuk peninjau
-> (`shreport:review`: Supervisor); Ketua Umum & Manajemen langsung ke daftar laporan — kategori
-> "Belum melapor" di dalam tiap subholding tetap ada. Supervisor mendapat tab Dashboard ini sejak
-> 11 Nov 2026 (`ROLE_TABS.SUPERVISOR = ['sh-review', 'sh-overview']`).
+> (`shreport:review`: Supervisor); Ketua Umum & Manajemen langsung ke daftar laporan. Supervisor
+> mendapat tab Dashboard ini sejak 11 Nov 2026 (`ROLE_TABS.SUPERVISOR = ['sh-review', 'sh-overview']`).
+>
+> **Hanya-disetujui untuk Ketua Umum & Manajemen (keputusan pemilik 12 Nov 2026).** Bukan peninjau =
+> hanya melihat yang sudah disetujui supervisor: subholding dan PT tanpa laporan disetujui **tidak
+> tampil sama sekali** (tanpa "Belum melapor", "Belum ada laporan disetujui", "n dari m PT", "terakhir
+> melapor"). `buildHierarchy(data, approvedOnly)` membuang keduanya; kepala subholding cukup
+> "3 laporan · 2 PT · terakhir 16.02". Belum ada satu pun yang disetujui pada tanggal itu → hanya
+> catatan netral "Laporan yang disetujui supervisor tampil di sini." Supervisor tetap melihat
+> kartu status dan kategori "Belum melapor". Respons API tidak berubah (penyaringan di klien web).
 
 > **Pembaruan 9 Nov 2026 — dua tampilan rentang hari (pilihan pemilik).** Rentang **Hari ini /
 > Kemarin** di ponsel dan tablet: kartu status (PT sudah/belum melapor + jumlah laporan) lalu

@@ -7,8 +7,9 @@
  * hari ini (bawaan, ikut berganti saat lewat tengah malam WIB) atau tanggal
  * pilihan pengguna. Subholding/PT yang terbuka diingat per perangkat.
  *
- * Kartu status melapor hanya untuk peninjau (Supervisor); Ketua Umum &
- * Manajemen langsung ke daftar laporan (keputusan pemilik 12 Nov 2026).
+ * Status pelaporan (kartu "n dari m PT", PT/subholding belum melapor) hanya
+ * untuk peninjau (Supervisor); Ketua Umum & Manajemen hanya melihat laporan
+ * yang sudah disetujui supervisor (keputusan pemilik 12 Nov 2026).
  *
  * Data: GET /api/sh/overview?date=YYYY-MM-DD. Diperbarui sendiri di belakang
  * tiap 30 detik selama tab terlihat dan saat tab kembali terlihat, jadi

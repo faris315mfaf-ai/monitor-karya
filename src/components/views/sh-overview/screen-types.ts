@@ -10,8 +10,9 @@ export type OverviewScreenProps = {
   todayKey: string
   onDate: (key: string) => void
   /**
-   * Kartu status melapor ("13 dari 18 PT sudah melapor"): hanya untuk peninjau
-   * (Supervisor); Ketua Umum & Manajemen langsung ke daftar laporan.
+   * Status pelaporan — kartu "13 dari 18 PT sudah melapor", PT/subholding
+   * "belum melapor" — hanya untuk peninjau (Supervisor). Ketua Umum &
+   * Manajemen (false) hanya melihat laporan yang sudah disetujui.
    */
   showStatus: boolean
   /** GET /api/sh/overview?date=dateKey. */

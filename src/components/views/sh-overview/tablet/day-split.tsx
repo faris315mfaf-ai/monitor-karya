@@ -23,7 +23,7 @@ import { HierarchyTree } from '../hierarchy-view'
 import { photosOf } from '../logic'
 import type { Filter, FlatV2 } from '../model'
 import { ReportDetail, ReportDetailPanel, type DetailReport } from '../report-detail'
-import { ListBar, ReportingStatusCard } from '../reporting-status'
+import { ApprovedEmpty, ListBar, ReportingStatusCard } from '../reporting-status'
 import type { OverviewScreenProps } from '../screen-types'
 import { dayHeading, dayLayout, dayWord, toDetail } from './logic'
 import { FadeSwap } from './parts'
@@ -48,7 +48,7 @@ export function TabletDaySplit({
   const [dialog, setDialog] = useState<FlatV2 | null>(null)
   const [lightbox, setLightbox] = useState<LightboxState>(null)
 
-  const subs = useMemo(() => buildHierarchy(data), [data])
+  const subs = useMemo(() => buildHierarchy(data, !showStatus), [data, showStatus])
   const status = useMemo(() => reportingStatus(data), [data])
   const open = openState(subs, filter, touched)
   const L = dayLayout(box?.w ?? 0)
@@ -98,6 +98,8 @@ export function TabletDaySplit({
               <ErrorNote message={error ?? 'Laporan belum termuat.'} onRetry={reload} />
             </div>
           )
+        ) : !showStatus && !subs.length ? (
+          <ApprovedEmpty />
         ) : (
           <>
             {showStatus ? <ReportingStatusCard status={status} /> : null}
