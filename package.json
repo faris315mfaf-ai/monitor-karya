@@ -82,6 +82,8 @@
     },
     "micromatch@4.0.8": {
       "braces": "$braces"
-    }
+    },
+    "vite": "^8.3.8",
+    "zod": "^4.6.7"
   }
 }
